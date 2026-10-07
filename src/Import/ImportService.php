@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Import;
 
 use App\Mapping\ParameterMapping;
+use App\PatientCard\PatientName;
 use App\Report\ReportSummary;
 use App\Report\ReportSummaryBuilder;
 use App\Security\FileName;
@@ -147,6 +148,9 @@ class ImportService
         }
         $dobRaw = $summary->nonEmpty('patient_dob');
         $dob = MerlinDate::parse($dobRaw)?->format('Y-m-d');
+        // Nachname/Vorname werden aus "NACHNAME, VORNAME" abgeleitet; fehlt das Komma,
+        // bleibt der Vorname leer und wird im Patientenausweis-Assistenten ergaenzt.
+        $parts = PatientName::split($name);
 
         if ($identifier !== null) {
             $stmt = $this->pdo->prepare('SELECT id FROM patients WHERE patient_identifier = ? FOR UPDATE');
@@ -167,18 +171,21 @@ class ImportService
             // Stammdaten werden nur ergaenzt, nie ueberschrieben (Berichte haben eigene Snapshots).
             $this->pdo->prepare(
                 'UPDATE patients SET patient_name = COALESCE(patient_name, ?),
+                        last_name = COALESCE(last_name, ?),
+                        first_name = COALESCE(first_name, ?),
                         date_of_birth = COALESCE(date_of_birth, ?),
                         date_of_birth_raw = COALESCE(date_of_birth_raw, ?),
                         updated_at = ?
                   WHERE id = ?'
-            )->execute([$name, $dob, $dobRaw, $now, $id]);
+            )->execute([$name, $parts['last'], $parts['first'], $dob, $dobRaw, $now, $id]);
             return (int) $id;
         }
 
         $this->pdo->prepare(
-            'INSERT INTO patients (patient_identifier, patient_name, date_of_birth, date_of_birth_raw, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)'
-        )->execute([$identifier, $name, $dob, $dobRaw, $now, $now]);
+            'INSERT INTO patients (patient_identifier, patient_name, last_name, first_name,
+                                   date_of_birth, date_of_birth_raw, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([$identifier, $name, $parts['last'], $parts['first'], $dob, $dobRaw, $now, $now]);
         return (int) $this->pdo->lastInsertId();
     }
 

@@ -48,6 +48,17 @@ final class Response
         ]);
     }
 
+    /**
+     * Binaere Antwort fuer ein Bild (z. B. das hinterlegte Ausweis-Logo).
+     */
+    public static function image(string $content, string $mimeType): self
+    {
+        return new self($content, 200, [
+            'Content-Type' => $mimeType,
+            'Content-Length' => (string) strlen($content),
+        ]);
+    }
+
     public function send(): void
     {
         http_response_code($this->status);

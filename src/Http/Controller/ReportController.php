@@ -46,6 +46,7 @@ final class ReportController extends Controller
             'title' => 'Bericht Nr. ' . $data->id(),
             'data' => $data,
             'related' => $related,
+            'cards' => $this->app->patientCardService()->cardsForReport($data->id()),
             'rawDefault' => $this->app->config->pdfRawAppendixDefault,
         ], 'reports'));
     }

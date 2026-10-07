@@ -19,19 +19,20 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 4. [Start, Stopp, Aktualisierung](#start-stopp-aktualisierung)
 5. [Offline-Betrieb](#offline-betrieb)
 6. [Bedienung der Weboberfläche](#bedienung-der-weboberfläche)
-7. [Kommandozeile (CLI)](#kommandozeile-cli)
-8. [Importformat](#importformat)
-9. [Parserverhalten und Fehlerbehandlung](#parserverhalten-und-fehlerbehandlung)
-10. [Datenmodell, Snapshots und Versionierung](#datenmodell-snapshots-und-versionierung)
-11. [PDF-Berichte](#pdf-berichte)
-12. [Parameterzuordnung erweitern](#parameterzuordnung-erweitern)
-13. [Sicherheitskonzept](#sicherheitskonzept)
-14. [Datenschutz](#datenschutz)
-15. [Tests](#tests)
-16. [Screenshots für die Dokumentation](#screenshots-für-die-dokumentation)
-17. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
-18. [Fehlerbehebung](#fehlerbehebung)
-19. [Projektstruktur](#projektstruktur)
+7. [Patientenausweis erstellen](#patientenausweis-erstellen)
+8. [Kommandozeile (CLI)](#kommandozeile-cli)
+9. [Importformat](#importformat)
+10. [Parserverhalten und Fehlerbehandlung](#parserverhalten-und-fehlerbehandlung)
+11. [Datenmodell, Snapshots und Versionierung](#datenmodell-snapshots-und-versionierung)
+12. [PDF-Berichte](#pdf-berichte)
+13. [Parameterzuordnung erweitern](#parameterzuordnung-erweitern)
+14. [Sicherheitskonzept](#sicherheitskonzept)
+15. [Datenschutz](#datenschutz)
+16. [Tests](#tests)
+17. [Screenshots für die Dokumentation](#screenshots-für-die-dokumentation)
+18. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
+19. [Fehlerbehebung](#fehlerbehebung)
+20. [Projektstruktur](#projektstruktur)
 
 ## Funktionsumfang
 
@@ -46,6 +47,11 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   Dateiname, Zeitraum), Importprotokoll und Systemstatus.
 - PDF-Berichte (eigene, abhängigkeitsfreie PDF-Erzeugung) – optional mit
   Rohdatenanhang, jederzeit reproduzierbar aus der Datenbank.
+- **Patientenausweis** (zwei Seiten DIN A4) aus einem importierten Bericht: Assistent in sechs
+  Schritten, Identitätsprüfung über Nachname + Vorname + Geburtsdatum, Konfliktentscheidung je
+  Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie.
+- Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
+  Flugsicherheitstexte) mit eigener Fassung je Ausweis.
 - CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
 - Keine externen Abhängigkeiten zur Laufzeit: kein CDN, keine Webfonts, keine Composer-Pakete.
 
@@ -164,6 +170,119 @@ ausdrücklicher Bestätigung erneut importiert werden; Dateien ohne Merlin-Forma
 ![Importdetail](docs/screenshots/07-import-detail.png)
 
 ![Systemstatus](docs/screenshots/08-systemstatus.png)
+
+## Patientenausweis erstellen
+
+Der Patientenausweis ist ein zweiseitiges DIN-A4-PDF („Schrittmacher - Patientenausweis" /
+„Patient Identification Card"), das aus einem bereits importierten Nachsorgebericht erzeugt
+wird. Es werden **keine** medizinischen Bewertungen abgeleitet oder ergänzt: übernommen werden
+nur Patient, Gerät, Sonden, Mess- und Nachsorgeangaben aus dem Bericht sowie die Angaben, die
+im Assistenten erfasst werden.
+
+### Ablauf
+
+**1. Stammdaten pflegen** (`/patient-cards/settings`) – Logo (PNG/JPEG, max. 1 MiB und
+2000 px Kantenlänge), Nachsorgezentrum mit Anschrift sowie die drei Texte (Hinweise,
+Achtung Flugsicherheit auf Deutsch, Attention Airline Security auf Englisch). Jede Speicherung
+erzeugt eine neue, unveränderliche Fassung; das Logo wird über seinen SHA-256 erkannt und nicht
+mehrfach gespeichert. Die Texte sind nicht im PDF-Generator hinterlegt, sondern werden je
+Ausweis mitgespeichert.
+
+![Stammdaten des Patientenausweises](docs/screenshots/13-ausweis-stammdaten.png)
+
+**2. Bericht wählen** (`/patient-cards/new` bzw. Schaltfläche *Patientenausweis erstellen* in
+der Berichtsansicht):
+
+![Bericht auswählen](docs/screenshots/14-ausweis-bericht-waehlen.png)
+
+**3. Assistent in sechs Schritten** (`/patient-cards/reports/{id}`) – Schritt 1 Patient
+identifizieren, 2 Patientendaten ergänzen, 3 Notfallkontakt, 4 Hausarzt, 5 Nachsorge und
+Kontrolle, 6 Zusammenfassung und Bestätigung:
+
+![Assistent Schritt 1](docs/screenshots/15-ausweis-assistent-schritt1.png)
+
+![Assistent Schritt 2](docs/screenshots/16-ausweis-assistent-schritt2.png)
+
+Ohne JavaScript sind alle sechs Abschnitte gleichzeitig sichtbar und absendbar; mit
+JavaScript wird je Schritt umgeschaltet. Verbindlich ist immer die serverseitige Prüfung:
+bei Fehlern antwortet der Server mit HTTP 422 und springt zu dem Schritt, in dem der erste
+Fehler steht.
+
+**4. Zusammenfassung und zwei Bestätigungen** – der Ausweis wird nur erzeugt, wenn beide
+Häkchen ausdrücklich gesetzt sind („Ja, dies ist der richtige Patient." **und** „Ich
+bestätige, dass die angezeigten Daten zum richtigen Patienten gehören und zusammengeführt
+werden dürfen."):
+
+![Zusammenfassung mit Bestätigungen](docs/screenshots/17-ausweis-assistent-zusammenfassung.png)
+
+**5. Konflikte** – stimmen bereits gespeicherte Angaben nicht mit den neuen Eingaben überein,
+zeigt der Assistent beide Werte nebeneinander und verlangt für **jedes** Feld eine
+Entscheidung (*neuer Wert* oder *gespeicherter Wert*). Nichts wird stillschweigend
+überschrieben; ohne Entscheidung wird nichts gespeichert:
+
+![Konfliktentscheidung](docs/screenshots/19-ausweis-konflikte.png)
+
+**6. Ergebnis** – Ausweisdetail mit Download von Ausweis-PDF und Ausgangsbericht, plus
+Ausweisübersicht, Patientensicht und Ausweisübersicht am Bericht:
+
+![Ausweisdetail](docs/screenshots/18-ausweis-detail.png)
+
+![Ausweisübersicht](docs/screenshots/20-ausweis-uebersicht.png)
+
+![Patientensicht mit Ausweisen und Nachsorgeuntersuchungen](docs/screenshots/21-ausweis-patient.png)
+
+![Bericht mit den Ausweisfassungen](docs/screenshots/23-ausweis-bericht.png)
+
+### Identität des Patienten
+
+Ein Patient wird ausschließlich über **Nachname + Vorname + Geburtsdatum** zugeordnet
+(`patients.identity_key`). Seriennummer, Patienten-ID, Import-ID oder Berichts-ID dienen nie
+als alleiniges Merkmal. Ergebnis: kein Treffer → neuer Patient, ein Treffer → dieser Patient
+wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklich auswählen.
+
+### Unveränderliche Ausweise und Historie
+
+- Das PDF wird als Blob mit SHA-256 und Größe im Datensatz gespeichert und danach nur noch
+  ausgeliefert – es wird nie neu berechnet.
+- Jeder Ausweis verweist auf die beim Erzeugen gültige Stammdatenfassung. Spätere Änderungen an
+  Logo, Nachsorgezentrum, Hinweistexten, Patientendaten oder weiteren Importen verändern
+  bestehende Ausweise nicht.
+- Für jeden Bericht können mehrere Ausweisfassungen existieren (`card_version`); jede Fassung
+  bleibt erhalten. Die Berichtsansicht listet alle Fassungen mit PDF-Link und Verlauf, die
+  Patientensicht zusätzlich alle Nachsorgeuntersuchungen des Patienten (Seite 2 des Ausweises,
+  gespeist aus den unveränderlichen Bericht-Snapshots).
+- Dateiname: `Patientenausweis_<Nachname>_<Vorname>_<Datum>[_Nr<laufende Nummer>].pdf`.
+
+### Routen
+
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/patient-cards` | Übersicht mit Suche (Patient, Dateiname, Seriennummer) |
+| GET | `/patient-cards/new` | Bericht für einen neuen Ausweis wählen |
+| GET | `/patient-cards/reports/{id}` | Assistent (Schritt über `?step=1..6`) |
+| POST | `/patient-cards/reports/{id}` | Ausweis erzeugen (CSRF, beide Bestätigungen) |
+| GET | `/patient-cards/{id}` | Ausweisdetail mit Verlauf |
+| GET | `/patient-cards/{id}/pdf` | Ausweis-PDF (inline, `?download=1` als Download) |
+| GET | `/patient-cards/patients/{patient}` | Alle Ausweise und Nachsorgeuntersuchungen |
+| GET | `/patient-cards/settings` | Stammdaten (Logo, Nachsorgezentrum, Texte) |
+| POST | `/patient-cards/settings` | Stammdaten speichern (neue Fassung) |
+| GET | `/patient-cards/settings/logo` | Hinterlegtes Logo ausliefern |
+
+### PDF-Seiten
+
+![Ausweis Seite 1](docs/screenshots/22-ausweis-pdf-seite-1.png)
+
+Seite 1: Kopfbereich mit Logo, Ausweistitel, Nachsorgezentrum, Patientendaten
+(Identitätsangaben), Gerät, Sonden, Implantationsort, Notfallkontakt, Hausarzt, nächste
+Kontrolle sowie Hinweis- und Flugsicherheitstexte (deutsch/englisch).
+
+![Ausweis Seite 2](docs/screenshots/22-ausweis-pdf-seite-2.png)
+
+Seite 2: medizinisch-technische Angaben aus dem Bericht sowie „Vergangene
+Nachsorgeuntersuchungen" mit Datum und – soweit ableitbar – Bericht, Arzt und Zentrum aus den
+gespeicherten Snapshots. Reicht der Platz nicht, bricht die Erzeugung mit einer klaren Meldung
+ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt ausschließlich über den eigenen,
+abhängigkeitsfreien PDF-Writer.
 
 ## Kommandozeile (CLI)
 
@@ -350,6 +469,13 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   Parameter, PDF aus der Datenbank ohne Originaldatei.
 - Zusätzlich: Zuordnung/Zusammenfassung, Uploadprüfung, Escaping, Weiterleitungen,
   Upload-Zwischenspeicher, Konfiguration.
+- **Patientenausweis:** Namenszerlegung und Identitätsschlüssel, Eingabeprüfung,
+  Logo-Prüfung, PDF-Layout (Seitenzahl, Seitenumbruch), Erzeugung aus einem Bericht,
+  Konflikterkennung, Unveränderlichkeit bestehender Ausweise.
+- **Oberflächen (Integration):** Die Templates werden mit den echten Controllern gerendert
+  (`tests/Integration/PatientCardViewTest.php`). Damit fallen Fehler in der HTML-Schicht
+  (fehlende Template-Variablen, unbekannte Klassen, unvollständige Formulare, fehlende
+  CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
 
 ## Screenshots für die Dokumentation
 
@@ -362,8 +488,12 @@ docker compose --profile docs run --rm screenshots
 docker compose --profile docs down
 ```
 
-Das Skript liegt in `docs/screenshots/capture.py`. Der Build des Screenshot-Images benötigt
-einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht erforderlich.
+Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Import der
+Testdatei, Stammdaten mit Beispiel-Logo, Patientenausweis) und erzeugt daraus die Bilder
+`01`–`22`, darunter Assistent, Konfliktdialog und beide Seiten des Ausweis-PDF. Der Build des
+Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
+erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
+Templates oder `src/` ist `docker compose build web` erforderlich.
 
 ## Backup und Wiederherstellung
 

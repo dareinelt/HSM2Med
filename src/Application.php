@@ -13,10 +13,15 @@ use App\Import\ImportValidator;
 use App\Import\MerlinParser;
 use App\Import\PendingUploadStore;
 use App\Mapping\ParameterMapping;
+use App\PatientCard\PatientCardPdfGenerator;
+use App\PatientCard\PatientCardRepository;
+use App\PatientCard\PatientCardService;
+use App\PatientCard\PatientCardSettingsService;
 use App\Report\ReportService;
 use App\Report\ReportSummaryBuilder;
 use App\Repository\ImportRepository;
 use App\Repository\ReportRepository;
+use App\Security\ImageUploadValidator;
 use App\Support\Clock;
 use App\Support\Logger;
 use App\Support\SystemClock;
@@ -87,6 +92,31 @@ final class Application
     public function reportService(): ReportService
     {
         return new ReportService($this->reportRepository(), $this->importRepository());
+    }
+
+    public function patientCardRepository(): PatientCardRepository
+    {
+        return new PatientCardRepository($this->pdo());
+    }
+
+    public function patientCardService(): PatientCardService
+    {
+        return new PatientCardService(
+            $this->pdo(),
+            $this->patientCardRepository(),
+            $this->reportService(),
+            new PatientCardPdfGenerator(),
+            $this->clock,
+        );
+    }
+
+    public function patientCardSettingsService(): PatientCardSettingsService
+    {
+        return new PatientCardSettingsService(
+            $this->patientCardRepository(),
+            new ImageUploadValidator(),
+            $this->clock,
+        );
     }
 
     public function pendingUploads(): PendingUploadStore
