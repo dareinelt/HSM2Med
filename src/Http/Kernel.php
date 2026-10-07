@@ -1,0 +1,93 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http;
+
+use App\Application;
+use App\Http\Controller\DashboardController;
+use App\Http\Controller\ImportController;
+use App\Http\Controller\ImportLogController;
+use App\Http\Controller\ReportController;
+use App\Http\Controller\SystemController;
+use App\Security\Csrf;
+use App\Security\SessionManager;
+use Throwable;
+
+/**
+ * Verarbeitet eine HTTP-Anfrage: Session, CSRF-Pruefung, Routing und Fehlerbehandlung.
+ * Technische Fehler werden protokolliert; Benutzer sehen nur eine neutrale Meldung mit Referenz.
+ */
+final class Kernel
+{
+    private readonly View $view;
+
+    public function __construct(private readonly Application $app)
+    {
+        $this->view = new View($app->rootDir . '/templates');
+    }
+
+    public function handle(Request $request): Response
+    {
+        try {
+            if ($request->path === '/health') {
+                return (new SystemController($this->app, $this->view))->health();
+            }
+            SessionManager::start($this->app->config->dataDir . '/sessions', $this->app->config->sessionSecureCookie);
+            if ($request->method === 'POST' && !Csrf::isValid($request->post['_csrf'] ?? null)) {
+                throw new HttpException(400, 'Die Sitzung ist abgelaufen oder die Anfrage ist ungültig. Bitte die Seite neu laden und erneut versuchen.');
+            }
+            return $this->router()->dispatch($request);
+        } catch (HttpException $e) {
+            return $this->error($e->status, $e->getMessage(), null);
+        } catch (Throwable $e) {
+            $reference = $this->app->logger()->error('Unbehandelter Fehler', ['path' => $request->path], $e);
+            $details = $this->app->config->isProduction() ? null : $e::class . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString();
+            return $this->error(500, 'Es ist ein technischer Fehler aufgetreten. Referenz: ' . $reference, $details);
+        }
+    }
+
+    private function router(): Router
+    {
+        $dashboard = new DashboardController($this->app, $this->view);
+        $import = new ImportController($this->app, $this->view);
+        $reports = new ReportController($this->app, $this->view);
+        $imports = new ImportLogController($this->app, $this->view);
+        $system = new SystemController($this->app, $this->view);
+
+        $router = new Router();
+        $router->get('/', $dashboard->index(...));
+        $router->get('/import', $import->form(...));
+        $router->post('/import', $import->upload(...));
+        $router->get('/import/{token}', $import->preview(...));
+        $router->post('/import/{token}/commit', $import->commit(...));
+        $router->post('/import/{token}/cancel', $import->cancel(...));
+        $router->get('/reports', $reports->index(...));
+        $router->get('/reports/{id}', $reports->show(...));
+        $router->get('/reports/{id}/pdf', $reports->pdf(...));
+        $router->get('/imports', $imports->index(...));
+        $router->get('/imports/{id}', $imports->show(...));
+        $router->get('/system', $system->index(...));
+        return $router;
+    }
+
+    private function error(int $status, string $message, ?string $details): Response
+    {
+        try {
+            $title = match ($status) {
+                400 => 'Ungültige Anfrage',
+                404 => 'Nicht gefunden',
+                405 => 'Methode nicht erlaubt',
+                default => 'Fehler',
+            };
+            return Response::html($this->view->render('error', [
+                'title' => $title,
+                'status' => $status,
+                'message' => $message,
+                'details' => $details,
+            ]), $status);
+        } catch (Throwable) {
+            return new Response('Fehler ' . $status, $status, ['Content-Type' => 'text/plain; charset=UTF-8']);
+        }
+    }
+}

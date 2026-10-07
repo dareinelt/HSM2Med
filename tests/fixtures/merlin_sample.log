@@ -1,0 +1,113 @@
+306RV Pulse Amplitude2.5V
+2457Model Number: SJM Atrial Lead2088TC Tendril STS
+2432Follow-up Physician
+2680Event Histogram Auto Mode Switch Count0.0
+1606RV. Capture Test Threshold Amplitude0.5V
+101Programmer Model Number3650
+875RV Lead Monitoring: Lower Limit200Ohms
+9015Percent Ventricular Pacing AlertOn
+203Device Last Interrogation Date and Time10/07/2026 07:03:24
+2459Implant Date: Atrial Lead06/18/2024 00:00:00
+9048VT/VF Detection Rate175bpm
+9002High Ventricular Rate AlertOn
+520Battery Current9uA
+2221Ventricular Sense Refractory250ms
+9046VT Episode Trigger PriorityHigh
+519Unloaded Battery Voltage2.97792V
+305RV Pulse Width0.4ms
+2727Safety Margin of Atrial Signal Amplitude3.0 : 1
+103Application Software Version Number3330 v28.9.2 rev1
+104Application Build Numberupsw-IRChinaSKU_Unity_3650-250617
+9018Percentage Ventricular Pacing Limit40%
+605MRI Atrial Pulse Width1.0ms
+2463Implant Date: RV Lead06/18/2024 00:00:00
+2722Ventricular Signal Amplitude4.9mV
+413Measured Auto Slope10
+2725Safety Margin of Ventricular Signal Amplitude2.25 : 1
+608MRI RV Pulse ConfigurationBipolar
+609MRI Activator Ready StatusDisabled
+106Programmer LanguageDeutsch
+2024Maximum Pacing Rate130bpm
+2405Episode Settings: Custom EGM 1 CathodeV tip
+848ATHR Threshold1.0mV
+9059Noise Reversion TriggerOff
+361Ventricular TriggeringOff
+2755Total Time in AT/AF Recent Week0
+1607RV. Capture Test Pulse Width0.4ms
+407Reaction TimeFast
+604MRI RV Pulse Amplitude5.0V
+201Device Model Number2152
+370Auto Intrinsic Conduction SearchOff
+302Base Rate60bpm
+2008RV Pulse ConfigurationBipolar
+2431Patient Date of Birth10/21/1938 00:00:00
+390Shortest PVARP/VREF175ms
+2441Indications for Implant: ListBrady/Tachy
+2682Event Histogram Percent Paced In Atrium0.0%
+308Ventricular Sensitivity2.0mV
+309Ventricular Pace Refractory250ms
+9043Episode Settings: Custom EGM 2 CathodeV tip
+307Ventricular Sense ConfigurationBipolar
+404Activity Sensor: SlopeAuto (+2)
+353RV AutoCaptureOff
+2709Ventricular Paced - Lifetime (RVP)82.0%
+2442Implant Date: Device06/18/2024 00:00:00
+9035Ventricular AutoSenseOff
+2754Total Number of AT/AF Episodes Since Last Cleared0
+501Magnet Rate100.0ppm
+2724Test Polarity of Ventricular Signal AmplitudeBipolar
+2907V Pace PolarityBipolar
+873RV Lead MonitoringMonitor
+373Pre-Vent. Atrial Blanking (Pre-VAB)Off
+2904A Sense PolarityBipolar
+102Programmer Serial Number12051195
+2708Atrial Paced - Lifetime6.4%
+403Measured Average Sensor2.0
+105Session Timestamp10/07/2026 07:03:24
+9042Episode Settings: Custom EGM 2 AnodeCan
+2470RV Lead Serial NumberEEM126412
+601MRI Base Rate85bpm
+874RV Lead Monitoring: Upper Limit2000Ohms
+2681Event Histogram Percent Paced In Ventricle67.0%
+208Atrial Lead TypeBipolar
+2461Model Number: SJM RV Pace/Sense Lead2088TC Tendril STS
+402Activity Sensor: ThresholdAuto (+0.0)
+406Maximum Sensor Rate130bpm
+389Rate Responsive PVARP/VREFHigh
+354Rest RateOff
+301ModeVVI
+409Activity Sensor: Recovery TimeMedium
+200Device Model NameEndurity Core
+9049VT/VF No. of Consecutive Cycles5
+2404Episode Settings: Custom EGM 1 AnodeCan
+606MRI RV Pulse Width1.0ms
+202Device Serial Number5809481
+2440Ejection FractionUnknown
+9056Magnet Response TriggerLow
+401Activity SensorPassive
+533Longevity Estimate8.9yrs
+321Magnet ResponseBattery Test
+1608RV. Capture Test Pulse ConfigurationBipolar
+2456Manufacturer: Atrial LeadSt. Jude Medical
+211RV Lead TypeBipolar
+2906A Pace PolarityBipolar
+607MRI Atrial Pulse ConfigurationBipolar
+2468Atrial Lead Serial NumberEEL193668
+602MRI Paced AV Delay120ms
+303Hysteresis RateOff
+603MRI Atrial Pulse Amplitude5.0V
+2905V Sense PolarityBipolar
+204Patient ID10358141
+395Suspend Notification during RestOn
+2430Patient NameLASTNAME, FIRSTNAME
+2460Manufacturer: RV LeadSt. Jude Medical
+100Programmer Marketing NameMerlin
+2004Ventricular Sensing ChamberRV
+600MRI ModeDOO
+2726Test Polarity of Atrial Signal AmplitudeBipolar
+2721Atrial Signal Amplitude2.2mV
+9014Percent Pacing Alert Duration7 days
+507RV Pacing Lead Impedance462.5Ohm
+2604V. Pulse Amp Decrement Capture Test: Capture Threshold (Pulse Amp)0.5V
+2605V. Pulse Amp Decrement Capture Test: Test Pulse Width0.4ms
+2913V. Pulse Amp Decrement Capture Test: Pulse ConfigurationB
