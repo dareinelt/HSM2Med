@@ -4,6 +4,7 @@
  * @var App\Http\View $view
  * @var App\Report\ReportData $data
  * @var list<array<string, mixed>> $related
+ * @var list<array<string, mixed>> $cards
  * @var bool $rawDefault
  */
 $r = $data->report;
@@ -25,6 +26,7 @@ $cell = static function (mixed $value) use ($e): string {
         <a class="button primary" href="/reports/<?= $e($id) ?>/pdf?raw=0" target="_blank" rel="noopener">PDF anzeigen</a>
         <a class="button" href="/reports/<?= $e($id) ?>/pdf?raw=0&amp;download=1">PDF herunterladen</a>
         <a class="button" href="/reports/<?= $e($id) ?>/pdf?raw=1&amp;download=1">PDF mit Rohdatenanhang</a>
+        <a class="button" href="/patient-cards/reports/<?= $e($id) ?>">Patientenausweis erstellen</a>
     </div>
 </div>
 <p class="muted">Die PDF-Erzeugung verwendet ausschließlich den in der Datenbank gespeicherten Bericht-Snapshot.
@@ -79,12 +81,44 @@ $cell = static function (mixed $value) use ($e): string {
     <?php endif; ?>
 </section>
 
+<section class="card" id="ausweise">
+    <h2>Patientenausweis <small class="muted"><?= $e(count($cards)) ?> Fassung(en)</small></h2>
+    <p class="muted">Der Ausweis wird aus diesem Bericht erzeugt und als unveränderliches PDF gespeichert.
+        Spätere Änderungen an Stammdaten oder Patientendaten verändern bestehende Ausweise nicht.</p>
+    <?php if ($cards === []): ?>
+        <p>Für diesen Bericht liegt noch kein Patientenausweis vor.
+            <a href="/patient-cards/reports/<?= $e($id) ?>">Ausweis erstellen</a>.</p>
+    <?php else: ?>
+        <table class="table">
+            <thead><tr><th>Fassung</th><th>Nr.</th><th>Erstellt</th><th>Nachsorge</th><th>PDF</th><th></th></tr></thead>
+            <tbody>
+            <?php foreach ($cards as $card): ?>
+                <tr>
+                    <td><?= $e($card['card_version']) ?></td>
+                    <td><?= $e($card['sequence_no']) ?></td>
+                    <td><?= $e($view::dateTime($card['created_at'])) ?></td>
+                    <td><?= $card['follow_up_date'] === null || $card['follow_up_date'] === '' ? '<span class="muted">nicht angegeben</span>' : $e($card['follow_up_date']) ?></td>
+                    <td class="muted"><?= $e($card['pdf_filename']) ?></td>
+                    <td class="actions">
+                        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>">Anzeigen</a>
+                        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>/pdf?download=1">PDF herunterladen</a>
+                        <a class="button" href="/patient-cards/reports/<?= $e($id) ?>">Neue Fassung</a>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p><a href="/patient-cards/patients/<?= $e($cards[0]['patient_id']) ?>">Alle Ausweise und Nachsorgeuntersuchungen dieses Patienten</a></p>
+    <?php endif; ?>
+</section>
+
 <nav class="card toc" aria-label="Kategorien">
     <strong>Kategorien:</strong>
     <?php foreach ($data->categories() as $category): ?>
         <a href="#cat-<?= $e($category['key']) ?>"><?= $e($category['label']) ?> (<?= $e(count($category['parameters'])) ?>)</a>
     <?php endforeach; ?>
     <a href="#issues">Importprotokoll</a>
+    <a href="#ausweise">Patientenausweis</a>
     <a href="#raw">Originaldaten</a>
 </nav>
 

@@ -36,6 +36,11 @@ final class PdfDocument
     private array $pages = [];
     private int $current = -1;
 
+    /** @var list<array{name: string, image: ImageData}> */
+    private array $images = [];
+    /** @var array<int, string> Objekt-ID => Ressourcenname */
+    private array $imageNames = [];
+
     public function __construct(private readonly bool $compress = true)
     {
     }
@@ -123,6 +128,55 @@ final class PdfDocument
         ));
     }
 
+    public function image(float $x, float $y, float $width, float $height, ImageData $image): void
+    {
+        if ($width <= 0.0 || $height <= 0.0) {
+            return;
+        }
+        $id = null;
+        foreach ($this->images as $index => $entry) {
+            if ($entry['image'] === $image) {
+                $id = $index;
+                break;
+            }
+        }
+        if ($id === null) {
+            $id = count($this->images);
+            $this->images[] = ['name' => 'Im' . ($id + 1), 'image' => $image];
+        }
+        $this->append(sprintf(
+            "q %s 0 0 %s %s %s cm /%s Do Q\n",
+            self::num($width),
+            self::num($height),
+            self::num($x),
+            self::num(self::PAGE_HEIGHT - $y - $height),
+            $this->images[$id]['name'],
+        ));
+    }
+
+    private static function imageObject(ImageData $image, ?int $smaskNo): string
+    {
+        $dict = sprintf(
+            '<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /%s /BitsPerComponent %d /Filter /%s',
+            $image->width,
+            $image->height,
+            $image->colorSpace,
+            $image->bitsPerComponent,
+            $image->filter,
+        );
+        if ($image->decodeParms !== null) {
+            $parms = [];
+            foreach ($image->decodeParms as $key => $value) {
+                $parms[] = '/' . $key . ' ' . $value;
+            }
+            $dict .= ' /DecodeParms << ' . implode(' ', $parms) . ' >>';
+        }
+        if ($smaskNo !== null) {
+            $dict .= ' /SMask ' . $smaskNo . ' 0 R';
+        }
+        return sprintf("%s /Length %d >>\nstream\n%s\nendstream", $dict, strlen($image->data), $image->data);
+    }
+
     public static function textWidth(string $text, string $font, float $size): float
     {
         $encoded = self::encode(self::sanitize($text));
@@ -174,7 +228,39 @@ final class PdfDocument
             $objectNo++;
         }
         $resourcesNo = $objectNo++;
-        $objects[$resourcesNo] = '<< /Font << ' . implode(' ', $fontRefs) . ' >> /ProcSet [/PDF /Text] >>';
+        $imageRefs = [];
+        $imageObjects = [];
+        foreach ($this->images as $entry) {
+            $smaskNo = null;
+            if ($entry['image']->smaskData !== null) {
+                $smaskNo = $objectNo++;
+                $imageObjects[$smaskNo] = self::imageObject(
+                    new ImageData(
+                        $entry['image']->width,
+                        $entry['image']->height,
+                        'DeviceGray',
+                        8,
+                        'FlateDecode',
+                        $entry['image']->smaskData,
+                        $entry['image']->decodeParms === null ? null : [
+                            'Predictor' => 15,
+                            'Colors' => 1,
+                            'BitsPerComponent' => 8,
+                            'Columns' => $entry['image']->width,
+                        ],
+                    ),
+                    null,
+                );
+            }
+            $imageNo = $objectNo++;
+            $imageObjects[$imageNo] = self::imageObject($entry['image'], $smaskNo);
+            $imageRefs[] = sprintf('/%s %d 0 R', $entry['name'], $imageNo);
+        }
+        $resources = '<< /Font << ' . implode(' ', $fontRefs) . ' >> /ProcSet [/PDF /Text /ImageB /ImageC /ImageI]';
+        if ($imageRefs !== []) {
+            $resources .= ' /XObject << ' . implode(' ', $imageRefs) . ' >>';
+        }
+        $objects[$resourcesNo] = $resources . ' >>';
 
         $kids = [];
         foreach ($this->pages as $content) {
@@ -197,6 +283,9 @@ final class PdfDocument
             );
         }
         $objects[2] = sprintf('<< /Type /Pages /Kids [%s] /Count %d >>', implode(' ', $kids), count($kids));
+        foreach ($imageObjects as $imageNo => $imageObject) {
+            $objects[$imageNo] = $imageObject;
+        }
 
         $infoNo = $objectNo;
         $date = $creationDate->format('YmdHisO');

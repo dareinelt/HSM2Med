@@ -10,6 +10,8 @@ $nav = [
     'dashboard' => ['/', 'Dashboard'],
     'import' => ['/import', 'Import'],
     'reports' => ['/reports', 'Berichte'],
+    'patient_cards' => ['/patient-cards', 'Patientenausweise'],
+    'patient_card_settings' => ['/patient-cards/settings', 'Ausweis-Stammdaten'],
     'imports' => ['/imports', 'Importprotokoll'],
     'system' => ['/system', 'Systeminformationen'],
 ];

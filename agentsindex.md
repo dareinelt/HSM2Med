@@ -41,6 +41,11 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
 6. **Keine neuen Laufzeit-Abhängigkeiten** (kein Composer-/npm-Paket, kein CDN).
 7. **Keine Zugangsdaten im Code** – Konfiguration ausschließlich über Umgebungsvariablen.
 8. Alle POST-Anfragen brauchen ein gültiges CSRF-Token; alle Ausgaben über `$e(...)` escapen.
+9. **Patientenidentität nur über Nachname + Vorname + Geburtsdatum** (`patients.identity_key`).
+   Seriennummer, Patienten-ID, Import-ID und Berichts-ID sind nie alleiniges Merkmal; bei
+   mehreren Treffern entscheidet der Benutzer.
+10. **Ausweise und Stammdatenfassungen sind unveränderlich.** Bestehende Ausweis-PDFs werden nie
+    neu berechnet; jede Änderung erzeugt eine neue `card_version` bzw. Stammdatenfassung.
 
 ---
 
@@ -60,6 +65,11 @@ HSM2Med verarbeitet Auslesedaten von Herzschrittmachern/ICDs aus dem Abbott/St. 
 - **Importprotokoll** (inkl. fehlgeschlagener Importe) und **Systeminformationen**.
 - **PDF-Berichte** über eine eigene, abhängigkeitsfreie PDF-Erzeugung, optional mit
   Rohdatenanhang, jederzeit reproduzierbar nur aus der Datenbank.
+- **Patientenausweis** (zweiseitiges DIN-A4-PDF) aus einem importierten Bericht: Assistent in
+  sechs Schritten, Identitätsprüfung über Nachname + Vorname + Geburtsdatum, Konfliktentscheidung
+  je Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots, Historie; globale
+  Stammdaten (Logo, Nachsorgezentrum, Hinweis- und Flugsicherheitstexte) mit eigener Fassung je
+  Ausweis.
 - **CLI** für Import, PDF-Export, Migrationen und Schema-Erzeugung.
 - **Parameterzuordnung** über `config/parameter_mapping.php` (Kategorien, Feld-/Sondenzuordnung).
 
@@ -197,14 +207,19 @@ src/                 Anwendungscode (Namespace App\)
   Config/            Config.php (nur Umgebungsvariablen)
   Database/          Database.php (PDO), Migrator.php
   Http/              Kernel, Router, Request, Response, View, HttpException
-    Controller/      Dashboard-, Import-, ImportLog-, Report-, SystemController
+    Controller/      Dashboard-, Import-, ImportLog-, Report-, System-,
+                     PatientCard-, PatientCardSettingsController
   Import/            MerlinParser, ImportValidator, ImportService, ImportArchive,
                      PendingUploadStore, ImportAnalysis/Outcome, ImportIssue(n)
   Mapping/           ParameterMapping, CategoryAssignment
+  PatientCard/       PatientCardService, PatientCardInput, PatientCardRepository,
+                     PatientCardSettingsService, PatientCardPdfGenerator,
+                     PatientCardException, PatientName
   Report/            ReportService, ReportData, ReportSummary(Builder), PdfGenerator
-    Pdf/             PdfDocument, font_metrics.php
+    Pdf/             PdfDocument, ImageData, PngDecoder, font_metrics.php
   Repository/        ImportRepository, ReportRepository (nur vorbereitete Statements)
-  Security/          Csrf, SessionManager, UploadValidator, FileName, UploadException
+  Security/          Csrf, SessionManager, UploadValidator, ImageUploadValidator,
+                     FileName, UploadException
   Support/           Clock/FixedClock/SystemClock, Logger, MerlinDate
 templates/           PHP-Templates (layout.php + je Bereich)
 tests/               run.php, TestCase.php, Unit/, Integration/, Support/, fixtures/
@@ -247,13 +262,28 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `ReportSummaryBuilder` | Leitet Patient/Gerät/Sonden aus den Datensätzen ab (Snapshot) |
 | `ReportData`/`ReportSummary` | Wertobjekte (inkl. `reportVersion()`) |
 | `PdfGenerator` | Layout des PDF-Berichts, Versionsprüfung, Rohdatenanhang |
-| `Pdf\PdfDocument` | Eigener PDF-Writer (Seiten, Tabellen, Schriften, Kompression) |
+| `Pdf\PdfDocument` | Eigener PDF-Writer (Seiten, Tabellen, Schriften, Kompression, Bilder) |
+| `Pdf\ImageData`/`Pdf\PngDecoder` | Bilddaten für XObjects (PNG dekodieren, JPEG direkt einbetten, SMask für Transparenz) |
+
+### `src/PatientCard/`
+
+| Klasse | Verantwortung |
+| --- | --- |
+| `PatientCardService` | Assistent, Identitätsprüfung (`patients.identity_key`), Konflikte, Zusammenführen, Erzeugen (eine Transaktion), Historie, `pdfFilename()` |
+| `PatientCardInput` | Serverseitige Prüfung der Assistenteneingaben (`TEXT_FIELDS`, `MERGE_FIELDS`, Bestätigungen, Konfliktentscheidungen, Datums-/Telefon-/PLZ-Format) |
+| `PatientCardRepository` | Alle Statements für Ausweise, Stammdaten, Fassungen und Logos |
+| `PatientCardSettingsService` | Stammdaten laden/speichern (jede Speicherung = neue Fassung, Logo-Deduplizierung per SHA-256) |
+| `PatientCardPdfGenerator` | Zweiseitiges DIN-A4-Layout, prüft `SUPPORTED_CARD_VERSION`, bricht bei Platzmangel ab |
+| `PatientCardException` | Validierungs-/Fachfehler mit Feldmeldungen (HTTP 422) |
+| `PatientName` | Zerlegen/Anzeigen von `LASTNAME, FIRSTNAME`, `identityKey()` |
 
 ### `src/Security/`
 
 `Csrf` (Token je Session), `SessionManager` (Start, ID-Erneuerung, Flash-Nachrichten,
 `HttpOnly`/`SameSite=Strict`), `UploadValidator` (Größe, Endung, MIME, verbotene
-Signaturen, 0x1C-Pflicht, NUL-Anteil), `FileName::sanitize()`, `UploadException`.
+Signaturen, 0x1C-Pflicht, NUL-Anteil), `ImageUploadValidator` (Logo: PNG/JPEG, max. 1 MiB,
+max. 2000 px, prüft `is_uploaded_file()`), `FileName::sanitize()`/`downloadName()`,
+`UploadException`.
 
 ### `src/Support/`
 
@@ -281,7 +311,21 @@ und keine Rollen – der Zugriffsschutz erfolgt über Netzwerk/Reverse-Proxy.
 | GET | `/reports/{id}/pdf` | `ReportController::pdf` | PDF (`?raw=1`, `?download=1`) |
 | GET | `/imports` | `ImportLogController::index` | Importprotokoll |
 | GET | `/imports/{id}` | `ImportLogController::show` | Importdetail |
+| GET | `/patient-cards` | `PatientCardController::index` | Ausweisübersicht + Suche |
+| GET | `/patient-cards/new` | `PatientCardController::selectReport` | Bericht für neuen Ausweis wählen |
+| GET | `/patient-cards/settings` | `PatientCardSettingsController::index` | Stammdaten (Logo, Zentrum, Texte) |
+| GET | `/patient-cards/settings/logo` | `PatientCardSettingsController::logo` | Logo ausliefern |
+| POST | `/patient-cards/settings` | `PatientCardSettingsController::save` | Stammdaten speichern (neue Fassung) |
+| GET | `/patient-cards/patients/{patient}` | `PatientCardController::patient` | Ausweise + Nachsorge je Patient |
+| GET | `/patient-cards/reports/{id}` | `PatientCardController::wizard` | Assistent (`?step=1..6`) |
+| POST | `/patient-cards/reports/{id}` | `PatientCardController::generate` | Ausweis erzeugen |
+| GET | `/patient-cards/{id}` | `PatientCardController::show` | Ausweisdetail + Verlauf |
+| GET | `/patient-cards/{id}/pdf` | `PatientCardController::pdf` | Ausweis-PDF (`?download=1`) |
 | GET | `/system` | `SystemController::index` | Systeminformationen |
+
+**Reihenfolge beachten:** Die festen Pfade (`/patient-cards/new`, `/patient-cards/settings`,
+`/patient-cards/reports/{id}`, `/patient-cards/patients/{patient}`) sind in `Kernel::router()`
+**vor** `/patient-cards/{id}` registriert, damit sie nicht als Kennung interpretiert werden.
 
 Unbekannte Pfade → 404, falsche Methode → 405, abgelaufenes CSRF-Token → 400.
 **Neue Route:** Controller-Aktion anlegen → in `Kernel::router()` registrieren → Template
@@ -291,8 +335,9 @@ in `templates/` ergänzen → Navigation in `templates/layout.php` prüfen.
 
 ## 8. Datenbankschema
 
-Maßgeblich ist `database/migrations/001_initial.sql`; `database/schema.sql` ist **generiert**
-(`php bin/build-schema.php`). Ein Test stellt sicher, dass beide identisch sind.
+Maßgeblich sind `database/migrations/001_initial.sql` und `002_patient_card.sql`;
+`database/schema.sql` ist **generiert** (`php bin/build-schema.php`). Ein Test stellt sicher,
+dass beide identisch sind.
 
 | Tabelle | Zweck |
 | --- | --- |
@@ -305,10 +350,20 @@ Maßgeblich ist `database/migrations/001_initial.sql`; `database/schema.sql` ist
 | `reports` | Unveränderlicher Bericht-Snapshot inkl. Kopfdaten, `summary_snapshot` (JSON), `report_version`, `parser_version`, `mapping_version`, `parameter_count` |
 | `report_leads` | Zuordnung Bericht ↔ Sonden |
 | `report_parameters` | Unveränderlicher Snapshot je Parameter (ID, Name, Wert, Einheit, Kategorie, Position, Rohdatensatz) |
+| `patient_card_logos` | Hochgeladene Logos (SHA-256 eindeutig, MIME, Maße, Inhalt) |
+| `patient_card_settings` | Aktuelle Stammdaten (genau eine Zeile `id=1`): Zentrum, Anschrift, drei Texte, `logo_id` |
+| `patient_card_settings_versions` | Unveränderliche Fassung je Speicherung; jeder Ausweis verweist auf seine Fassung |
+| `patient_card_master_data` | Zusammengeführte Angaben je Patient (Adresse, Notfallkontakt, Hausarzt, Kontrolle), eindeutig je Patient |
+| `patient_cards` | Erzeugter Ausweis: Patient/Bericht, `sequence_no`, `card_version`, Snapshot (JSON), PDF als Blob mit SHA-256 und Größe, Dateiname |
 
 Grundsätze:
 
 - Fremdschlüssel durchgängig `ON DELETE RESTRICT`; Berichte werden **nicht gelöscht**.
+- `patients.last_name`/`first_name` und `patients.identity_key` (generiert, `Nachname|Vorname|Geburtsdatum`,
+  `utf8mb4_bin`) tragen die Identitätsregel des Patientenausweises; `idx_patients_identity` ist
+  bewusst **nicht** eindeutig, damit mehrere Treffer erkannt und dem Benutzer vorgelegt werden können.
+- Ausweise sind unveränderlich: `pdf_content` wird nie neu berechnet, jede Korrektur erzeugt eine
+  neue `card_version` desselben Berichts; `patient_cards` ist eindeutig über `(patient_id, sequence_no)`.
 - `NULL` bedeutet „Feld nicht vorhanden“, `''` bedeutet „Feld vorhanden, aber leer“.
 - Beim Laden wird `parameter_count` gegen die tatsächliche Anzahl geprüft – Abweichung ist
   ein Fehler, kein unvollständiger Bericht.
@@ -403,6 +458,19 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
   Bei strukturellen Snapshot-Änderungen **beide** erhöhen und die Layout-Auswahl im
   `PdfGenerator` anhand der Version verzweigen, damit alte Berichte weiter erzeugbar bleiben.
 
+### Patientenausweis (2 Seiten DIN A4)
+
+- Eigener Generator `PatientCardPdfGenerator` (nicht `PdfGenerator`): Seite 1 Patientenausweis
+  (Kopf, Logo, Patient, Gerät, Sonden, Notfallkontakt, Hausarzt, Kontrolle, Hinweise und
+  Flugsicherheitstexte DE/EN), Seite 2 Mess-/Verlaufsangaben und „Vergangene
+  Nachsorgeuntersuchungen“ aus den unveränderlichen Bericht-Snapshots.
+- Stammdatentexte und Logo kommen aus den Fassungstabellen, **nicht** aus dem Generator.
+- Reicht der Platz nicht, bricht die Erzeugung mit klarer Meldung ab – Inhalte werden nie
+  abgeschnitten. `SUPPORTED_CARD_VERSION` prüft `patient_cards.card_version`.
+- Das erzeugte PDF wird als Blob mit SHA-256 und Größe gespeichert und nur noch ausgeliefert;
+  Stammdaten- oder Patientendatenänderungen verändern bestehende Ausweise nicht.
+- Dateiname: `Patientenausweis_<Nachname>_<Vorname>_<Datum>[_Nr<n>].pdf`.
+
 ---
 
 ## 12. Sicherheits- und Datenschutzmodell
@@ -461,14 +529,26 @@ bzw. `Tests\Integration\DatabaseTestCase` erben und `test*`-Methoden schreiben. 
 stammen aus `TestCase` (`assertSame`, `assertTrue`, `assertContains`, …). Datenbanktests
 erhalten über `DatabaseTestCase` ein frisch migriertes, leeres Schema und `FixedClock`
 für deterministische Zeitstempel. Fixtures in `tests/Support/Fixtures.php`,
-PDF-Textauswertung in `tests/Support/PdfText.php`.
+PDF-Textauswertung in `tests/Support/PdfText.php`, GD-freie Bildfixtures in
+`tests/Support/Images.php`, Ausweis-Snapshots in `tests/Support/PatientCardFactory.php`.
+
+**Template-Tests:** `php -l` prüft Templates nicht auf Laufzeitfehler. Neue oder geänderte
+Templates deshalb in `tests/Integration/PatientCardViewTest.php` über den echten Controller
+und `new View(dirname(__DIR__, 2) . '/templates')` rendern lassen und Inhalt (Überschriften,
+CSRF-Feld, Formularfelder, Links) sowie den Statuscode prüfen. Das Test-Container-Image hat
+**kein GD** – Bildfixtures müssen ohne GD erzeugt werden; `ImageUploadValidator` verlangt
+`is_uploaded_file()`, Logos werden in Tests daher über `PatientCardRepository::insertLogo()`
+eingesetzt.
 
 ### Screenshots erzeugen
 
 `docker compose --profile docs run --rm screenshots` startet eine eigene flüchtige Instanz
 (`db-docs`, `web-docs`) und ruft `docs/screenshots/capture.py` (Playwright/Chromium,
-`pdftoppm`) auf. Produktivdaten werden nicht berührt. Der Image-Build braucht einmalig
-Internetzugang, der Betrieb der Anwendung nicht.
+`pdftoppm`) auf. Produktivdaten werden nicht berührt. Das Skript legt selbst Beispieldaten an
+(Import der Testdatei, Stammdaten inkl. Beispiel-Logo, Patientenausweis) und erzeugt die Bilder
+`01`–`22`. Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht.
+`web-docs` bindet das Projektverzeichnis **nicht** ein: nach Änderungen an Templates oder
+`src/` zuerst `docker compose build web`, sonst entstehen Bilder aus altem Code.
 
 ---
 
@@ -501,6 +581,8 @@ Internetzugang, der Betrieb der Anwendung nicht.
 | Neue Seite/Route | Controller in `src/Http/Controller/`, Route in `Kernel::router()`, Template in `templates/`, Link in `templates/layout.php` (niemals eine PHP-Datei in `public/` – nur `index.php` wird ausgeführt) |
 | Neues Parser-Fehlerkennzeichen | in `MerlinParser`/`ImportValidator` erzeugen, Code + Art in README-Tabelle und in `templates/import/preview.php` ergänzen, Test in `tests/Unit/MerlinParserTest.php` |
 | PDF-Layout ändern | `PdfGenerator` anpassen; bei strukturellen Snapshot-Änderungen `REPORT_VERSION` und `SUPPORTED_REPORT_VERSION` erhöhen und Versionszweig ergänzen |
+| Ausweis-Layout ändern | `PatientCardPdfGenerator` anpassen; bei strukturellen Snapshot-Änderungen `PatientCardService::CARD_VERSION` und `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` erhöhen; bestehende Ausweise bleiben unverändert |
+| Template ändern | Rendering im Browser **und** über `tests/Integration/PatientCardViewTest.php` (echter Controller + `View`) prüfen – `php -l` erkennt Template-Fehler nicht |
 | Neues CLI-Werkzeug | `bin/<name>.php` mit `require __DIR__ . '/../src/bootstrap.php'`, `PHP_SAPI !== 'cli'`-Guard, definierte Exit-Codes, README-Abschnitt aktualisieren |
 | Konfigurationsvariable | `Config` (+ Validierung), `docker-compose.yml`, `.env.example` und README-Tabelle ergänzen |
 | Neuer Test | Klasse in `tests/Unit`/`tests/Integration`, `docker compose --profile test run --rm tests php tests/run.php <Filter>` |
@@ -516,6 +598,7 @@ Internetzugang, der Betrieb der Anwendung nicht.
 | --- | --- |
 | `README.md` | Vollständige Betriebs-, Installations- und Bedienungsdokumentation (Quelle der Wahrheit für Nutzerverhalten) |
 | `database/migrations/001_initial.sql` | Maßgebliches Schema inkl. Kommentaren zu Snapshot-Grundsätzen |
+| `database/migrations/002_patient_card.sql` | Schema des Patientenausweises (Identitätsschlüssel, Stammdaten und -fassungen, Logos, Ausweise mit PDF-Blob) |
 | `database/schema.sql` | Generiertes Gesamtschema (muss zu den Migrationen passen) |
 | `config/parameter_mapping.php` | Kategorien und Zuordnungsregeln inkl. `version` |
 | `docker-compose.yml` | Dienste, Profile (`test`, `docs`), Netze, Volumes |
