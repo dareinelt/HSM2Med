@@ -272,9 +272,12 @@ wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklic
 
 ![Ausweis Seite 1](docs/screenshots/22-ausweis-pdf-seite-1.png)
 
-Seite 1: Kopfbereich mit Logo, Ausweistitel, Nachsorgezentrum, Patientendaten
-(Identitätsangaben), Gerät, Sonden, Implantationsort, Notfallkontakt, Hausarzt, nächste
-Kontrolle sowie Hinweis- und Flugsicherheitstexte (deutsch/englisch).
+Seite 1: Kopfbereich mit Logo, Ausweistitel, Patientendaten (Identitätsangaben), Notfallkontakt,
+Hausarzt, betreuendem Nachsorgezentrum, Implantate-/Elektroden-Tabellen (Modell, Impl.Ort bzw.
+Lokalisation, Impl.Datum), Hinweis- und Flugsicherheitstexten (deutsch/englisch) sowie dem
+Abschlussblock „Sonstiges/Bemerkung/Arzt/Nächste Kontrolle in“ mit Code-39-Barcode der
+Patient-ID. Aufbau, Reihenfolge und Beschriftungen folgen der Vorlage `.reference/idcard_ann.png`
+(Schwarz auf Weiß, ohne rotes Achtung-Feld).
 
 ![Ausweis Seite 2](docs/screenshots/22-ausweis-pdf-seite-2.png)
 
