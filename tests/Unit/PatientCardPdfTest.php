@@ -47,18 +47,27 @@ final class PatientCardPdfTest extends TestCase
 
         foreach ([
             'Schrittmacher - Patientenausweis',
-            'Patient Identification Card',
-            'Achtung / Attention',
-            'Patientendaten / Patient data',
-            'Gerät / Device',
-            'Elektroden / Leads',
-            'Hinweise / Notes',
-            'Achtung Flugsicherheit / Attention Airline Security',
-            'Nachsorge / Follow-up',
+            '(Patient Identification Card)',
+            // Abschnittsueberschriften der Vorlage idcard_ann.png
+            'Patientendaten:',
+            'Notfallkontakt:',
+            'Hausarzt:',
+            'Betreuendes Nachsorgezentrum:',
+            'Implantate:',
+            'Schrittmacher:',
+            'Elektroden:',
+            'Hinweise:',
+            'Achtung Flugsicherheit:',
+            'Attention Airline Security:',
+            'Sonstiges',
+            'Bemerkung',
+            'Nächste Kontrolle in',
+            // Tabellenkoepfe der Vorlage
+            'Modell', 'Impl.Ort', 'Impl.Datum', 'Lokalisation',
             // Patient
             'LASTNAME, FIRSTNAME', '21.10.1938', 'Musterstraße', '12345', 'Beispielstadt', '10358141', 'Bradykardie',
             // Geraet und Elektroden
-            'Endurity Core 2152', '5809481', 'links pektoral', '18.06.2024',
+            'Endurity Core', '2152', '5809481', 'links pektoral', '18.06.2024',
             'EEM126412', 'EEL193668', '2088TC Tendril STS',
             // Stammdatentexte
             'Nachsorgezentrum Beispielstadt', 'Musterweg 5',
@@ -73,6 +82,17 @@ final class PatientCardPdfTest extends TestCase
             'Seite 1 von 2',
         ] as $expected) {
             $this->assertContains($expected, $pageOne);
+        }
+        // Die Vorlage zeigt weder das rote Achtung-Feld noch englische Abschnittstitel.
+        foreach ([
+            'Achtung / Attention',
+            'Patientendaten / Patient data',
+            'Gerät / Device',
+            'Elektroden / Leads',
+            'Hinweise / Notes',
+            'Nachsorge / Follow-up',
+        ] as $forbidden) {
+            $this->assertNotContains($forbidden, $pageOne);
         }
         // Keine medizinische Bewertung
         foreach (['Empfehlung:', 'Diagnose: ', 'normal', 'kritisch'] as $forbidden) {
@@ -97,7 +117,7 @@ final class PatientCardPdfTest extends TestCase
         ] as $expected) {
             $this->assertContains($expected, $pageTwo);
         }
-        $this->assertNotContains('Patientendaten / Patient data', $pageTwo);
+        $this->assertNotContains('Patientendaten:', $pageTwo);
     }
 
     public function testEmptyHistoryIsAnnounced(): void
