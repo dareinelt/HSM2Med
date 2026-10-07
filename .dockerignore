@@ -1,0 +1,13 @@
+.git
+.gitignore
+.gitattributes
+.env
+.idea
+.vscode
+.reference
+storage/*
+tests
+*.pdf
+docker-compose.yml
+README.md
+docs

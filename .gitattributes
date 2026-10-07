@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.php text eol=lf
+*.sql text eol=lf
+
+# Merlin-Exporte enthalten Steuerzeichen (0x1C) und muessen byte-genau erhalten bleiben.
+*.log -text
+.reference/** -text
+tests/fixtures/** -text

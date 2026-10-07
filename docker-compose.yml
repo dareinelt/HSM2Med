@@ -1,0 +1,184 @@
+name: hsm2med
+
+# Start:   cp .env.example .env  (Passwoerter anpassen)  &&  docker compose up -d
+# Tests:   docker compose --profile test run --rm tests
+
+services:
+  db:
+    image: mysql:9.7
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-hsm2med}
+      MYSQL_USER: ${DB_USERNAME:-hsm2med}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD muss in .env gesetzt sein}
+      TZ: ${APP_TIMEZONE:-Europe/Berlin}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  web:
+    build: .
+    image: hsm2med-web:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-hsm2med}
+      DB_USERNAME: ${DB_USERNAME:-hsm2med}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}
+      APP_ENV: ${APP_ENV:-production}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Berlin}
+      UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-5M}
+      PDF_RAW_APPENDIX_DEFAULT: ${PDF_RAW_APPENDIX_DEFAULT:-0}
+      SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-0}
+      APP_DATA_DIR: /var/www/storage
+      IMPORT_DATA_DIR: /data/imports
+      TZ: ${APP_TIMEZONE:-Europe/Berlin}
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    volumes:
+      - application_data:/var/www/storage
+      - import_data:/data/imports
+    networks:
+      - backend
+      - frontend
+
+  # --- Nur fuer automatisierte Tests (Profil "test"), Daten im RAM -----------
+  db-test:
+    image: mysql:9.7
+    profiles: ["test"]
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: hsm2med_test
+      MYSQL_USER: hsm2med_test
+      MYSQL_PASSWORD: hsm2med_test
+      MYSQL_ROOT_PASSWORD: hsm2med_test_root
+    tmpfs:
+      - /var/lib/mysql
+    networks:
+      - test
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -phsm2med_test_root --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  tests:
+    build: .
+    image: hsm2med-web:latest
+    profiles: ["test"]
+    depends_on:
+      db-test:
+        condition: service_healthy
+    entrypoint: []
+    command: ["php", "tests/run.php"]
+    working_dir: /var/www/html
+    environment:
+      APP_ENV: testing
+      APP_TIMEZONE: Europe/Berlin
+      DB_HOST: db-test
+      DB_PORT: 3306
+      DB_DATABASE: hsm2med_test
+      DB_USERNAME: hsm2med_test
+      DB_PASSWORD: hsm2med_test
+    volumes:
+      - ./:/var/www/html:ro
+    networks:
+      - test
+
+  # --- Nur fuer Dokumentations-Screenshots (Profil "docs") --------------------
+  # Eigene, fluechtige Instanz: Produktivdaten werden nicht beruehrt.
+  # Aufruf: docker compose --profile docs run --rm screenshots
+  db-docs:
+    image: mysql:9.7
+    profiles: ["docs"]
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: hsm2med_docs
+      MYSQL_USER: hsm2med_docs
+      MYSQL_PASSWORD: hsm2med_docs
+      MYSQL_ROOT_PASSWORD: hsm2med_docs_root
+    tmpfs:
+      - /var/lib/mysql
+    networks:
+      - docs
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -phsm2med_docs_root --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  web-docs:
+    build: .
+    image: hsm2med-web:latest
+    profiles: ["docs"]
+    depends_on:
+      db-docs:
+        condition: service_healthy
+    environment:
+      DB_HOST: db-docs
+      DB_PORT: 3306
+      DB_DATABASE: hsm2med_docs
+      DB_USERNAME: hsm2med_docs
+      DB_PASSWORD: hsm2med_docs
+      APP_ENV: production
+      APP_TIMEZONE: Europe/Berlin
+      UPLOAD_MAX_SIZE: 5M
+      APP_DATA_DIR: /var/www/storage
+      IMPORT_DATA_DIR: /data/imports
+      TZ: Europe/Berlin
+    tmpfs:
+      - /var/www/storage:uid=33,gid=33
+      - /data/imports:uid=33,gid=33
+    networks:
+      - docs
+
+  screenshots:
+    build: ./docs/screenshots
+    image: hsm2med-screenshots:latest
+    profiles: ["docs"]
+    depends_on:
+      web-docs:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://web-docs
+      OUT_DIR: /work/docs/screenshots
+    volumes:
+      - ./tests/fixtures:/work/tests/fixtures:ro
+      - ./docs/screenshots:/work/docs/screenshots
+    networks:
+      - docs
+networks:
+  # Datenbanknetz ohne Verbindung nach aussen
+  backend:
+    internal: true
+  frontend: {}
+  test:
+    internal: true
+  docs:
+    internal: true
+
+volumes:
+  mysql_data:
+  application_data:
+  import_data:
