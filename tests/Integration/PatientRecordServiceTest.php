@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use App\Patient\DeviceCheckTemplate;
 use App\Patient\PatientInput;
 use App\Patient\PatientRecordRepository;
 use App\Patient\PatientRecordService;
@@ -25,7 +26,12 @@ final class PatientRecordServiceTest extends DatabaseTestCase
         parent::setUp();
         $repository = new PatientRepository($this->pdo);
         $this->patients = new PatientService($this->pdo, $repository, $this->clock);
-        $this->service = new PatientRecordService(new PatientRecordRepository($this->pdo), $repository, $this->clock);
+        $this->service = new PatientRecordService(
+            new PatientRecordRepository($this->pdo),
+            $repository,
+            $this->clock,
+            DeviceCheckTemplate::default(dirname(__DIR__, 2)),
+        );
         $this->patientId = (int) $this->patients->create(PatientInput::fromPost([
             'last_name' => 'Mustermann',
             'first_name' => 'Erika',

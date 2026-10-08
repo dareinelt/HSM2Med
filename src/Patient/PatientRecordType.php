@@ -16,6 +16,7 @@ enum PatientRecordType: string
     case Premedication = 'premedication';
     case Epicrisis = 'epicrisis';
     case Note = 'note';
+    case DeviceCheck = 'device_check';
 
     public function label(): string
     {
@@ -24,6 +25,7 @@ enum PatientRecordType: string
             self::Premedication => 'Vormedikation',
             self::Epicrisis => 'Epikrise',
             self::Note => 'Notiz',
+            self::DeviceCheck => 'Schrittmacher-/ICD-Abfrage',
         };
     }
 
@@ -34,6 +36,7 @@ enum PatientRecordType: string
             self::Premedication => 'Dauermedikation als Tabelle, Ergänzungen als Freitext',
             self::Epicrisis => 'Zusammenfassung des Verlaufs',
             self::Note => 'Freie Anmerkung zur Akte',
+            self::DeviceCheck => 'Gerät, Sonden, Messdaten und Programmierung – Vorlage des ärztlichen Dienstes',
         };
     }
 
@@ -43,6 +46,15 @@ enum PatientRecordType: string
     public function isStructured(): bool
     {
         return $this === self::Premedication;
+    }
+
+    /**
+     * Die Abfrage wird nach der Vorlage config/device_check_template.php erfasst; Aufbau und
+     * Geltungsbereich der Felder haengen von der Art des Geraets ab.
+     */
+    public function isDeviceCheck(): bool
+    {
+        return $this === self::DeviceCheck;
     }
 
     public static function fromValue(?string $value): ?self

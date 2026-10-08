@@ -102,8 +102,15 @@ $masterRows = [
                             <span class="badge"><?= $e(\App\Patient\PatientRecordService::versionLabel($record)) ?></span>
                         </td>
                         <td>
-                            <?= $e(count($record['entries'] ?? [])) ?> Zeile(n) Medikation,
-                            <?= $e(mb_strlen((string) ($record['text'] ?? ''))) ?> Zeichen Freitext
+                            <?php $check = $record['device_check'] ?? null; ?>
+                            <?php if (is_array($check)): ?>
+                                <?= $e((string) $check['device_type_label']) ?>,
+                                <?= $e((string) count($check['leads'] ?? [])) ?> Sonde(n),
+                                <?= $e((string) $check['filled']) ?> Angabe(n)
+                            <?php else: ?>
+                                <?= $e(count($record['entries'] ?? [])) ?> Zeile(n) Medikation,
+                                <?= $e(mb_strlen((string) ($record['text'] ?? ''))) ?> Zeichen Freitext
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php if (($record['lines'] ?? []) !== []): ?>

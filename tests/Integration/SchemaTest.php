@@ -37,9 +37,9 @@ final class SchemaTest extends DatabaseTestCase
     {
         $migrator = new Migrator($this->pdo, dirname(__DIR__, 2) . '/database/migrations');
         $this->assertSame([], $migrator->migrate());
-        $this->assertCount(4, $migrator->appliedMigrations());
+        $this->assertCount(5, $migrator->appliedMigrations());
         $this->assertSame(
-            ['001_initial', '002_patient_card', '003_patient_records', '004_patient_card_mrt'],
+            ['001_initial', '002_patient_card', '003_patient_records', '004_patient_card_mrt', '005_patient_record_device_check'],
             array_column($migrator->appliedMigrations(), 'version'),
         );
     }

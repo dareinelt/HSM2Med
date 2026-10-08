@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Wiederholbare Zeilen (z. B. Arzneimittelzeilen der Vormedikation)
+    // Wiederholbare Zeilen (z. B. Arzneimittelzeilen der Vormedikation, Sondenzeilen der Abfrage)
     document.querySelectorAll('[data-repeat]').forEach((container) => {
         const template = container.querySelector('template[data-repeat-template]');
         const list = container.querySelector('[data-repeat-rows]');
@@ -111,13 +111,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const limit = parseInt(container.dataset.repeatLimit || '0', 10);
+        const prefix = container.dataset.repeatName || 'medication';
+        const pattern = new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\[[^\\]]*\\]');
         const rows = () => Array.from(list.querySelectorAll('[data-repeat-row]'));
         const sync = () => {
             const count = rows().length;
             addButton.disabled = limit > 0 && count >= limit;
             rows().forEach((row, index) => {
                 row.querySelectorAll('[name]').forEach((field) => {
-                    field.name = field.name.replace(/medication\[[^\]]*\]/, 'medication[' + index + ']');
+                    field.name = field.name.replace(pattern, prefix + '[' + index + ']');
                 });
                 const remove = row.querySelector('[data-repeat-remove]');
                 if (remove) {
@@ -147,6 +149,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 sync();
             }
         });
+        sync();
+    });
+
+    // Schrittmacher-/ICD-Abfrage: Abschnitte und Felder nach Geraeteart ein- und ausblenden.
+    // Ohne JavaScript bleibt alles sichtbar; gueltig ist serverseitig die gewaehlte Geraeteart.
+    document.querySelectorAll('[data-device-type]').forEach((select) => {
+        const form = select.closest('form');
+        if (!form) {
+            return;
+        }
+        const sync = () => {
+            const deviceType = select.value;
+            form.querySelectorAll('[data-devices]').forEach((node) => {
+                const devices = (node.dataset.devices || '').split(/\s+/).filter(Boolean);
+                const visible = devices.length === 0 || devices.includes(deviceType);
+                node.hidden = !visible;
+                node.querySelectorAll('input, select, textarea').forEach((field) => {
+                    if (field.closest('[data-locked]')) {
+                        return;
+                    }
+                    field.disabled = !visible;
+                });
+            });
+        };
+        select.addEventListener('change', sync);
         sync();
     });
 });

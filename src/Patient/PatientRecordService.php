@@ -8,7 +8,7 @@ use App\Support\Clock;
 use App\Support\DateInput;
 
 /**
- * Ablauf der Aktenbausteine (Anamnese, Vormedikation, Epikrise, Notiz).
+ * Ablauf der Aktenbausteine (Anamnese, Vormedikation, Epikrise, Notiz, Schrittmacher-/ICD-Abfrage).
  *
  * Regeln:
  *  * Ein Baustein ist eine Kette unveraenderlicher Fassungen. Speichern erzeugt eine neue
@@ -16,6 +16,8 @@ use App\Support\DateInput;
  *  * Ein inhaltsgleicher Speichervorgang erzeugt keine neue Fassung.
  *  * Ein Baustein wird nie leer gespeichert.
  *  * Fassungen tragen die freie Angabe "erfasst von" (die Anwendung kennt keine Benutzer).
+ *  * Die Abfrage richtet sich nach config/device_check_template.php; der Geraetetyp bestimmt
+ *    die zulaessigen Abschnitte und Felder.
  */
 final class PatientRecordService
 {
@@ -23,7 +25,16 @@ final class PatientRecordService
         private readonly PatientRecordRepository $repository,
         private readonly PatientRepository $patients,
         private readonly Clock $clock,
+        private readonly DeviceCheckTemplate $deviceCheck,
     ) {
+    }
+
+    /**
+     * Vorlage des Bausteins "Schrittmacher-/ICD-Abfrage".
+     */
+    public function deviceCheckTemplate(): DeviceCheckTemplate
+    {
+        return $this->deviceCheck;
     }
 
     /**
@@ -89,7 +100,7 @@ final class PatientRecordService
      */
     public function save(int $patientId, PatientRecordType $type, array $post): array
     {
-        $input = PatientRecordInput::fromPost($type, $post);
+        $input = PatientRecordInput::fromPost($type, $post, $this->deviceCheck);
         $content = $input->content();
         $json = (string) json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $result = $this->repository->appendVersion(
@@ -106,7 +117,7 @@ final class PatientRecordService
     }
 
     /**
-     * Anzeigedaten einer Fassung: Inhalt, Textfassung und Medikamentenzeilen.
+     * Anzeigedaten einer Fassung: Inhalt, Textfassung, Medikamentenzeilen oder Abfragewerte.
      *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
@@ -125,12 +136,20 @@ final class PatientRecordService
 
         $text = $content['text'] ?? '';
         $text = is_string($text) ? trim($text) : '';
-        $rendered = PatientRecordInput::renderText($content);
+
+        $deviceCheck = null;
+        if ($type->isDeviceCheck()) {
+            $deviceCheck = DeviceCheckInput::describe($content, $this->deviceCheck);
+            $rendered = DeviceCheckInput::renderText($content, $this->deviceCheck);
+        } else {
+            $rendered = PatientRecordInput::renderText($content);
+        }
 
         return [
             'type' => $type->value,
             'label' => $type->label(),
             'structured' => $type->isStructured(),
+            'device_check' => $deviceCheck,
             'record_id' => isset($row['record_id']) ? (int) $row['record_id'] : null,
             'version' => isset($row['version']) ? (int) $row['version'] : null,
             'version_count' => isset($row['version_count']) ? (int) $row['version_count'] : 1,
@@ -140,7 +159,9 @@ final class PatientRecordService
             'text' => $text,
             'entries' => $entries,
             'lines' => $rendered === '' ? [] : explode("\n", $rendered),
-            'empty' => $text === '' && $entries === [],
+            'empty' => $deviceCheck !== null
+                ? $deviceCheck['filled'] === 0
+                : ($text === '' && $entries === []),
         ];
     }
 
@@ -162,7 +183,10 @@ final class PatientRecordService
             return $stored;
         }
         $content = json_decode((string) ($version['content'] ?? ''), true);
-        return PatientRecordInput::renderText(is_array($content) ? $content : []);
+        $content = is_array($content) ? $content : [];
+        return $type->isDeviceCheck()
+            ? DeviceCheckInput::renderText($content, $this->deviceCheck)
+            : PatientRecordInput::renderText($content);
     }
 
     /**

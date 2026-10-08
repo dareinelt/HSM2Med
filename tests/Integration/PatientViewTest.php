@@ -402,4 +402,133 @@ final class PatientViewTest extends DatabaseTestCase
             $this->assertContains('<h1>' . $type->label() . '</h1>', $response->body);
         }
     }
+
+    /** Das Formular der Abfrage enthaelt Geraeteart, Abschnitte, Sondenzeilen und Vorbelegung. */
+    public function testDeviceCheckFormRendersCatalogue(): void
+    {
+        $patientId = $this->create();
+
+        $response = $this->patients()->recordForm(
+            new Request('GET', '/patients/' . $patientId . '/records/device_check'),
+            ['id' => (string) $patientId, 'slug' => 'device_check'],
+        );
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('name="device_type"', $response->body);
+        $this->assertContains('data-device-type', $response->body);
+        $this->assertContains('<option value="crt_d"', $response->body);
+        $this->assertContains('Vorlage 1.0.0', $response->body);
+
+        // Wunschkatalog des aerztlichen Dienstes
+        foreach ([
+            'Gerät', 'Sonden (Elektroden)', 'Batterie', 'Programmierung Bradykardie',
+            'RA (Vorhofsonde)', 'RV (Ventrikelsonde)', 'AV', 'LV (linksventrikuläre Sonde)',
+            'Tachykardie',
+        ] as $section) {
+            $this->assertContains('<h2>' . $section . '</h2>', $response->body);
+        }
+        foreach ([
+            'name="values[device.mrt_compatibility]"', 'name="values[battery.magnet_rate]"',
+            'name="values[brady.lower_rate]"', 'name="values[ra.pvarp]"', 'name="values[rv.output]"',
+            'name="values[av.search_hysteresis]"', 'name="values[tachy.vf.therapy]"',
+            'name="values[lv.threshold]"', 'name="leads[0][shock_impedance]"',
+            'name="leads[__INDEX__][model]"', 'data-repeat-name="leads"', 'name="notes"',
+        ] as $field) {
+            $this->assertContains($field, $response->body);
+        }
+        $this->assertContains('Werte aus dem letzten Bericht übernehmen', $response->body);
+        // Die MRT-Tauglichkeit ist ein Auswahlfeld mit den Werten des Patientenausweises.
+        $this->assertContains(
+            '<select id="f-values-device-mrt_compatibility-" name="values[device.mrt_compatibility]">',
+            $response->body,
+        );
+        $this->assertContains('<option value="MRT-bedingt tauglich">MRT-bedingt tauglich</option>', $response->body);
+    }
+
+    /** Speichern der Abfrage: Weiterleitung und Zusammenfassung in der Akte. */
+    public function testDeviceCheckSaveAndSummary(): void
+    {
+        $patientId = $this->create();
+
+        $response = $this->patients()->saveRecord(
+            new Request('POST', '/patients/' . $patientId . '/records/device_check', [], [
+                'device_type' => 'crt_d',
+                'values' => [
+                    'device.manufacturer' => 'Medtronic',
+                    'brady.mode' => 'DDD',
+                    'tachy.vf.therapy' => 'Schock 35 J',
+                    'lv.output' => '2,0/0,5',
+                ],
+                'leads' => [
+                    ['model' => '5076-52', 'location' => 'RA', 'implant_date' => '15.01.2020', 'impedance' => '620'],
+                    ['model' => '6935', 'location' => 'RV', 'implant_date' => '15.01.2020', 'shock_impedance' => '45'],
+                ],
+                'notes' => 'Kontrolle ohne Auffälligkeit.',
+                'author_name' => 'Dr. Beispiel',
+            ]),
+            ['id' => (string) $patientId, 'slug' => 'device_check'],
+        );
+
+        $this->assertSame(303, $response->status);
+
+        $show = $this->patients()->show(new Request('GET', '/patients/' . $patientId), ['id' => (string) $patientId]);
+        $this->assertContains('CRT-D', $show->body);
+        $this->assertContains('2 Sonde(n)', $show->body);
+        $this->assertContains('12 Angabe(n)', $show->body);
+        $this->assertContains('Abfrage: CRT-D', $show->body);
+
+        $form = $this->patients()->recordForm(
+            new Request('GET', '/patients/' . $patientId . '/records/device_check'),
+            ['id' => (string) $patientId, 'slug' => 'device_check'],
+        );
+        $this->assertContains('value="15.01.2020"', $form->body, 'Das Implantationsdatum wird als TT.MM.JJJJ vorbelegt.');
+        $this->assertContains('<option value="crt_d" selected', $form->body);
+        $this->assertContains('Fassung 1', $form->body);
+        $this->assertContains('Tachykardie VF · Therapie: Maßnahmen: Schock 35 J', $form->body);
+        $this->assertContains('Sonden (Elektroden) · Sonde 2 · Schockimpedanz (Ohm): 45', $form->body);
+    }
+
+    /** Fehlende Geraeteart wird gemeldet, es wird nichts gespeichert. */
+    public function testDeviceCheckRequiresDeviceType(): void
+    {
+        $patientId = $this->create();
+
+        $response = $this->patients()->saveRecord(
+            new Request('POST', '/patients/' . $patientId . '/records/device_check', [], ['device_type' => '']),
+            ['id' => (string) $patientId, 'slug' => 'device_check'],
+        );
+
+        $this->assertSame(422, $response->status);
+        $this->assertContains('Bitte die Art des Geräts wählen.', $response->body);
+        $this->assertSame(0, $this->rowCount('patient_record_versions'));
+    }
+
+    /** Vorbelegung ohne Bericht: Hinweis statt Werten. */
+    public function testDeviceCheckPrefillWithoutReport(): void
+    {
+        $patientId = $this->create();
+
+        $response = $this->patients()->prefillRecord(
+            new Request('POST', '/patients/' . $patientId . '/records/device_check/prefill', [], ['device_type' => 'pacemaker']),
+            ['id' => (string) $patientId, 'slug' => 'device_check'],
+        );
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('Es liegt kein Bericht vor', $response->body);
+        $this->assertContains('value="pacemaker" selected', $response->body, 'Die gewaehlte Geraeteart bleibt erhalten.');
+    }
+
+    /** Die Vorbelegung ist nur fuer die Abfrage vorgesehen. */
+    public function testPrefillIsRejectedForOtherBlocks(): void
+    {
+        $patientId = $this->create();
+
+        $this->assertThrows(
+            HttpException::class,
+            fn () => $this->patients()->prefillRecord(
+                new Request('POST', '/patients/' . $patientId . '/records/anamnesis/prefill', [], []),
+                ['id' => (string) $patientId, 'slug' => 'anamnesis'],
+            ),
+        );
+    }
 }

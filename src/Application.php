@@ -13,6 +13,8 @@ use App\Import\ImportValidator;
 use App\Import\MerlinParser;
 use App\Import\PendingUploadStore;
 use App\Mapping\ParameterMapping;
+use App\Patient\DeviceCheckPrefill;
+use App\Patient\DeviceCheckTemplate;
 use App\Patient\PatientRecordRepository;
 use App\Patient\PatientRecordService;
 use App\Patient\PatientRepository;
@@ -41,6 +43,7 @@ final class Application
     private ?Logger $logger = null;
     private ?ParameterMapping $mapping = null;
     private ?MeasurementTemplate $measurementTemplate = null;
+    private ?DeviceCheckTemplate $deviceCheckTemplate = null;
     private ?PatientRepository $patientRepository = null;
     private ?PatientRecordRepository $patientRecordRepository = null;
     private ?PatientService $patientService = null;
@@ -78,6 +81,20 @@ final class Application
     public function measurementTemplate(): MeasurementTemplate
     {
         return $this->measurementTemplate ??= MeasurementTemplate::default($this->rootDir);
+    }
+
+    public function deviceCheckTemplate(): DeviceCheckTemplate
+    {
+        return $this->deviceCheckTemplate ??= DeviceCheckTemplate::default($this->rootDir);
+    }
+
+    public function deviceCheckPrefill(): DeviceCheckPrefill
+    {
+        return new DeviceCheckPrefill(
+            $this->patientRepository(),
+            $this->patientCardRepository(),
+            $this->reportService(),
+        );
     }
 
     public function importService(): ImportService
@@ -135,6 +152,7 @@ final class Application
             $this->patientRecordRepository(),
             $this->patientRepository(),
             $this->clock,
+            $this->deviceCheckTemplate(),
         );
     }
 

@@ -314,6 +314,7 @@ def main() -> int:
         page.goto(f"{BASE_URL}/patient-cards/reports/{report_id}")
         page.click("[data-wizard-next]")
         page.fill("input[name=street]", "Anderer Weg 5")
+        page.select_option("select[name=mrt_compatibility]", "MRT-bedingt tauglich")
         for _ in range(4):
             page.click("[data-wizard-next]")
         page.check("input[name=confirm_patient]")
@@ -332,6 +333,52 @@ def main() -> int:
 
         page.goto(f"{BASE_URL}/reports/{report_id}")
         shot(page, "23-ausweis-bericht")
+
+        # --- Aktenbaustein "Schrittmacher-/ICD-Abfrage" -------------------------
+        page.goto(card_url)
+        card_patient_href = page.locator("a[href^='/patient-cards/patients/']").first.get_attribute("href")
+        if not card_patient_href:
+            print("Patientenverknuepfung des Ausweises nicht gefunden.", file=sys.stderr)
+            return 1
+        card_patient_id = card_patient_href.rstrip("/").split("/")[-1]
+        check_url = f"{BASE_URL}/patients/{card_patient_id}/records/device_check"
+        akte_url = f"{BASE_URL}/patients/{card_patient_id}"
+
+        page.goto(check_url)
+        shot(page, "30-akte-abfrage-formular")
+
+        page.select_option("select[name=device_type]", "crt_d")
+        page.click("button[formaction$='/prefill']")
+        page.wait_for_load_state()
+        shot(page, "31-akte-abfrage-vorbefuellt")
+
+        # Der Ausweis fuehrt die MRT-Tauglichkeit: das Feld ist gesperrt und wird mitgesendet.
+        if page.locator("select[name='values[device.mrt_compatibility]'][disabled]").count() != 1:
+            print("MRT-Tauglichkeit ist im Abfrage-Formular nicht gesperrt.", file=sys.stderr)
+            return 1
+        if page.input_value("input[name='values[device.mrt_compatibility_note]']") != "Kontrolle der Sonde jährlich":
+            print("Zusatzangabe zur MRT-Tauglichkeit fehlt im Abfrage-Formular.", file=sys.stderr)
+            return 1
+
+        page.fill("input[name='values[lv.output]']", "2,5/0,4")
+        page.fill("input[name='values[lv.sensitivity]']", "1,0")
+        page.fill("input[name='values[tachy.vt1.rate]']", "170")
+        page.fill("input[name='values[tachy.vt1.cycle_length]']", "350")
+        page.fill("input[name='values[tachy.vt1.therapy]']", "ATP, Schock 35 J")
+        page.fill("textarea[name=notes]", "Kontrolle in sechs Monaten geplant.")
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("button[data-once]")
+        page.wait_for_load_state()
+        if "Fassung 1" not in page.content():
+            print("Die Abfrage wurde nicht gespeichert.", file=sys.stderr)
+            return 1
+        shot(page, "32-akte-abfrage")
+
+        page.goto(akte_url)
+        if "CRT-D" not in page.content():
+            print("Die Abfrage fehlt in der Patientenakte.", file=sys.stderr)
+            return 1
+        shot(page, "33-akte-mit-abfrage")
 
         pdf = context.request.get(f"{report_url}/pdf?raw=1&download=1")
         if not pdf.ok or not pdf.body().startswith(b"%PDF-"):

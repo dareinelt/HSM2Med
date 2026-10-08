@@ -80,6 +80,7 @@ final class Kernel
         $router->post('/patients/{id}', $patients->update(...));
         $router->get('/patients/{id}/records/{slug}', $patients->recordForm(...));
         $router->post('/patients/{id}/records/{slug}', $patients->saveRecord(...));
+        $router->post('/patients/{id}/records/{slug}/prefill', $patients->prefillRecord(...));
         $router->get('/patients/{id}', $patients->show(...));
         $router->get('/patient-cards', $cards->index(...));
         $router->get('/patient-cards/new', $cards->selectReport(...));

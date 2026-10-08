@@ -49,8 +49,10 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 - PDF-Berichte (eigene, abhängigkeitsfreie PDF-Erzeugung) – optional mit
   Rohdatenanhang, jederzeit reproduzierbar aus der Datenbank.
 - **Patientenakte**: Patienten lassen sich **vor** dem Import anlegen und pflegen. Anamnese,
-  Vormedikation und Epikrise werden als eigene, versionierte Bausteine am Patienten gespeichert –
-  analog zu Berichten aus dem Import oder Patientenausweisen.
+  Vormedikation, Epikrise und Notiz sowie die **Schrittmacher-/ICD-Abfrage** werden als eigene,
+  versionierte Bausteine am Patienten gespeichert – analog zu Berichten aus dem Import oder
+  Patientenausweisen. Die Abfrage bildet den Wunschkatalog des ärztlichen Dienstes als
+  geräteabhängiges Formular ab und lässt sich aus dem letzten Bericht vorbelegen.
 - **Patientenausweis** (zwei Seiten DIN A4) aus einem importierten Bericht: Assistent in sechs
   Schritten, Identitätsprüfung über Nachname + Vorname + Geburtsdatum, Konfliktentscheidung je
   Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie. Seite 1
@@ -147,7 +149,7 @@ docker compose up -d   # ohne --build
 | **Dashboard** | Kennzahlen und zuletzt importierte Berichte |
 | **Import** | Datei wählen → *Datei prüfen* → Vorschau → *Import endgültig speichern* oder *Verwerfen* |
 | **Berichte** | Liste und Suche; Detailansicht mit Patient, Gerät, Sonden, Kategorien, Importprotokoll und Originaldaten |
-| **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Epikrise/Notiz als versionierte Bausteine |
+| **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Epikrise/Notiz und Schrittmacher-/ICD-Abfrage als versionierte Bausteine |
 | **Importprotokoll** | Alle Importe inkl. fehlgeschlagener, mit Warnungen/Fehlern je Datensatz |
 | **Systeminformationen** | Versionen, Datenbank- und Migrationsstatus, Limits |
 
@@ -217,6 +219,7 @@ Bausteintyp existiert genau ein aktueller Stand, dazu die vollständige Historie
 | **Vormedikation** | Tabelle (Wirkstoff, Dosis, Einheit, Einnahme, Grund, von, bis) mit ergänzendem Freitext |
 | **Epikrise** | Freitext (Zusammenfassung des Verlaufs) |
 | **Notiz** | Freitext (freie Anmerkung zur Akte) |
+| **Schrittmacher-/ICD-Abfrage** | Geräteabhängiges Formular nach Vorlage `config/device_check_template.php` (siehe unten) |
 
 Jede Speicherung erzeugt eine neue Fassung mit laufender Nummer, Zeitstempel und optionalem
 Autor (`Fassung 2, vom 07.10.2026, erfasst von Dr. med. Anna Beispiel`). Inhaltsgleiche
@@ -233,6 +236,55 @@ Spalte *bis* bedeutet „fortlaufend".
 ![Vormedikation](docs/screenshots/28-akte-vormedikation.png)
 
 ![Akte mit gespeicherten Bausteinen](docs/screenshots/29-akte-patient-mit-bausteinen.png)
+
+### Schrittmacher-/ICD-Abfrage
+
+Der Baustein **Schrittmacher-/ICD-Abfrage** (`record_type = device_check`) setzt den
+Wunschkatalog des ärztlichen Dienstes als eigenes, versioniertes Formular um. Vorlage ist
+`config/device_check_template.php`; die Vorlagenfassung (`Vorlage 1.0.0`) wird mit jedem
+gespeicherten Inhalt festgehalten, sodass ältere Abfragen unverändert bleiben. Alle Feldwerte
+sind Freitext mit der Einheit in der Beschriftung (`Output (V/ms)` → `2,5/0,4`); es findet
+**keine** Zahleninterpretation und keine medizinische Bewertung statt.
+
+Die **Art des Geräts** steuert die sichtbaren Abschnitte und ist beim Speichern erforderlich:
+
+| Abschnitt | Felder | Gilt für |
+|---|---|---|
+| **Gerät** | Hersteller, Modell, Seriennummer, Implantationsdatum, MRT-Tauglichkeit (mit Zusatzangabe) | alle |
+| **Sonden (Elektroden)** | Modell, Lokalisation, Implantationsdatum, Impedanz, Wahrnehmung, Reizschwelle, Schockimpedanz | alle; Schockimpedanz nur ICD/CRT-D |
+| **Batterie** | Status, verbleibende Laufzeit, Magnetfrequenz | alle |
+| **Bradykardie** | Betriebsart, untere Grenzfrequenz, Hysteresefrequenz, max. Synch.frequenz, max. Sensorfrequenz, PMT-Intervention, R-Funktion | alle |
+| **RA (Vorhofsonde)** | Output, Empfindlichkeit, Wahrnehmungs- und Stimulationspolarität, Ausblendzeit, Refraktärzeit, Refraktärzeit (PVARP) | alle |
+| **RV (Ventrikelsonde)** | Output, Empfindlichkeit, Wahrnehmungs- und Stimulationspolarität, Ausblendzeit, Refraktärzeit | alle |
+| **AV** | Stim. AV-Intervall, wahrg. AV-Intervall, AV-Suchhysterese, ModeSwitch Betriebsart, ModeSwitch Frequenz | alle |
+| **LV (linksventrikuläre Sonde)** | Wahrnehmung, Reizschwelle, Impedanz, Output, Empfindlichkeit, Wahrnehmungs- und Stimulationspolarität | nur CRT-P/CRT-D |
+| **Tachykardie** | je VT1, VT2, VF: Erkennung (Frequenz, Zykluslänge) und Therapie (Maßnahmen) | nur ICD/CRT-D |
+
+Grenzen: bis zu 12 Sondenzeilen, 120 Zeichen je Feldwert, 4 000 Zeichen Bemerkungen. Vollständig
+leere Sondenzeilen werden verworfen; nicht zum Gerätetyp passende Werte werden weder gespeichert
+noch ausgegeben.
+
+**Vorbelegung aus dem letzten Bericht:** die Schaltfläche *Werte aus dem letzten Bericht
+übernehmen* füllt **nur leere Felder** aus dem neuesten importierten Bericht des Patienten
+(z. B. Betriebsart, Grenzfrequenzen, Sondenmodell, Implantationsdatum, Polaritäten). Die
+Zuordnung steht als `sources` (Parameter-IDs und Bezeichnungen aus dem Merlin-Quellformat) bzw.
+`from_summary` (Zeilen der Berichtszusammenfassung) in der Vorlage; vorhandene Eingaben bleiben
+erhalten, es gibt keinen Bericht → entsprechender Hinweis.
+
+**Die MRT-Tauglichkeit führt der Patientenausweis.** Enthält der neueste Ausweis eine Angabe,
+wird sie in der Abfrage nur lesend übernommen und dort gepflegt (Feld gesperrt, Wert wird
+dennoch mitgesendet). Ohne Angabe im Ausweis bleibt das Feld in der Abfrage erfassbar. Auch beim
+Speichern gilt der Ausweis: ein abweichender Wert aus dem Formular wird verworfen. Da der
+Ausweis dauerhaft auf **zwei Seiten** begrenzt ist, bleibt die Zusatzangabe auf 120 Zeichen
+beschränkt.
+
+![Abfrage: Gerätetyp wählen](docs/screenshots/30-akte-abfrage-formular.png)
+
+![Abfrage: aus dem letzten Bericht vorbelegt](docs/screenshots/31-akte-abfrage-vorbefuellt.png)
+
+![Abfrage: gespeicherte Fassung](docs/screenshots/32-akte-abfrage.png)
+
+![Akte mit gespeicherter Abfrage](docs/screenshots/33-akte-mit-abfrage.png)
 
 ### Suche und Zuordnung
 
@@ -252,8 +304,9 @@ Identität zugeordnet; die Akte verlinkt auf die Ausweise und die Nachsorge des 
 | `GET /patients/{id}` | Akte mit Stammdaten, Bausteinen und Berichten |
 | `GET /patients/{id}/edit` | Stammdaten bearbeiten |
 | `POST /patients/{id}` | Stammdaten speichern |
-| `GET /patients/{id}/records/{slug}` | Baustein bearbeiten (`anamnesis`, `premedication`, `epicrisis`, `note`) |
+| `GET /patients/{id}/records/{slug}` | Baustein bearbeiten (`anamnesis`, `premedication`, `epicrisis`, `note`, `device_check`) |
 | `POST /patients/{id}/records/{slug}` | Baustein speichern (neue Fassung) |
+| `POST /patients/{id}/records/device_check/prefill` | Leere Felder der Abfrage aus dem letzten Bericht vorbelegen |
 
 ## Patientenausweis erstellen
 
@@ -552,6 +605,32 @@ Ausweises gespeichert ist. Eine bestehende Zeile ohne Treffer im Bericht kann un
 bleiben; fehlt der Parameter im Merlin-Export, bleibt die Zelle leer, bis ein Bericht den
 Wert enthält.
 
+## Vorlage der Schrittmacher-/ICD-Abfrage erweitern
+
+Abschnitte, Felder und die Vorbelegung der Abfrage stehen 1:1 in
+`config/device_check_template.php`:
+
+- `version` – Fassung der Vorlage; bei inhaltlichen Änderungen erhöhen. Die Fassung wird im
+  Inhalt jeder gespeicherten Abfrage mitgeführt, ältere Fassungen bleiben dadurch unverändert.
+- `device_types` – Gerätetypen in der Reihenfolge des Formulars (`pacemaker`, `icd`, `crt_p`,
+  `crt_d`).
+- `lead_fields` – Spalten der Sondentabelle (`key`, `label`, optional `options`, `type`,
+  `maxlength` und `devices`).
+- `sections` → `groups` → `fields` – Abschnitte, Gruppen und Felder (`key`, `label`, optional
+  `options`, `type` = `date`, `maxlength`, `devices`).
+- `devices` – für welche Gerätetypen ein Abschnitt oder Feld gilt; fehlt die Angabe, gilt der
+  Eintrag für alle. Nicht zutreffende Werte werden weder gespeichert noch ausgegeben.
+- `sources` – Vorbelegung aus dem Bericht wie in `config/patient_card_measurements.php`
+  (`ids` haben Vorrang vor `names`, mehrere Quellen werden mit `glue` verbunden).
+- `from_summary` – Vorbelegung aus einer Zeile der Berichtszusammenfassung
+  (`<Abschnitt>.<Zeile>`), z. B. `device.Modell`.
+- `from_card` – Feld wird aus dem neuesten Patientenausweis übernommen und dort gepflegt
+  (aktuell `mrt_compatibility` und `mrt_compatibility_note`).
+
+Feldwerte sind Freitext mit der Einheit in der Beschriftung; es findet keine
+Zahleninterpretation und keine medizinische Bewertung statt. Bereits gespeicherte Abfragen
+bleiben unverändert, weil jede Fassung ihren Inhalt als Snapshot speichert.
+
 ## Sicherheitskonzept
 
 - **Netz:** standardmäßig nur an `127.0.0.1` gebunden; Datenbank nur im internen Netz.
@@ -609,6 +688,11 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   (Freitext, Vormedikationszeilen, Datumsnormalisierung, Grenzwerte, inhaltsgleiche Eingabe
   ohne neue Fassung), Anlegen ohne Import, Identität und Dubletten, Suche und Pagination
   sowie Fassungshistorie.
+- **Schrittmacher-/ICD-Abfrage:** Vorlagenvertrag (Gerätetypen, Abschnitte, Feldtypen,
+  Zuordnungstabellen, fehlerhafte Vorlagen), Eingabeprüfung (Gerätetyp, Auswahlwerte, Datum,
+  Längen, Sondenzeilen), Vorbelegung aus einem echten Beispielbericht sowie die Regel, dass die
+  MRT-Tauglichkeit aus dem Patientenausweis führt und ein abweichender Formularwert verworfen
+  wird.
 - **Oberflächen (Integration):** Die Templates werden mit den echten Controllern gerendert
   (`tests/Integration/PatientCardViewTest.php`, `tests/Integration/PatientViewTest.php`).
   Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
@@ -627,8 +711,11 @@ docker compose --profile docs down
 
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Import der
 Testdatei, Stammdaten mit Beispiel-Logo, Patient mit Anamnese und Vormedikation,
-Patientenausweis) und erzeugt daraus die Bilder `01`–`29`, darunter Assistent,
-Konfliktdialog, Patientenakte und beide Seiten des Ausweis-PDF. Der Build des
+Patientenausweis, Schrittmacher-/ICD-Abfrage) und erzeugt daraus die Bilder `01`–`33`,
+darunter Assistent, Konfliktdialog, Patientenakte, die Abfrage mit Vorbelegung und
+Sperrung der MRT-Tauglichkeit sowie beide Seiten des Ausweis-PDF. Das Skript prüft dabei
+zugleich die harten Anforderungen: Das Ausweis-PDF hat **genau zwei** Seiten, Seite 1 nennt die
+MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die Abfrage wird gespeichert. Der Build des
 Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
 Templates oder `src/` ist `docker compose build web` erforderlich.
@@ -677,7 +764,8 @@ sämtliche Daten.
 
 ```
 bin/                 CLI: import, export-pdf, migrate, build-schema, php-limits
-config/              parameter_mapping.php (Kategorien, Feldzuordnung)
+config/              parameter_mapping.php (Kategorien, Feldzuordnung),
+                     patient_card_measurements.php, device_check_template.php
 database/            migrations/ (maßgeblich) und schema.sql (generiert)
 docker/              Apache-/PHP-Konfiguration, Entrypoint
 docs/screenshots/    Screenshots und Erzeugungsskript (Playwright)

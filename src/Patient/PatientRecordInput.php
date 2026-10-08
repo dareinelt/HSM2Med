@@ -13,6 +13,7 @@ use App\Support\DateInput;
  *  * Freitextbausteine (Anamnese, Epikrise, Notiz): {"text": "..."}
  *  * Vormedikation: {"text": "Ergaenzungen", "entries": [{substance, dose, unit, schedule,
  *    reason, from, to}, ...]}
+ *  * Schrittmacher-/ICD-Abfrage: siehe DeviceCheckInput (nach Vorlage gegliedert)
  *
  * Ein Baustein wird nie leer gespeichert: ohne mindestens eine Angabe wird die Eingabe
  * abgelehnt. Fruehere Fassungen bleiben erhalten, Korrekturen erzeugen eine neue Fassung.
@@ -35,19 +36,25 @@ final class PatientRecordInput
 
     /**
      * @param list<array<string, string>> $entries
+     * @param array<string, mixed>|null $deviceCheck
      */
     private function __construct(
         public readonly string $text,
         public readonly array $entries,
         public readonly ?string $authorName,
+        public readonly ?array $deviceCheck = null,
+        private readonly ?string $deviceCheckText = null,
     ) {
     }
 
     /**
      * @param array<string, mixed> $post
      */
-    public static function fromPost(PatientRecordType $type, array $post): self
-    {
+    public static function fromPost(
+        PatientRecordType $type,
+        array $post,
+        ?DeviceCheckTemplate $template = null,
+    ): self {
         $errors = [];
         $text = $post['text'] ?? '';
         $text = is_string($text) ? $text : '';
@@ -63,10 +70,21 @@ final class PatientRecordInput
             $errors['author_name'] = sprintf('Höchstens %d Zeichen erlaubt.', self::MAX_AUTHOR);
         }
 
-        $entries = $type->isStructured() ? self::entries($post, $errors) : [];
+        $entries = [];
+        $deviceCheck = null;
+        $deviceCheckText = null;
+        if ($type->isDeviceCheck()) {
+            if ($template === null) {
+                throw new \LogicException('Für die Abfrage wird die Vorlage benötigt.');
+            }
+            $deviceCheck = DeviceCheckInput::normalize($post, $template, $errors);
+            $deviceCheckText = $deviceCheck === null ? null : DeviceCheckInput::renderText($deviceCheck, $template);
+        } elseif ($type->isStructured()) {
+            $entries = self::entries($post, $errors);
+        }
 
         if ($errors === []) {
-            if ($text === '' && $entries === []) {
+            if ($deviceCheck === null && $text === '' && $entries === []) {
                 $errors['text'] = $type->isStructured()
                     ? 'Bitte mindestens ein Arzneimittel oder eine Ergänzung angeben.'
                     : 'Bitte den Inhalt des Bausteins angeben.';
@@ -77,7 +95,7 @@ final class PatientRecordInput
             throw PatientException::validation($errors);
         }
 
-        return new self($text, $entries, $author === '' ? null : $author);
+        return new self($text, $entries, $author === '' ? null : $author, $deviceCheck, $deviceCheckText);
     }
 
     /**
@@ -149,6 +167,9 @@ final class PatientRecordInput
      */
     public function content(): array
     {
+        if ($this->deviceCheck !== null) {
+            return $this->deviceCheck;
+        }
         return $this->entries === [] ? ['text' => $this->text] : ['text' => $this->text, 'entries' => $this->entries];
     }
 
@@ -157,6 +178,9 @@ final class PatientRecordInput
      */
     public function contentText(): string
     {
+        if ($this->deviceCheckText !== null) {
+            return $this->deviceCheckText;
+        }
         $lines = [];
         foreach ($this->entries as $entry) {
             $lines[] = self::entryLine($entry);

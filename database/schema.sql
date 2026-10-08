@@ -427,3 +427,29 @@ ALTER TABLE patient_card_master_data
         COMMENT 'Zusatzangabe zur MRT-Tauglichkeit (z. B. Bedingungen)' AFTER mrt_compatibility;
 
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('004_patient_card_mrt', '8e9e51354f24dcbf67823043a8c4d5f75acddb498cf3f591ec8828506298aa98', NOW());
+
+-- ===== Migration 005_patient_record_device_check =====
+
+-- HSM2Med – Migration 005: Baustein "Schrittmacher-/ICD-Abfrage"
+--
+-- Grundsaetze (analog zu Migration 003):
+--  * Die Abfrage ist ein zusaetzlicher Bausteintyp der Akte (device_check). Sie folgt damit
+--    denselben Regeln: ein Behaelter je Patient (patient_records), unveraenderliche Fassungen
+--    in patient_record_versions, inhaltsgleiche Speicherungen erzeugen keine neue Fassung.
+--  * Es werden keine neuen Tabellen und keine neuen Spalten benoetigt. Der Inhalt der Abfrage
+--    ist strukturiertes JSON in patient_record_versions.content:
+--      {"template":"1.0.0","device_type":"pacemaker","values":{...},"leads":[...],"notes":""}
+--    Die Feldliste und die je Geraetetyp zulaessigen Abschnitte stehen in
+--    config/device_check_template.php; die Fassung der Vorlage wird im Inhalt mitgefuehrt.
+--  * content_text enthaelt weiterhin die Textfassung (Anzeige, Suche, spaeterer Brief).
+--  * Die Aufzaehlung ist die einzige Stelle, an der ein neuer Bausteintyp ergaenzt werden muss;
+--    der neue Wert 'device_check' muss exakt dem Wert von PatientRecordType::DeviceCheck
+--    entsprechen.
+--  * Bestehende Akteneintraege bleiben unberuehrt: die Erweiterung einer ENUM-Spalte aendert
+--    vorhandene Zeilen nicht.
+
+ALTER TABLE patient_records
+    MODIFY COLUMN record_type ENUM('anamnesis','premedication','epicrisis','note','device_check') NOT NULL
+        COMMENT 'Bausteintyp der Akte';
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('005_patient_record_device_check', '4611796b2e6713c55e0288bf3c74ff53ee2fd8b53be0c4bae1044e94b451652a', NOW());
