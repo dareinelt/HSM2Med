@@ -73,4 +73,25 @@ final class LetterSalutationTest extends TestCase
         $this->assertSame('', LetterSalutation::fromMaster(LetterRecipient::PATIENT, ['salutation' => null]));
         $this->assertSame('unpersoenlich', LetterSalutation::fromMaster(LetterRecipient::FAMILY_DOCTOR, ['physician_salutation' => 'unpersoenlich']));
     }
+
+    /**
+     * Der generische Arztbrief hat keine Anrede in den Stammdaten: Feld, Auswahl und Anredetext
+     * sind fest vorgegeben.
+     */
+    public function testGenericLetterHasAFixedSalutation(): void
+    {
+        $this->assertSame('Sehr geehrte Kollegin, sehr geehrter Kollege,', LetterSalutation::GENERIC);
+        $this->assertSame(LetterSalutation::GENERIC, LetterSalutation::text(LetterRecipient::GENERIC, ''));
+        $this->assertSame(
+            LetterSalutation::GENERIC,
+            LetterSalutation::text(LetterRecipient::GENERIC, LetterSalutation::KOLLEGE, 'Mustermann', 'Erika'),
+            'Die Stammdaten der Aerzte und der Name des Patienten bleiben unberuecksichtigt.',
+        );
+
+        $this->assertSame('', LetterSalutation::field(LetterRecipient::GENERIC));
+        $this->assertSame([], LetterSalutation::choices(LetterRecipient::GENERIC));
+        $this->assertSame([], LetterSalutation::values(LetterRecipient::GENERIC));
+        $this->assertSame('', LetterSalutation::fromMaster(LetterRecipient::GENERIC, ['referrer_salutation' => 'kollege']));
+        $this->assertContains('Sehr geehrte Kollegin, sehr geehrter Kollege,', LetterSalutation::hint(LetterRecipient::GENERIC));
+    }
 }

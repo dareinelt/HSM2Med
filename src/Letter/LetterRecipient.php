@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Letter;
 
 /**
- * Empfaenger eines Briefes: Patient, Hausarzt oder ueberweisender Arzt.
+ * Empfaenger eines Briefes: Patient, Hausarzt, ueberweisender Arzt oder generischer Arztbrief.
  *
  * Die Anschrift stammt aus den Stammdaten des Patienten (patient_card_master_data). Beim
  * Erzeugen werden die Anschriftzeilen im Snapshot eingefroren; spaetere Aenderungen der
@@ -13,6 +13,10 @@ namespace App\Letter;
  *
  * Verwendbar ist ein Empfaenger, wenn ein Name (beim Arzt: Name oder Praxis) sowie
  * Postleitzahl und Ort vorliegen. Die Strasse ist empfohlen, aber keine Pflicht.
+ *
+ * Der generische Arztbrief hat keine Anschrift in den Stammdaten: Sein Anschriftfeld ist fest
+ * ("An die weiterbehandelnden Aerztinnen und Aerzte"). Er wird nur angeboten, wenn weder
+ * Hausarzt noch ueberweisender Arzt angeschrieben werden kann.
  *
  * Neben der Anschrift liefert der Empfaenger die Anrede (siehe LetterSalutation). Sie steht
  * in den Stammdaten und wird im Snapshot eingefroren, damit ein gespeicherter Brief seine
@@ -23,9 +27,13 @@ final class LetterRecipient
     public const string PATIENT = 'patient';
     public const string FAMILY_DOCTOR = 'family_doctor';
     public const string REFERRING_PHYSICIAN = 'referring_physician';
+    public const string GENERIC = 'generic';
 
     /** Reihenfolge im Assistenten und beim Erzeugen. */
-    public const array TYPES = [self::PATIENT, self::FAMILY_DOCTOR, self::REFERRING_PHYSICIAN];
+    public const array TYPES = [self::PATIENT, self::FAMILY_DOCTOR, self::REFERRING_PHYSICIAN, self::GENERIC];
+
+    /** Anschriftzeilen des generischen Arztbriefs (fest, ohne Stammdatenbezug). */
+    public const array GENERIC_LINES = ['An die weiterbehandelnden', 'Ärztinnen und Ärzte'];
 
     /** Spaltenpraefix der Arztanschrift in patient_card_master_data. */
     private const array PREFIX = [
@@ -44,6 +52,7 @@ final class LetterRecipient
             self::PATIENT => 'Patient',
             self::FAMILY_DOCTOR => 'Hausarzt',
             self::REFERRING_PHYSICIAN => 'Überweisender Arzt',
+            self::GENERIC => 'Arztbrief generisch',
             default => '',
         };
     }
@@ -55,8 +64,19 @@ final class LetterRecipient
             self::PATIENT => 'Patient',
             self::FAMILY_DOCTOR => 'Hausarzt',
             self::REFERRING_PHYSICIAN => 'Ueberweisender-Arzt',
+            self::GENERIC => 'Arztbrief-generisch',
             default => '',
         };
+    }
+
+    /**
+     * Beschriftung der Auswahl im Brief-Assistenten (Schritt 4). Beim generischen Arztbrief
+     * nennt sie die Handlung, weil dort kein Empfaenger angeschrieben, sondern der Brief
+     * generisch erstellt wird.
+     */
+    public static function choiceLabel(?string $type): string
+    {
+        return $type === self::GENERIC ? 'Arztbrief generisch erstellen' : self::label($type);
     }
 
     /**
@@ -71,39 +91,54 @@ final class LetterRecipient
     public static function resolve(string $type, array $patient, array $master): array
     {
         $value = static fn (string $key): string => trim((string) ($master[$key] ?? ''));
-        if ($type === self::PATIENT) {
-            $name = trim(trim((string) ($patient['first_name'] ?? '')) . ' ' . trim((string) ($patient['last_name'] ?? '')));
-            if ($name === '') {
-                $name = trim((string) ($patient['patient_name'] ?? ''));
-            }
+
+        if ($type === self::GENERIC) {
+            // Feste Anschrift, feste Anrede: Der generische Arztbrief ist nur eine Alternative
+            // zu den Aerzten, deshalb nur waehlbar, wenn keiner der beiden angeschrieben werden kann.
+            $name = '';
             $practice = '';
-            $street = $value('street');
-            $postalCode = $value('postal_code');
-            $city = $value('city');
+            $street = '';
+            $postalCode = '';
+            $city = '';
+            $lines = self::GENERIC_LINES;
+            $available = !self::hasAddress(self::FAMILY_DOCTOR, $master) && !self::hasAddress(self::REFERRING_PHYSICIAN, $master);
+            $missing = $available ? [] : ['Anschrift von Hausarzt oder Überweisendem Arzt'];
         } else {
-            $prefix = self::PREFIX[$type] ?? throw new \InvalidArgumentException('Unbekannter Empfänger: ' . $type);
-            $name = $value($prefix . 'name');
-            $practice = $value($prefix . 'practice');
-            $street = $value($prefix . 'street');
-            $postalCode = $value($prefix . 'postal_code');
-            $city = $value($prefix . 'city');
-        }
+            if ($type === self::PATIENT) {
+                $name = trim(trim((string) ($patient['first_name'] ?? '')) . ' ' . trim((string) ($patient['last_name'] ?? '')));
+                if ($name === '') {
+                    $name = trim((string) ($patient['patient_name'] ?? ''));
+                }
+                $practice = '';
+                $street = $value('street');
+                $postalCode = $value('postal_code');
+                $city = $value('city');
+            } else {
+                $prefix = self::PREFIX[$type] ?? throw new \InvalidArgumentException('Unbekannter Empfänger: ' . $type);
+                $name = $value($prefix . 'name');
+                $practice = $value($prefix . 'practice');
+                $street = $value($prefix . 'street');
+                $postalCode = $value($prefix . 'postal_code');
+                $city = $value($prefix . 'city');
+            }
 
-        $missing = [];
-        if ($name === '' && $practice === '') {
-            $missing[] = $type === self::PATIENT ? 'Name' : 'Name oder Praxis';
-        }
-        if ($postalCode === '') {
-            $missing[] = 'Postleitzahl';
-        }
-        if ($city === '') {
-            $missing[] = 'Ort';
-        }
+            $missing = [];
+            if ($name === '' && $practice === '') {
+                $missing[] = $type === self::PATIENT ? 'Name' : 'Name oder Praxis';
+            }
+            if ($postalCode === '') {
+                $missing[] = 'Postleitzahl';
+            }
+            if ($city === '') {
+                $missing[] = 'Ort';
+            }
 
-        $lines = array_values(array_filter(
-            [$practice, $name, $street, trim($postalCode . ' ' . $city)],
-            static fn (string $line): bool => $line !== '',
-        ));
+            $lines = array_values(array_filter(
+                [$practice, $name, $street, trim($postalCode . ' ' . $city)],
+                static fn (string $line): bool => $line !== '',
+            ));
+            $available = $missing === [];
+        }
 
         $salutationValue = LetterSalutation::fromMaster($type, $master);
 
@@ -116,7 +151,7 @@ final class LetterRecipient
             'postal_code' => $postalCode,
             'city' => $city,
             'lines' => $lines,
-            'available' => $missing === [],
+            'available' => $available,
             'missing' => $missing,
             'salutation' => LetterSalutation::text(
                 $type,
@@ -126,6 +161,21 @@ final class LetterRecipient
             ),
             'salutation_value' => $salutationValue,
         ];
+    }
+
+    /**
+     * Liegt fuer eine Arztanschrift ein Name (oder eine Praxis), eine Postleitzahl und ein Ort
+     * vor? Strasse und Hausnummer sind empfohlen, aber keine Pflicht.
+     *
+     * @param array<string, mixed> $master
+     */
+    private static function hasAddress(string $type, array $master): bool
+    {
+        $prefix = self::PREFIX[$type] ?? throw new \InvalidArgumentException('Unbekannter Empfänger: ' . $type);
+        $value = static fn (string $key): string => trim((string) ($master[$key] ?? ''));
+        return ($value($prefix . 'name') !== '' || $value($prefix . 'practice') !== '')
+            && $value($prefix . 'postal_code') !== ''
+            && $value($prefix . 'city') !== '';
     }
 
     /**

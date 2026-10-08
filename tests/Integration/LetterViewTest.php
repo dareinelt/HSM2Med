@@ -13,6 +13,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\View;
 use App\Import\ImportOutcome;
+use App\Letter\LetterSalutation;
 use App\Patient\DeviceCheckTemplate;
 use App\Patient\PatientRecordRepository;
 use App\Patient\PatientRecordService;
@@ -53,6 +54,12 @@ final class LetterViewTest extends DatabaseTestCase
             DeviceCheckTemplate::default(dirname(__DIR__, 2)),
         );
         $this->patientId = 0;
+    }
+
+    /** Ist die Auswahl eines Empfaengers im Assistenten angehakt? */
+    private function isRecipientChecked(string $body, string $type): bool
+    {
+        return preg_match('/value="' . $type . '"\\s+data-recipient-label="[^"]*"\\s+checked/u', $body) === 1;
     }
 
     private function letters(): LetterController
@@ -315,9 +322,9 @@ final class LetterViewTest extends DatabaseTestCase
 
         $this->saveFamilyDoctor();
         $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
-        $checked = static fn (string $type): bool => preg_match('/value="' . $type . '"\\s+data-recipient-label="[^"]*"\\s+checked/u', $wizard->body) === 1;
-        $this->assertTrue($checked('family_doctor') && $checked('referring_physician'), 'Aerzte mit Anschrift sind vorausgewaehlt.');
-        $this->assertFalse($checked('patient'), 'Der Patient wird nur auf Wunsch angeschrieben.');
+        $this->assertTrue($this->isRecipientChecked($wizard->body, 'family_doctor') && $this->isRecipientChecked($wizard->body, 'referring_physician'), 'Aerzte mit Anschrift sind vorausgewaehlt.');
+        $this->assertFalse($this->isRecipientChecked($wizard->body, 'patient'), 'Der Patient wird nur auf Wunsch angeschrieben.');
+        $this->assertNotContains('Arztbrief generisch erstellen', $wizard->body, 'Mit Arztanschrift gibt es den generischen Arztbrief nicht.');
         $this->assertContains('Kardiologie am Dom', $wizard->body);
 
         $none = $this->createLetter(['recipients' => []]);
@@ -339,6 +346,79 @@ final class LetterViewTest extends DatabaseTestCase
         $show = $this->letters()->show(new Request('GET', '/letters/3'), ['id' => '3']);
         $this->assertContains('Domplatz 1', $show->body);
         $this->assertContains('an Überweisender Arzt', $show->body);
+    }
+
+    /**
+     * Ohne Anschrift von Hausarzt und ueberweisendem Arzt bietet der Assistent den generischen
+     * Arztbrief an und waehlt ihn vor; der Brief geht an die weiterbehandelnden Aerztinnen und
+     * Aerzte und wird fest angeredet.
+     */
+    public function testGenericLetterWithoutDoctorAddress(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+
+        $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertContains('Arztbrief generisch erstellen', $wizard->body);
+        $this->assertContains('An die weiterbehandelnden', $wizard->body);
+        $this->assertContains('Ärztinnen und Ärzte', $wizard->body);
+        $this->assertContains(LetterSalutation::GENERIC, $wizard->body);
+        $this->assertTrue($this->isRecipientChecked($wizard->body, 'generic'), 'Ohne Arztanschrift ist der generische Arztbrief vorausgewaehlt.');
+        $this->assertFalse($this->isRecipientChecked($wizard->body, 'family_doctor'), 'Ohne Anschrift ist der Hausarzt nicht vorausgewaehlt.');
+        $this->assertFalse($this->isRecipientChecked($wizard->body, 'referring_physician'));
+        $this->assertFalse($this->isRecipientChecked($wizard->body, 'patient'), 'Der Patient wird nur auf Wunsch angeschrieben.');
+        // Die Aerzte bleiben gesperrt, weil ihre Anschrift fehlt.
+        $this->assertContains('Nicht wählbar – in den Stammdaten fehlt:', $wizard->body);
+
+        $created = $this->letters()->create(new Request('POST', '/letters', [], [
+            'patient_id' => (string) $this->patientId,
+            'report_id' => '',
+            'confirm_data' => '1',
+            'confirm_letter' => '1',
+            'recipients' => ['generic'],
+        ]));
+        $this->assertSame(303, $created->status);
+        $this->assertSame(1, $this->rowCount('patient_letters'));
+
+        $row = $this->pdo->query('SELECT recipient_type, recipient_name, pdf_filename, snapshot FROM patient_letters')->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('generic', $row['recipient_type']);
+        $this->assertNull($row['recipient_name'], 'Der generische Arztbrief hat keinen Namen fuer die Liste.');
+        $this->assertContains('an-Arztbrief-generisch', (string) $row['pdf_filename']);
+        $snapshot = json_decode((string) $row['snapshot'], true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(LetterSalutation::GENERIC, $snapshot['recipient']['salutation']);
+        $this->assertSame(['An die weiterbehandelnden', 'Ärztinnen und Ärzte'], $snapshot['recipient']['lines']);
+
+        $list = $this->letters()->patient(new Request('GET', '/letters/patients/' . $this->patientId), ['patient' => (string) $this->patientId]);
+        $this->assertContains('Arztbrief generisch', $list->body);
+        $show = $this->letters()->show(new Request('GET', '/letters/1'), ['id' => '1']);
+        $this->assertContains('Arztbrief generisch', $show->body);
+        $this->assertContains('An die weiterbehandelnden', $show->body);
+        $this->assertContains('Ärztinnen und Ärzte', $show->body);
+    }
+
+    /** Mit Arztanschrift ist der generische Arztbrief nicht waehlbar - auch nicht ueber das Formular. */
+    public function testGenericLetterIsRejectedWhenADoctorAddressExists(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+
+        $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertContains('Arztbrief generisch erstellen', $wizard->body);
+
+        // Hausarzt anschliessend pflegen: der generische Arztbrief verschwindet aus dem Assistenten.
+        $this->saveFamilyDoctor();
+        $withDoctor = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertNotContains('Arztbrief generisch erstellen', $withDoctor->body);
+        $this->assertTrue($this->isRecipientChecked($withDoctor->body, 'family_doctor'), 'Der Hausarzt ist nun vorausgewaehlt.');
+        $this->assertFalse($this->isRecipientChecked($withDoctor->body, 'generic'));
+
+        // Auch eine nachtraeglich gesendete Auswahl wird abgewiesen.
+        $rejected = $this->createLetter(['recipients' => ['generic']]);
+        $this->assertSame(422, $rejected->status);
+        $this->assertContains('Für den Empfänger „Arztbrief generisch“ fehlt in den Stammdaten: Anschrift von Hausarzt oder Überweisendem Arzt.', $rejected->body);
+        $this->assertSame(0, $this->rowCount('patient_letters'));
     }
 
     /** Ohne Bausteine, Abfrage und Ausweis benennt der Assistent jeden fehlenden Teil. */
@@ -552,6 +632,7 @@ final class LetterViewTest extends DatabaseTestCase
     }
 
     /** Vorlagen werden je Empfaengerart getrennt gefasst; die Anrede steht in den Stammdaten. */
+    /** Die Empfaengerart des Editors (Dropdown) trennt die Fassungsverlaeufe. */
     public function testTemplateEditorSeparatesRecipientTypes(): void
     {
         $controller = new LetterTemplateController($this->app, new View(dirname(__DIR__, 2) . '/templates'));
@@ -563,7 +644,7 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertSame('family_doctor', $data['type']);
         $this->assertSame('family_doctor', $data['definition']['type']);
         $this->assertSame(
-            ['patient' => 'Patient', 'family_doctor' => 'Hausarzt', 'referring_physician' => 'Überweisender Arzt'],
+            ['patient' => 'Patient', 'family_doctor' => 'Hausarzt', 'referring_physician' => 'Überweisender Arzt', 'generic' => 'Arztbrief generisch'],
             $data['definition']['types'],
         );
         $this->assertSame('Standardvorlage Hausarzt', $data['current']['name']);
@@ -605,6 +686,33 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertSame('Standardvorlage Hausarzt', $sourcePayload['default_name']);
         $this->assertSame(2, $sourcePayload['template']['version_no']);
         $this->assertCount(2, $sourcePayload['versions']);
+
+        // Der generische Arztbrief ist eine eigene Art mit eigenem Fassungsverlauf.
+        $generic = $controller->editor(new Request('GET', '/system/letter-templates', ['type' => 'generic']));
+        $this->assertSame(200, $generic->status);
+        $genericData = $this->editorData($generic->body);
+        $this->assertSame('generic', $genericData['type']);
+        $this->assertSame('Standardvorlage Arztbrief generisch', $genericData['current']['name']);
+        $this->assertSame(1, $genericData['current']['version_no']);
+        $this->assertSame("An die weiterbehandelnden\nÄrztinnen und Ärzte", $genericData['current']['content']['zones']['recipient']['texts']['text']);
+
+        $genericContent = $genericData['current']['content'];
+        $genericContent['blocks'][7]['texts']['text'] = 'Mit kollegialen Grüßen, wir bitten um Weiterbehandlung.';
+        $genericSaved = $controller->save(new Request('POST', '/system/letter-templates', [], [
+            'content' => json_encode($genericContent),
+            'comment' => 'Generisch angepasst',
+            'type' => 'generic',
+            'base_version_id' => (string) $genericData['current']['id'],
+        ]));
+        $this->assertSame(200, $genericSaved->status, $genericSaved->body);
+        $savedPayload = json_decode($genericSaved->body, true);
+        $this->assertSame('generic', $savedPayload['current']['type']);
+        $this->assertSame(2, $savedPayload['current']['version_no']);
+        $this->assertSame(
+            1,
+            $this->editorData($controller->editor(new Request('GET', '/system/letter-templates'))->body)['current']['version_no'],
+            'Die Patientenvorlage bleibt unberuehrt.',
+        );
     }
 
     /**

@@ -298,7 +298,7 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `LetterTemplateService` / `LetterTemplateRepository` | Versionierung: `current()`, `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
 | `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter |
 | `LetterSample` | Beispieldaten für Editor-Vorschau |
-| `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben |
+| `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`, `generic`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben; der generische Arztbrief hat eine feste Anschrift und ist nur ohne Arztanschrift wählbar |
 
 Der Editor (`templates/letter_templates/editor.php`, eigenständige Seite ohne Layout, CSP-konform
 ohne Inline-Skript) liest seine Daten aus dem JSON-Block `#template-editor-data`; die Logik liegt

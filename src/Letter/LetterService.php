@@ -193,7 +193,7 @@ final class LetterService
     {
         $errors = [];
         if ($input->recipients === []) {
-            $errors['recipients'] = 'Bitte mindestens einen Empfänger auswählen (Patient, Hausarzt oder Überweisender Arzt).';
+            $errors['recipients'] = 'Bitte mindestens einen Empfänger auswählen (Patient, Hausarzt, Überweisender Arzt oder Arztbrief generisch).';
         }
         if (!$input->confirmData) {
             $errors['confirm_data'] = 'Die Bestätigung „Ja, die Angaben sind geprüft und vollständig." ist erforderlich.';
