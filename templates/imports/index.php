@@ -1,6 +1,7 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var list<array<string, mixed>> $rows
  * @var int $total
@@ -11,8 +12,17 @@
 $statuses = ['completed', 'completed_with_warnings', 'completed_with_errors', 'failed'];
 $link = static fn (array $params): string => '/imports' . (($q = http_build_query(array_filter($params, static fn ($v): bool => $v !== null && $v !== ''))) !== '' ? '?' . $q : '');
 ?>
-<h1>Importprotokoll</h1>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('log', 'app-icon app-icon--lg') ?><span>Importprotokoll</span></h1>
+        <p class="lead">Jede eingelesene Datei mit Ergebnis, Fehlern und Warnungen.</p>
+    </div>
+    <div class="actions">
+        <a class="button primary" href="/import"><?= $icon('import') ?><span>Neue Datei importieren</span></a>
+    </div>
+</div>
 <section class="card">
+    <h2><?= $icon('filter', 'app-icon app-icon--sm') ?> Nach Status filtern</h2>
     <p class="filters-inline">Status:
         <a href="/imports"<?= $status === null ? ' class="active"' : '' ?>>alle</a>
         <?php foreach ($statuses as $s): ?>

@@ -8,6 +8,7 @@
  * Ohne JavaScript sind alle Schritte untereinander sichtbar. Geprueft wird immer serverseitig.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $patient
  * @var App\Report\ReportData|null $report
@@ -45,13 +46,13 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
 ?>
 <div class="page-head">
     <div>
-        <h1>Brief erstellen</h1>
+        <h1><?= $icon('mail-new', 'app-icon app-icon--lg') ?><span>Brief erstellen</span></h1>
         <p class="lead">Patient Nr. <?= $e($patientId) ?> · <?= $e($patient['patient_name']) ?>
             · geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?></p>
     </div>
     <div class="actions">
-        <a class="button" href="/patients/<?= $e($patientId) ?>">Akte</a>
-        <a class="button" href="/letters/new">Anderen Patienten wählen</a>
+        <a class="button" href="/patients/<?= $e($patientId) ?>"><?= $icon('patients') ?> <span>Akte</span></a>
+        <a class="button" href="/letters/new"><?= $icon('refresh') ?> <span>Anderen Patienten wählen</span></a>
     </div>
 </div>
 
@@ -83,7 +84,7 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </ol>
 
     <section class="card wizard-step" data-step="2" id="schritt-2">
-        <h2>2 · Bericht zuordnen (optional)</h2>
+        <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> 2 · Bericht zuordnen (optional)</h2>
         <p class="muted">Der Bericht liefert den Befundteil „Schrittmacher-/ICD-Abfrage". Ohne Bericht entfällt
             dieser Teil; der Brief enthält dann Anamnese, Vormedikation, Epikrise und den Anhang.</p>
         <?= $err('report_id') ?>
@@ -134,7 +135,7 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </section>
 
     <section class="card wizard-step" data-step="3" id="schritt-3">
-        <h2>3 · Bausteine prüfen</h2>
+        <h2><?= $icon('list', 'app-icon app-icon--sm') ?> 3 · Bausteine prüfen</h2>
         <p class="muted">Gezeigt wird der aktuelle Stand der Akte. Beim Erzeugen friert der Brief genau diese
             Fassungen ein; spätere Änderungen an der Akte verändern den Brief nicht.</p>
         <?php foreach ($textTypes as $type): ?>
@@ -201,7 +202,7 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </section>
 
     <section class="card wizard-step" data-step="4" id="schritt-4">
-        <h2>4 · Zusammenfassung</h2>
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 4 · Zusammenfassung</h2>
         <table class="kv">
             <tr><th>Patient</th><td><?= $e($patient['patient_name']) ?>,
                 geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?></td></tr>
@@ -223,7 +224,7 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </section>
 
     <section class="card wizard-step" data-step="5" id="schritt-5">
-        <h2>5 · Bestätigen und erzeugen</h2>
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 5 · Bestätigen und erzeugen</h2>
         <fieldset class="choice-box">
             <legend>Bestätigungen</legend>
             <div class="field">
@@ -247,8 +248,8 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </section>
 
     <div class="wizard-controls">
-        <button type="button" class="button" data-wizard-prev>Zurück</button>
-        <button type="button" class="button" data-wizard-next>Weiter</button>
-        <button type="submit" class="button primary" data-wizard-submit data-once>Brief erzeugen</button>
+        <button type="button" class="button" data-wizard-prev><?= $icon('back') ?> <span>Zurück</span></button>
+        <button type="button" class="button" data-wizard-next><?= $icon('next') ?> <span>Weiter</span></button>
+        <button type="submit" class="button primary" data-wizard-submit data-once><?= $icon('mail-new') ?> <span data-label>Brief erzeugen</span></button>
     </div>
 </form>

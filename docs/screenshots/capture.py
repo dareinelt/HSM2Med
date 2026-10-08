@@ -71,6 +71,11 @@ AKTE_EPICRISIS = (
 
 def shot(page: Page, name: str, full_page: bool = True) -> None:
     target = OUT / f"{name}.png"
+    if full_page:
+        # Funktionsband und Titelleiste kleben ("sticky"). Nach Eingaben hat Playwright die
+        # Seite bereits gescrollt; Chromium rendert klebende Elemente dann an der aktuellen
+        # Scrollposition und der Seitenkopf fehlt am oberen Bildrand. Deshalb zurueckscrollen.
+        page.evaluate("window.scrollTo(0, 0)")
     page.screenshot(path=str(target), full_page=full_page)
     print(f"  {target.name}")
 

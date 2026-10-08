@@ -46,6 +46,7 @@ final class View
         }
         $e = self::escape(...);
         $csrf = static fn (): string => '<input type="hidden" name="_csrf" value="' . self::escape(Csrf::token()) . '">';
+        $icon = static fn (string $name, string $class = Icon::DEFAULT_CLASS): string => Icon::svg($name, $class);
         $view = $this;
         extract($vars, EXTR_SKIP);
         ob_start();

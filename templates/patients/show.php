@@ -3,6 +3,7 @@
  * Patientenakte: Stammdaten, versionierte Bausteine und verknuepfte Berichte.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $patient
  * @var array<string, mixed>|null $master
@@ -20,7 +21,7 @@ $masterRows = [
 ?>
 <div class="page-head">
     <div>
-        <h1><?= $e($patient['patient_name']) ?></h1>
+        <h1><?= $icon('patients', 'app-icon app-icon--lg') ?><span><?= $e($patient['patient_name']) ?></span></h1>
         <p class="lead">
             Patient Nr. <?= $e($id) ?>
             · geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?>
@@ -30,16 +31,16 @@ $masterRows = [
         </p>
     </div>
     <div class="actions">
-        <a class="button" href="/patients/<?= $e($id) ?>/edit">Stammdaten bearbeiten</a>
-        <a class="button" href="/patient-cards/patients/<?= $e($id) ?>">Ausweise und Nachsorge</a>
-        <a class="button" href="/letters/patients/<?= $e($id) ?>">Briefe</a>
-        <a class="button" href="/patients">Zur Übersicht</a>
+        <a class="button" href="/patients/<?= $e($id) ?>/edit"><?= $icon('edit') ?> <span>Stammdaten bearbeiten</span></a>
+        <a class="button" href="/patient-cards/patients/<?= $e($id) ?>"><?= $icon('cards') ?> <span>Ausweise und Nachsorge</span></a>
+        <a class="button" href="/letters/patients/<?= $e($id) ?>"><?= $icon('letters') ?> <span>Briefe</span></a>
+        <a class="button" href="/patients"><?= $icon('back') ?> <span>Zur Übersicht</span></a>
     </div>
 </div>
 
 <div class="grid-2">
     <section class="card">
-        <h2>Stammdaten</h2>
+        <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Stammdaten</h2>
         <table class="kv">
             <tr><th>Patienten-ID</th><td><?= $e($patient['patient_identifier'] ?? '') ?></td></tr>
             <?php foreach ($masterRows as $label => $field): ?>
@@ -55,7 +56,7 @@ $masterRows = [
     </section>
 
     <section class="card">
-        <h2>Berichte</h2>
+        <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Berichte</h2>
         <?php if ($reports === []): ?>
             <p class="muted">Noch kein Bericht mit diesem Patienten verknüpft. Nach dem Import wird der Bericht
                 automatisch zugeordnet.</p>
@@ -80,7 +81,7 @@ $masterRows = [
 </div>
 
 <section class="card">
-    <h2>Bausteine der Akte</h2>
+    <h2><?= $icon('list', 'app-icon app-icon--sm') ?> Bausteine der Akte</h2>
     <p class="muted">Jeder Baustein ist eine Kette unveränderlicher Fassungen. Speichern erzeugt eine neue
         Fassung; frühere Fassungen bleiben erhalten.</p>
     <div class="table-scroll">

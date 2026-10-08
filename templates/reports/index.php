@@ -1,6 +1,7 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, string> $filters
  * @var list<array<string, mixed>> $rows
@@ -11,8 +12,18 @@
 $query = static fn (array $extra): string => http_build_query(array_filter($extra + $filters, static fn ($v): bool => $v !== '' && $v !== null));
 $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !== [];
 ?>
-<h1>Berichte</h1>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('reports', 'app-icon app-icon--lg') ?><span>Berichte</span></h1>
+        <p class="lead">Alle importierten Merlin-Auslesungen durchsuchen und öffnen.</p>
+    </div>
+    <div class="actions">
+        <a class="button primary" href="/import"><?= $icon('import') ?><span>Neue Datei importieren</span></a>
+        <a class="button" href="/imports"><?= $icon('log') ?><span>Importprotokoll</span></a>
+    </div>
+</div>
 <section class="card">
+    <h2><?= $icon('search', 'app-icon app-icon--sm') ?> Suche und Filter</h2>
     <form method="get" action="/reports" class="filters">
         <div class="field wide"><label for="q">Suche (alle Felder)</label><input type="search" id="q" name="q" value="<?= $e($filters['q']) ?>" maxlength="200"></div>
         <div class="field"><label for="patient">Patient</label><input id="patient" name="patient" value="<?= $e($filters['patient']) ?>" maxlength="200"></div>
@@ -22,11 +33,12 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
         <div class="field"><label for="filename">Importdatei</label><input id="filename" name="filename" value="<?= $e($filters['filename']) ?>" maxlength="200"></div>
         <div class="field"><label for="date_from">Datum von</label><input type="date" id="date_from" name="date_from" value="<?= $e($filters['date_from']) ?>"></div>
         <div class="field"><label for="date_to">Datum bis</label><input type="date" id="date_to" name="date_to" value="<?= $e($filters['date_to']) ?>"></div>
-        <div class="field buttons"><button type="submit" class="primary">Suchen</button><?php if ($hasFilter): ?> <a class="button" href="/reports">Zurücksetzen</a><?php endif; ?></div>
+        <div class="field buttons"><button type="submit" class="primary"><?= $icon('search') ?> <span data-label>Suchen</span></button><?php if ($hasFilter): ?> <a class="button" href="/reports"><?= $icon('undo') ?> <span>Zurücksetzen</span></a><?php endif; ?></div>
     </form>
 </section>
 
 <section class="card">
+    <h2><?= $icon('list', 'app-icon app-icon--sm') ?> Suchergebnis</h2>
     <p class="muted"><?= $e($total) ?> Bericht(e) gefunden. Sortierung: neueste zuerst (Sitzungsdatum, sonst Importdatum).</p>
     <?php if ($rows === []): ?>
         <p>Keine Berichte gefunden.</p>

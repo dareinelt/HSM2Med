@@ -6,6 +6,7 @@
  * die Zuordnung erfolgt ueber Links. Schritt 2 folgt auf derselben Route mit ?patient={id}.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var string $query
  * @var list<array<string, mixed>> $rows
@@ -18,12 +19,12 @@ $message = $message ?? null;
 ?>
 <div class="page-head">
     <div>
-        <h1>Brief erstellen</h1>
+        <h1><?= $icon('mail-new', 'app-icon app-icon--lg') ?><span>Brief erstellen</span></h1>
         <p class="lead">Der Brief entsteht ausschließlich aus vorhandenen Daten. Zuerst wird der Patient
             gewählt; der Bericht als Befundteil ist optional.</p>
     </div>
     <div class="actions">
-        <a class="button" href="/letters">Zur Übersicht</a>
+        <a class="button" href="/letters"><?= $icon('back') ?> <span>Zur Übersicht</span></a>
     </div>
 </div>
 
@@ -42,14 +43,14 @@ $message = $message ?? null;
 <?php endforeach; ?>
 
 <section class="card">
-    <h2>Patient wählen</h2>
+    <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Patient wählen</h2>
     <form method="get" action="/letters/new" class="filters">
         <div class="field wide">
             <label for="q">Suche (Name)</label>
             <input type="search" id="q" name="q" value="<?= $e($query) ?>" maxlength="200" autofocus>
         </div>
-        <div class="field buttons"><button type="submit" class="primary">Suchen</button>
-            <?php if ($query !== ''): ?> <a class="button" href="/letters/new">Zurücksetzen</a><?php endif; ?></div>
+        <div class="field buttons"><button type="submit" class="primary"><?= $icon('search') ?> <span data-label>Suchen</span></button>
+            <?php if ($query !== ''): ?> <a class="button" href="/letters/new"><?= $icon('undo') ?> <span>Zurücksetzen</span></a><?php endif; ?></div>
     </form>
 </section>
 
@@ -75,7 +76,7 @@ $message = $message ?? null;
                         <td><?= $e($p['report_count']) ?></td>
                         <td><?= $e($p['record_count']) ?></td>
                         <td class="nowrap">
-                            <a class="button primary" href="/letters/new?patient=<?= $e($p['id']) ?>">Brief erstellen</a>
+                            <a class="button primary" href="/letters/new?patient=<?= $e($p['id']) ?>"><?= $icon('mail-new') ?> <span>Brief erstellen</span></a>
                             <a href="/patients/<?= $e($p['id']) ?>">Akte</a>
                         </td>
                     </tr>

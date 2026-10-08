@@ -1,14 +1,23 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var Closure $csrf
  * @var int $maxBytes
  * @var ?string $error
  */
 ?>
-<h1>Import</h1>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('import', 'app-icon app-icon--lg') ?><span>Import</span></h1>
+        <p class="lead">Auslesedatei eines Merlin-Programmiergeräts prüfen und übernehmen.</p>
+    </div>
+    <div class="actions">
+        <a class="button" href="/imports"><?= $icon('log') ?><span>Importprotokoll</span></a>
+    </div>
+</div>
 <section class="card">
-    <h2>Merlin-Exportdatei auswählen</h2>
+    <h2><?= $icon('import', 'app-icon app-icon--sm') ?> Merlin-Exportdatei auswählen</h2>
     <p>Unterstützt werden Textexporte eines Abbott/St. Jude Merlin-Programmiergeräts (Felder getrennt durch das Steuerzeichen 0x1C).
         Erlaubte Endungen: <code>.txt</code>, <code>.log</code>. Maximale Größe: <?= $e(App\Security\UploadValidator::formatBytes($maxBytes)) ?>.</p>
     <?php if ($error !== null): ?>

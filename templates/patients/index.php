@@ -3,6 +3,7 @@
  * Patientenuebersicht der Patientenakte.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, string> $filters
  * @var string $birth
@@ -17,13 +18,13 @@ $hasFilter = $filters['q'] !== '' || $filters['identifier'] !== '' || $birth !==
 ?>
 <div class="page-head">
     <div>
-        <h1>Patienten</h1>
+        <h1><?= $icon('patients', 'app-icon app-icon--lg') ?><span>Patienten</span></h1>
         <p class="lead">Patienten können vor dem Import angelegt werden. Anamnese, Vormedikation, Epikrise
             und Notizen werden als versionierte Bausteine am Patienten geführt.</p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/patients/new">Patient anlegen</a>
-        <a class="button" href="/patient-cards">Patientenausweise</a>
+        <a class="button primary" href="/patients/new"><?= $icon('user-plus') ?> <span>Patient anlegen</span></a>
+        <a class="button" href="/patient-cards"><?= $icon('cards') ?> <span>Patientenausweise</span></a>
     </div>
 </div>
 
@@ -42,8 +43,8 @@ $hasFilter = $filters['q'] !== '' || $filters['identifier'] !== '' || $birth !==
             <input id="birth" name="birth" value="<?= $e($birth) ?>" maxlength="32">
         </div>
         <div class="field buttons">
-            <button type="submit" class="primary">Suchen</button>
-            <?php if ($hasFilter): ?> <a class="button" href="/patients">Zurücksetzen</a><?php endif; ?>
+            <button type="submit" class="primary"><?= $icon('search') ?> <span data-label>Suchen</span></button>
+            <?php if ($hasFilter): ?> <a class="button" href="/patients"><?= $icon('undo') ?> <span>Zurücksetzen</span></a><?php endif; ?>
         </div>
     </form>
     <?php if ($filterError !== null): ?>

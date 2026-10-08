@@ -3,6 +3,7 @@
  * Uebersicht der erstellten Briefe zur Schrittmacher-/ICD-Abfrage.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, string> $filters
  * @var list<array<string, mixed>> $rows
@@ -18,14 +19,14 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
 ?>
 <div class="page-head">
     <div>
-        <h1>Briefe zur Schrittmacher-/ICD-Abfrage</h1>
+        <h1><?= $icon('letters', 'app-icon app-icon--lg') ?><span>Briefe zur Schrittmacher-/ICD-Abfrage</span></h1>
         <p class="lead">Jeder Brief ist ein unveränderliches Dokument: Er friert die Fassungen von Anamnese,
             Vormedikation und Epikrise, den zugeordneten Bericht und die Stammdatenfassung ein. Die vollständige
             Abfragetabelle steht als mehrseitiger Anhang am Briefende.</p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/letters/new">Brief erstellen</a>
-        <a class="button" href="/patients">Patienten</a>
+        <a class="button primary" href="/letters/new"><?= $icon('mail-new') ?> <span>Brief erstellen</span></a>
+        <a class="button" href="/patients"><?= $icon('patients') ?> <span>Patienten</span></a>
     </div>
 </div>
 
@@ -34,7 +35,7 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
         <div class="field wide"><label for="q">Suche (Patient)</label><input type="search" id="q" name="q" value="<?= $e($filters['q']) ?>" maxlength="200"></div>
         <div class="field"><label for="patient">Patienten-ID</label><input id="patient" name="patient" value="<?= $e($filters['patient']) ?>" maxlength="200"></div>
         <div class="field"><label for="report">Bericht-Nr.</label><input id="report" name="report" value="<?= $e($filters['report']) ?>" maxlength="200"></div>
-        <div class="field buttons"><button type="submit" class="primary">Suchen</button><?php if ($hasFilter): ?> <a class="button" href="/letters">Zurücksetzen</a><?php endif; ?></div>
+        <div class="field buttons"><button type="submit" class="primary"><?= $icon('search') ?> <span data-label>Suchen</span></button><?php if ($hasFilter): ?> <a class="button" href="/letters"><?= $icon('undo') ?> <span>Zurücksetzen</span></a><?php endif; ?></div>
     </form>
 </section>
 

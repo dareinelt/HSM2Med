@@ -1,13 +1,26 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $import
  * @var list<array<string, mixed>> $issues
  */
 ?>
-<h1>Import Nr. <?= $e($import['id']) ?></h1>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('log', 'app-icon app-icon--lg') ?><span>Import Nr. <?= $e($import['id']) ?></span></h1>
+        <p class="lead">Ergebnis der Dateiprüfung mit allen Meldungen des Parsers.</p>
+    </div>
+    <div class="actions">
+        <a class="button" href="/imports"><?= $icon('back') ?><span>Zurück zum Protokoll</span></a>
+        <?php if ($import['report_id'] !== null): ?>
+            <a class="button primary" href="/reports/<?= $e($import['report_id']) ?>"><?= $icon('reports') ?><span>Bericht öffnen</span></a>
+        <?php endif; ?>
+    </div>
+</div>
 <section class="card">
+    <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Dateiangaben</h2>
     <table class="kv">
         <tr><th>Dateiname</th><td class="break"><?= $e($import['filename']) ?></td></tr>
         <tr><th>Dateigröße</th><td><?= $e(App\Security\UploadValidator::formatBytes((int) $import['file_size'])) ?> (<?= $e($import['file_size']) ?> Byte)</td></tr>
@@ -27,7 +40,7 @@
 </section>
 
 <section class="card">
-    <h2>Fehler und Warnungen (<?= $e(count($issues)) ?>)</h2>
+    <h2><?= $icon('warning', 'app-icon app-icon--sm') ?> Fehler und Warnungen (<?= $e(count($issues)) ?>)</h2>
     <?php if ($issues === []): ?>
         <p class="muted">Keine Einträge.</p>
     <?php else: ?>

@@ -1,6 +1,7 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var Closure $csrf
  * @var App\Http\View $view
  * @var string $token
@@ -20,8 +21,12 @@ $cell = static function (?string $value) use ($e): string {
     return $value === '' ? '<span class="muted">(leer)</span>' : $e($value);
 };
 ?>
-<h1>Importübersicht</h1>
-<p class="lead">Bitte prüfen Sie die erkannten Daten. Es wurde noch nichts gespeichert.</p>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('eye', 'app-icon app-icon--lg') ?><span>Importübersicht</span></h1>
+        <p class="lead">Bitte prüfen Sie die erkannten Daten. Es wurde noch nichts gespeichert.</p>
+    </div>
+</div>
 
 <?php if (!$valid): ?>
     <div class="alert alert-error" role="alert">
@@ -46,7 +51,7 @@ $cell = static function (?string $value) use ($e): string {
 
 <div class="grid-2">
     <section class="card">
-        <h2>Datei</h2>
+        <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Datei</h2>
         <table class="kv">
             <tr><th>Dateiname</th><td><?= $e($analysis->filename) ?></td></tr>
             <tr><th>Dateigröße</th><td><?= $e(App\Security\UploadValidator::formatBytes($analysis->fileSize)) ?> (<?= $e($analysis->fileSize) ?> Byte)</td></tr>
@@ -60,13 +65,13 @@ $cell = static function (?string $value) use ($e): string {
         </table>
     </section>
     <section class="card">
-        <h2>Patient</h2>
+        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Patient</h2>
         <table class="kv">
             <?php foreach ($sections['patient']['rows'] as $row): ?>
                 <tr><th><?= $e($row['label']) ?></th><td><?= $cell($row['value']) ?></td></tr>
             <?php endforeach; ?>
         </table>
-        <h2>Gerät</h2>
+        <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Gerät</h2>
         <table class="kv">
             <?php foreach ($sections['device']['rows'] as $row): ?>
                 <tr><th><?= $e($row['label'] === 'Sitzungszeitpunkt' ? 'Auslesedatum (Sitzung)' : $row['label']) ?></th>
@@ -77,7 +82,7 @@ $cell = static function (?string $value) use ($e): string {
 </div>
 
 <section class="card">
-    <h2>Sonden</h2>
+    <h2><?= $icon('list', 'app-icon app-icon--sm') ?> Sonden</h2>
     <?php if ($snapshot['leads'] === []): ?>
         <p class="muted">Keine Sondenangaben in der Datei.</p>
     <?php else: ?>
@@ -99,7 +104,7 @@ $cell = static function (?string $value) use ($e): string {
 </section>
 
 <section class="card">
-    <h2>Parameter je Kategorie</h2>
+    <h2><?= $icon('settings', 'app-icon app-icon--sm') ?> Parameter je Kategorie</h2>
     <ul class="chips">
         <?php foreach ($analysis->categoryCounts() as $label => $count): ?>
             <li><?= $e($label) ?> <strong><?= $e($count) ?></strong></li>
@@ -109,7 +114,7 @@ $cell = static function (?string $value) use ($e): string {
 
 <?php $issues = $analysis->issues(); ?>
 <section class="card">
-    <h2>Fehler und Warnungen (<?= $e(count($issues)) ?>)</h2>
+    <h2><?= $icon('warning', 'app-icon app-icon--sm') ?> Fehler und Warnungen (<?= $e(count($issues)) ?>)</h2>
     <?php if ($issues === []): ?>
         <p class="muted">Keine Auffälligkeiten beim Einlesen.</p>
     <?php else: ?>

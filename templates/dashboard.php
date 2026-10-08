@@ -1,23 +1,56 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, int> $stats
  * @var list<array<string, mixed>> $latestReports
  * @var list<array<string, mixed>> $latestImports
  */
 ?>
-<h1>Dashboard</h1>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('dashboard', 'app-icon app-icon--lg') ?><span>Dashboard</span></h1>
+        <p class="lead">Kennzahlen, letzte Vorgänge und die häufigsten Einstiege.</p>
+    </div>
+    <div class="actions">
+        <a class="button primary" href="/import"><?= $icon('import') ?><span>Neue Datei importieren</span></a>
+    </div>
+</div>
+
+<div class="tiles">
+    <a class="tile" href="/import">
+        <?= $icon('import') ?>
+        <div><strong>Merlin-Datei importieren</strong><span>Auslesedatei des Programmiergeräts einlesen</span></div>
+    </a>
+    <a class="tile" href="/reports">
+        <?= $icon('reports') ?>
+        <div><strong>Berichte ansehen</strong><span>Alle importierten Auslesungen durchsuchen</span></div>
+    </a>
+    <a class="tile" href="/patient-cards/new">
+        <?= $icon('card-plus') ?>
+        <div><strong>Patientenausweis erstellen</strong><span>Ausweis mit MRT-Kompatibilität und Nachsorgeplan</span></div>
+    </a>
+    <a class="tile" href="/letters/new">
+        <?= $icon('mail-new') ?>
+        <div><strong>Arztbrief erstellen</strong><span>Brief aus Anamnese, Befunden und Auslesedaten</span></div>
+    </a>
+    <a class="tile" href="/patients/new">
+        <?= $icon('user-plus') ?>
+        <div><strong>Patient anlegen</strong><span>Neue Akte mit Stammdaten erfassen</span></div>
+    </a>
+</div>
+
 <div class="stats">
-    <div class="stat"><span class="stat-value"><?= $e($stats['patients']) ?></span><span class="stat-label">Patienten</span></div>
-    <div class="stat"><span class="stat-value"><?= $e($stats['devices']) ?></span><span class="stat-label">Geräte</span></div>
-    <div class="stat"><span class="stat-value"><?= $e($stats['reports']) ?></span><span class="stat-label">Berichte</span></div>
-    <div class="stat"><span class="stat-value"><?= $e($stats['imports']) ?></span><span class="stat-label">Importe<?= $stats['failed_imports'] > 0 ? ' (' . $e($stats['failed_imports']) . ' fehlgeschlagen)' : '' ?></span></div>
+    <div class="stat"><span class="stat-value"><?= $e($stats['patients']) ?></span><span class="stat-label"><?= $icon('patients', 'app-icon app-icon--sm') ?> Patienten</span></div>
+    <div class="stat"><span class="stat-value"><?= $e($stats['devices']) ?></span><span class="stat-label"><?= $icon('pulse', 'app-icon app-icon--sm') ?> Geräte</span></div>
+    <div class="stat"><span class="stat-value"><?= $e($stats['reports']) ?></span><span class="stat-label"><?= $icon('reports', 'app-icon app-icon--sm') ?> Berichte</span></div>
+    <div class="stat"><span class="stat-value"><?= $e($stats['imports']) ?></span><span class="stat-label"><?= $icon('import', 'app-icon app-icon--sm') ?> Importe<?= $stats['failed_imports'] > 0 ? ' (' . $e($stats['failed_imports']) . ' fehlgeschlagen)' : '' ?></span></div>
 </div>
 
 <div class="grid-2">
     <section class="card">
-        <h2>Letzte Berichte</h2>
+        <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Letzte Berichte</h2>
         <?php if ($latestReports === []): ?>
             <p class="muted">Noch keine Berichte vorhanden. <a href="/import">Jetzt eine Datei importieren.</a></p>
         <?php else: ?>
@@ -37,7 +70,7 @@
         <?php endif; ?>
     </section>
     <section class="card">
-        <h2>Letzte Importe</h2>
+        <h2><?= $icon('import', 'app-icon app-icon--sm') ?> Letzte Importe</h2>
         <?php if ($latestImports === []): ?>
             <p class="muted">Noch keine Importe.</p>
         <?php else: ?>
@@ -54,6 +87,6 @@
                 </tbody>
             </table>
         <?php endif; ?>
-        <p><a class="button primary" href="/import">Neue Datei importieren</a></p>
+        <p><a class="button primary" href="/import"><?= $icon('import') ?> Neue Datei importieren</a></p>
     </section>
 </div>

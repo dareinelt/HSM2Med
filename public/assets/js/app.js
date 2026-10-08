@@ -2,6 +2,18 @@
 'use strict';
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Hoehe des festen Rahmens (Titelleiste + Funktionsband) als CSS-Variable bereitstellen,
+    // damit Tabellenkoepfe und Sprungmarken nicht darunter verschwinden.
+    const chrome = document.querySelector('.app-chrome');
+    if (chrome) {
+        const syncChromeHeight = () => {
+            document.documentElement.style.setProperty('--chrome-h', Math.round(chrome.getBoundingClientRect().height) + 'px');
+        };
+        syncChromeHeight();
+        window.addEventListener('resize', syncChromeHeight);
+        window.addEventListener('load', syncChromeHeight);
+    }
+
     // Clientseitige Vorpruefung der Uploadgroesse/-endung (serverseitige Pruefung bleibt massgeblich)
     document.querySelectorAll('form.upload-form').forEach((form) => {
         const input = form.querySelector('input[type=file]');
@@ -37,7 +49,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         form.addEventListener('submit', () => {
-            window.setTimeout(() => { button.disabled = true; button.textContent = 'Wird gespeichert …'; }, 0);
+            window.setTimeout(() => {
+                button.disabled = true;
+                // Nur die Beschriftung tauschen, damit ein Symbol in der Schaltflaeche erhalten bleibt.
+                const label = button.querySelector('[data-label]');
+                (label || button).textContent = 'Wird gespeichert …';
+            }, 0);
         });
     });
 

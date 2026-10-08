@@ -7,6 +7,7 @@
  * immer serverseitig.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var App\Report\ReportData $report
  * @var array<string, string> $values
@@ -67,13 +68,13 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
 ?>
 <div class="page-head">
     <div>
-        <h1>Patientenausweis erstellen</h1>
+        <h1><?= $icon('card-plus', 'app-icon app-icon--lg') ?><span>Patientenausweis erstellen</span></h1>
         <p class="lead">Bericht Nr. <?= $e($id) ?> · Schritt 1: Patient identifizieren – die Identität ist
             Nachname + Vorname + Geburtsdatum.</p>
     </div>
     <div class="actions">
-        <a class="button" href="/reports/<?= $e($id) ?>">Bericht ansehen</a>
-        <a class="button" href="/patient-cards/new">Anderen Bericht wählen</a>
+        <a class="button" href="/reports/<?= $e($id) ?>"><?= $icon('eye') ?> <span>Bericht ansehen</span></a>
+        <a class="button" href="/patient-cards/new"><?= $icon('refresh') ?> <span>Anderen Bericht wählen</span></a>
     </div>
 </div>
 
@@ -98,7 +99,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
 <?php endif; ?>
 
 <section class="card">
-    <h2>Quellbericht</h2>
+    <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Quellbericht</h2>
     <div class="grid-2">
         <table class="kv">
             <tr><th>Bericht</th><td>Nr. <?= $e($id) ?> vom
@@ -135,7 +136,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </ol>
 
     <section class="wizard-step" data-step="1">
-        <h2>1. Patient identifizieren</h2>
+        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> 1. Patient identifizieren</h2>
         <p class="muted">Nachname, Vorname und Geburtsdatum bestimmen den Patienten. Vorbelegt sind die Werte aus
             dem Bericht; sie können korrigiert werden.</p>
         <div class="field-row">
@@ -175,7 +176,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </section>
 
     <section class="wizard-step" data-step="2">
-        <h2>2. Patientendaten ergänzen</h2>
+        <h2><?= $icon('user-plus', 'app-icon app-icon--sm') ?> 2. Patientendaten ergänzen</h2>
         <p class="muted">Diese Angaben sind im Merlin-Export nicht enthalten und werden ausschließlich hier gepflegt.</p>
         <div class="field-row">
             <?= $text('street', 'Straße und Hausnummer') ?>
@@ -197,7 +198,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </section>
 
     <section class="wizard-step" data-step="3">
-        <h2>3. Notfallkontakt</h2>
+        <h2><?= $icon('user-plus', 'app-icon app-icon--sm') ?> 3. Notfallkontakt</h2>
         <p class="muted">Erscheint auf dem Ausweis unter „Notfallkontakt".</p>
         <div class="field-row">
             <?= $text('emergency_contact_name', 'Name des Notfallkontakts') ?>
@@ -206,7 +207,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </section>
 
     <section class="wizard-step" data-step="4">
-        <h2>4. Hausarzt</h2>
+        <h2><?= $icon('user-plus', 'app-icon app-icon--sm') ?> 4. Hausarzt</h2>
         <p class="muted">Hausärztliche Anschrift für Rückfragen.</p>
         <div class="field-row">
             <?= $text('physician_name', 'Name') ?>
@@ -218,7 +219,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </section>
 
     <section class="wizard-step" data-step="5">
-        <h2>5. Nachsorge und Kontrolle</h2>
+        <h2><?= $icon('calendar', 'app-icon app-icon--sm') ?> 5. Nachsorge und Kontrolle</h2>
         <p class="muted">Das Nachsorgezentrum stammt aus den globalen Stammdaten.</p>
         <div class="field-row">
             <?= $text('control_physician', 'Arzt zur Kontrolle', 'Vorbelegt aus dem Bericht (Parameter „Nachsorgearzt"), sofern vorhanden') ?>
@@ -236,7 +237,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </section>
 
     <section class="wizard-step" data-step="6">
-        <h2>6. Zusammenfassung und Bestätigung</h2>
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 6. Zusammenfassung und Bestätigung</h2>
 
         <?php if ($conflicts !== []): ?>
             <div class="alert alert-warning" role="alert">

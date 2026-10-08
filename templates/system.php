@@ -1,6 +1,7 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, string> $app
  * @var array<string, array{0: string, 1: bool}> $storage
@@ -9,10 +10,18 @@
  * @var array<string, int>|null $stats
  */
 ?>
-<h1>Systeminformationen</h1>
+<div class="page-head">
+    <div>
+        <h1><?= $icon('system', 'app-icon app-icon--lg') ?><span>Systeminformationen</span></h1>
+        <p class="lead">Technischer Zustand der Anwendung, Datenbank und Speicherorte.</p>
+    </div>
+    <div class="actions">
+        <a class="button" href="#datenschutz"><?= $icon('shield') ?><span>Datenschutz und Betrieb</span></a>
+    </div>
+</div>
 <div class="grid-2">
     <section class="card">
-        <h2>Anwendung</h2>
+        <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Anwendung</h2>
         <table class="kv">
             <?php foreach ($app as $label => $value): ?>
                 <tr><th><?= $e($label) ?></th><td><?= $e($value) ?></td></tr>
@@ -23,7 +32,7 @@
         </table>
     </section>
     <section class="card">
-        <h2>Datenbank</h2>
+        <h2><?= $icon('database', 'app-icon app-icon--sm') ?> Datenbank</h2>
         <table class="kv">
             <tr><th>Verbindung</th><td class="<?= $database['ok'] ? 'text-ok' : 'text-error' ?>"><?= $database['ok'] ? 'verbunden' : 'nicht erreichbar' . (isset($database['reference']) ? ' (Ref. ' . $e($database['reference']) . ')' : '') ?></td></tr>
             <tr><th>MySQL-Version</th><td><?= $e($database['version'] ?? '–') ?></td></tr>
@@ -39,7 +48,7 @@
                 <tr><th>Importe (fehlgeschlagen)</th><td><?= $e($stats['imports']) ?> (<?= $e($stats['failed_imports']) ?>)</td></tr>
             <?php endif; ?>
         </table>
-        <h2>Speicher</h2>
+        <h2><?= $icon('database', 'app-icon app-icon--sm') ?> Speicher</h2>
         <table class="kv">
             <?php foreach ($storage as $label => [$path, $writable]): ?>
                 <tr><th><?= $e($label) ?></th><td><code><?= $e($path) ?></code> <span class="<?= $writable ? 'text-ok' : 'text-error' ?>"><?= $writable ? 'beschreibbar' : 'nicht beschreibbar' ?></span></td></tr>
@@ -47,10 +56,9 @@
         </table>
     </section>
 </div>
-<section class="card">
-    <h2>Datenschutz und Betrieb</h2>
+<section class="card" id="datenschutz">
+    <h2><?= $icon('shield', 'app-icon app-icon--sm') ?> Datenschutz und Betrieb</h2>
     <ul>
-        <li>Die Anwendung arbeitet vollständig offline; es werden keine externen Ressourcen (CDN, Schriften, Telemetrie) geladen.</li>
         <li>Alle Daten verbleiben in den lokalen Docker-Volumes (Datenbank, Anwendungsdaten, Import-Archiv).</li>
         <li>Parameter-IDs sind Quellformat-IDs des Merlin-Exports und keine standardisierten Kodierungen.</li>
         <li>Es erfolgt keine medizinische Bewertung der Daten.</li>

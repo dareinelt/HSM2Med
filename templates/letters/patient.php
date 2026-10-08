@@ -3,6 +3,7 @@
  * Alle Briefe eines Patienten (Einstieg aus der Patientenakte).
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $patient
  * @var list<array<string, mixed>> $rows
@@ -11,16 +12,16 @@ $patientId = (int) $patient['id'];
 ?>
 <div class="page-head">
     <div>
-        <h1>Briefe – <?= $e($patient['patient_name']) ?></h1>
+        <h1><?= $icon('letters', 'app-icon app-icon--lg') ?><span>Briefe – <?= $e($patient['patient_name']) ?></span></h1>
         <p class="lead">
             geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?>
             · <?= $e(count($rows)) ?> Brief<?= count($rows) === 1 ? '' : 'e' ?> gespeichert
         </p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/letters/new?patient=<?= $e($patientId) ?>">Neuen Brief erstellen</a>
-        <a class="button" href="/patients/<?= $e($patientId) ?>">Zur Patientenakte</a>
-        <a class="button" href="/letters">Alle Briefe</a>
+        <a class="button primary" href="/letters/new?patient=<?= $e($patientId) ?>"><?= $icon('mail-new') ?> <span>Neuen Brief erstellen</span></a>
+        <a class="button" href="/patients/<?= $e($patientId) ?>"><?= $icon('patients') ?> <span>Zur Patientenakte</span></a>
+        <a class="button" href="/letters"><?= $icon('letters') ?> <span>Alle Briefe</span></a>
     </div>
 </div>
 
