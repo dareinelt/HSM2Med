@@ -8,6 +8,7 @@
  * @var list<array{0: string, 1: bool}> $extensions
  * @var array<string, mixed> $database
  * @var array<string, int>|null $stats
+ * @var Closure(string): bool $permitted
  */
 ?>
 <div class="page-head">
@@ -16,9 +17,13 @@
         <p class="lead">Technischer Zustand der Anwendung, Datenbank und Speicherorte.</p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/system/settings"><?= $icon('settings') ?><span>Praxis-Informationen</span></a>
-        <a class="button" href="/system/letter-templates" target="_blank" rel="noopener"
-           title="Feste Texte und Aufbau der Briefe bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Briefvorlage bearbeiten</span></a>
+        <?php if ($permitted('/system/settings')): ?>
+            <a class="button primary" href="/system/settings"><?= $icon('settings') ?><span>Praxis-Informationen</span></a>
+        <?php endif; ?>
+        <?php if ($permitted('/system/letter-templates')): ?>
+            <a class="button" href="/system/letter-templates" target="_blank" rel="noopener"
+               title="Feste Texte und Aufbau der Briefe bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Briefvorlage bearbeiten</span></a>
+        <?php endif; ?>
         <a class="button" href="#datenschutz"><?= $icon('shield') ?><span>Datenschutz und Betrieb</span></a>
     </div>
 </div>

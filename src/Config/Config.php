@@ -14,6 +14,15 @@ final readonly class Config
     public const string APP_NAME = 'HSM2Med';
     public const string APP_VERSION = '1.0.0';
 
+    /** Anmeldename des Administrators, der beim ersten Start angelegt wird. */
+    public const string DEFAULT_ADMIN_USERNAME = 'admin';
+
+    /** Vorgabe des Administratorkennworts; der Betrieb muss sie in der .env ersetzen. */
+    public const string DEFAULT_ADMIN_PASSWORD = 'bitte-aendern-admin-passwort';
+
+    /** Ruhezeit der Sitzung in Minuten; danach ist eine erneute Anmeldung noetig. */
+    public const int DEFAULT_AUTH_IDLE_MINUTES = 30;
+
     public function __construct(
         public string $dbHost,
         public int $dbPort,
@@ -27,6 +36,9 @@ final readonly class Config
         public string $importDir,
         public bool $pdfRawAppendixDefault,
         public bool $sessionSecureCookie,
+        public string $adminUsername = self::DEFAULT_ADMIN_USERNAME,
+        public string $adminPassword = self::DEFAULT_ADMIN_PASSWORD,
+        public int $authIdleMinutes = self::DEFAULT_AUTH_IDLE_MINUTES,
     ) {
     }
 
@@ -70,12 +82,27 @@ final readonly class Config
             importDir: rtrim($get('IMPORT_DATA_DIR', dirname(__DIR__, 2) . '/storage/imports'), '/'),
             pdfRawAppendixDefault: self::parseBool($get('PDF_RAW_APPENDIX_DEFAULT', '0')),
             sessionSecureCookie: self::parseBool($get('SESSION_SECURE_COOKIE', '0')),
+            adminUsername: $get('ADMIN_USERNAME', self::DEFAULT_ADMIN_USERNAME),
+            adminPassword: $get('ADMIN_PASSWORD', self::DEFAULT_ADMIN_PASSWORD),
+            authIdleMinutes: self::parseIdleMinutes($get('AUTH_IDLE_MINUTES', (string) self::DEFAULT_AUTH_IDLE_MINUTES)),
         );
     }
 
     public function isProduction(): bool
     {
         return $this->appEnv === 'production';
+    }
+
+    /** Ruhezeit der Sitzung in Sekunden. */
+    public function authIdleSeconds(): int
+    {
+        return $this->authIdleMinutes * 60;
+    }
+
+    /** Wahr, solange das voreingestellte Administratorkennwort noch unveraendert ist. */
+    public function adminPasswordIsDefault(): bool
+    {
+        return $this->adminPassword === self::DEFAULT_ADMIN_PASSWORD;
     }
 
     /**
@@ -103,6 +130,14 @@ final readonly class Config
     {
         if (!ctype_digit($value) || (int) $value < 1 || (int) $value > 65535) {
             throw new InvalidArgumentException('DB_PORT ist ungueltig.');
+        }
+        return (int) $value;
+    }
+
+    private static function parseIdleMinutes(string $value): int
+    {
+        if (!ctype_digit($value) || (int) $value < 1 || (int) $value > 1440) {
+            throw new InvalidArgumentException('AUTH_IDLE_MINUTES muss zwischen 1 und 1440 liegen.');
         }
         return (int) $value;
     }

@@ -14,6 +14,7 @@
  * @var array<string, array{0: string, 1: int, 2: bool}> $fields
  * @var array<string, string> $errors
  * @var string|null $message
+ * @var Closure(string): bool $permitted
  */
 $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
 $practiceName = trim((string) ($settings['center_name'] ?? ''));
@@ -51,7 +52,9 @@ $practiceAddress = trim((string) ($settings['center_address'] ?? ''));
     <p class="hint">Praxis, Anschrift, Kontaktangaben, Logo und Rücksendeangaben werden im Bereich
         „System“ gepflegt und gelten gemeinsam für Briefe und Ausweise.</p>
     <div class="form-actions">
-        <a class="button" href="/system/settings"><?= $icon('settings') ?> <span>Praxis-Informationen bearbeiten</span></a>
+        <?php if ($permitted('/system/settings')): ?>
+            <a class="button" href="/system/settings"><?= $icon('settings') ?> <span>Praxis-Informationen bearbeiten</span></a>
+        <?php endif; ?>
     </div>
 </section>
 

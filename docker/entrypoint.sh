@@ -16,6 +16,8 @@ php /var/www/html/bin/php-limits.php > "$PHP_INI_DIR/conf.d/zz-hsm2med-limits.in
 
 if [ "${1:-}" = "apache2-foreground" ] && [ "${SKIP_MIGRATIONS:-0}" != "1" ]; then
     runuser -u www-data -- php /var/www/html/bin/migrate.php --wait=120
+    # Administratorkonto aus der .env anlegen, falls noch keines existiert (idempotent).
+    runuser -u www-data -- php /var/www/html/bin/seed-admin.php
 fi
 
 exec docker-php-entrypoint "$@"

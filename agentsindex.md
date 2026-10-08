@@ -22,6 +22,8 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
 | Einstiegspunkt CLI | `bin/*.php` → jeweils `require src/bootstrap.php` |
 | Namensraum | `App\` → `src/` (PSR-4, zusätzlich eigener Fallback-Autoloader) |
 | Start | `cp .env.example .env` (Passwörter setzen) → `docker compose up -d` |
+| Anmeldung | Pflicht für jede Seite; Gruppen *Admin*/*MFA*/*Arzt*, Rechte je Gruppe (`App\User\Permission`) |
+| Administrator | `ADMIN_USERNAME`/`ADMIN_PASSWORD` aus `.env`, gesetzt von `bin/seed-admin.php` |
 | Test | `docker compose --profile test run --rm tests` |
 | Screenshots | `docker compose --profile docs run --rm screenshots` |
 | Log | `storage/logs/app.log` (Volume `hsm2med_application_data`) |
@@ -51,6 +53,11 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
     aktuellen Vorlage. Vorlagenfassungen (`letter_template_versions`) werden nie geändert –
     Speichern legt immer eine neue Fassung an. Briefe der Fassung 1 laufen über
     `LegacyLetterPdfGenerator` und behalten ihren Aufbau.
+12. **Jede Anfrage ist angemeldet und berechtigt.** Neue Routen bekommen in `Kernel::router()`
+    ein Recht aus `App\User\Permission`; die Oberfläche leitet dasselbe Recht über
+    `View::permitted()` ab, damit Sperre und Anzeige nie auseinanderlaufen. Kennwörter liegen
+    **nur** als `password_hash()` in der Datenbank; der Administrator kommt ausschließlich aus
+    `ADMIN_USERNAME`/`ADMIN_PASSWORD` (`.env`), nie aus dem Quelltext.
 
 ---
 
@@ -76,6 +83,10 @@ HSM2Med verarbeitet Auslesedaten von Herzschrittmachern/ICDs aus dem Abbott/St. 
   Stammdaten (Logo, Nachsorgezentrum, Hinweis- und Flugsicherheitstexte) mit eigener Fassung je
   Ausweis.
 - **CLI** für Import, PDF-Export, Migrationen und Schema-Erzeugung.
+- **Anmeldung und Benutzerverwaltung**: Die gesamte Anwendung ist durch ein Anmeldefenster
+  geschützt, das als Overlay über der abgedunkelten und unscharfen Oberfläche erscheint.
+  Benutzerkonten und Gruppen werden in der Oberfläche gepflegt; vorgegeben sind die Gruppen
+  *Admin*, *MFA* und *Arzt*, deren Rechte als Matrix (Gruppe × Bereich) einstellbar sind.
 - **Parameterzuordnung** über `config/parameter_mapping.php` (Kategorien, Feld-/Sondenzuordnung).
 
 > **Wichtig:** Die Anwendung führt **keine medizinische Bewertung** durch. Diagnose- und
@@ -141,6 +152,7 @@ docker compose exec web sh -c 'find /var/www/html/src /var/www/html/bin -name "*
 | `export-pdf.php <id> <ziel.pdf> [--raw] [--no-raw] [--force]` | PDF aus der Datenbank | 0/1/2 |
 | `migrate.php [--wait=SEKUNDEN]` | ausstehende Migrationen ausführen | 0/1 |
 | `build-schema.php` | `database/schema.sql` aus den Migrationen erzeugen | 0/1 |
+| `seed-admin.php [--force] [--wait=SEKUNDEN]` | Administrator aus `ADMIN_USERNAME`/`ADMIN_PASSWORD` anlegen bzw. Kennwort zurücksetzen | 0/1 |
 | `php-limits.php` | PHP-Upload-Limits aus `UPLOAD_MAX_SIZE` ausgeben | 0/1 |
 
 CLI-Befehle im Container als `www-data` ausführen, damit Archiv- und Protokolldateien die
@@ -168,7 +180,8 @@ flowchart TD
     C -->|nein| E[CLI-Skript]
     D --> F[/health → SystemController/]
     D --> G[SessionManager::start]
-    G --> H[Csrf::isValid bei POST]
+    G --> H0[Auth::check/can<br/>sonst Anmeldefenster oder Weiterleitung]
+    H0 --> H[Csrf::isValid bei POST]
     H --> I[Router::dispatch]
     I --> J[Controller]
     J --> K[Service / Repository]
@@ -202,7 +215,7 @@ unbekannter Version bewusst ab, statt einen unvollständigen Bericht zu erzeugen
 ## 5. Verzeichnisstruktur
 
 ```
-bin/                 CLI: import, export-pdf, migrate, build-schema, php-limits
+bin/                 CLI: import, export-pdf, migrate, build-schema, seed-admin, php-limits
 config/              parameter_mapping.php (Kategorien, Feld-/Sondenzuordnung, Version)
 database/            migrations/ (maßgeblich) + schema.sql (generiert)
 docker/              Apache-/PHP-Konfiguration, entrypoint.sh
@@ -216,7 +229,8 @@ src/                 Anwendungscode (Namespace App\)
   Http/              Kernel, Router, Request, Response, View, HttpException
     Controller/      Dashboard-, Import-, ImportLog-, Report-, System-,
                      PatientCard-, PatientCardSettingsController,
-                     Letter-, LetterTemplateController
+                     Letter-, LetterTemplateController,
+                     Login-, Account-, UserController
   Import/            MerlinParser, ImportValidator, ImportService, ImportArchive,
                      PendingUploadStore, ImportAnalysis/Outcome, ImportIssue(n)
   Letter/            LetterService, LetterRepository, LetterPdfGenerator (DIN 5008),
@@ -229,11 +243,13 @@ src/                 Anwendungscode (Namespace App\)
                      PatientCardException, PatientName
   Report/            ReportService, ReportData, ReportSummary(Builder), PdfGenerator
     Pdf/             PdfDocument, ImageData, PngDecoder, font_metrics.php
-  Repository/        ImportRepository, ReportRepository (nur vorbereitete Statements)
-  Security/          Csrf, SessionManager, UploadValidator, ImageUploadValidator,
+  Repository/        ImportRepository, ReportRepository, UserRepository,
+                     GroupRepository (nur vorbereitete Statements)
+  Security/          Auth, Csrf, SessionManager, UploadValidator, ImageUploadValidator,
                      FileName, UploadException
   Support/           Clock/FixedClock/SystemClock, Logger, MerlinDate
-templates/           PHP-Templates (layout.php + je Bereich)
+  User/              User, UserInput, UserService, Permission, UserException, AuthException
+templates/           PHP-Templates (layout.php + je Bereich; login/, users/, account/)
 tests/               run.php, TestCase.php, Unit/, Integration/, Support/, fixtures/
 storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingecheckt
 .reference/          Referenz-Merlin-Export (nur lesen, nicht verändern)
@@ -251,7 +267,7 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `Router` | Registrierung von `get()`/`post()`-Routen mit `{parameter}`-Platzhaltern |
 | `Request` | Methode, Pfad, Query, POST-Daten, Uploads |
 | `Response` | HTML/Text/Datei, Status, Header, Weiterleitungen (nur lokal) |
-| `View` | Templates mit `$e()`-Escaping, `$csrf()`, `raw()`, `dateTime()` |
+| `View` | Templates mit `$e()`-Escaping, `$csrf()`, `raw()`, `dateTime()`; `permitted()` leitet die Rechte der angemeldeten Person aus `Permission::forPath()` ab und übergibt sie an Template und Layout |
 | `Controller\Controller` | Basisklasse mit `id()`/`page()`-Helfern und Zugriff auf `Application` |
 
 ### `src/Import/`
@@ -308,11 +324,23 @@ Erweiterung: **`docs/editor-referenz.md`** – vor Änderungen am Editor oder Vo
 
 ### `src/Security/`
 
-`Csrf` (Token je Session), `SessionManager` (Start, ID-Erneuerung, Flash-Nachrichten,
-`HttpOnly`/`SameSite=Strict`), `UploadValidator` (Größe, Endung, MIME, verbotene
-Signaturen, 0x1C-Pflicht, NUL-Anteil), `ImageUploadValidator` (Logo: PNG/JPEG, max. 1 MiB,
-max. 2000 px, prüft `is_uploaded_file()`), `FileName::sanitize()`/`downloadName()`,
-`UploadException`.
+`Auth` (angemeldeter Benutzer je Anfrage, `check()`/`user()`/`can()`, Anmelde- und
+Abmeldezeitpunkt, gleitende Ruhezeit aus `AUTH_IDLE_MINUTES`, Rechte werden bei jeder Anfrage
+frisch aus der Datenbank gelesen), `Csrf` (Token je Session), `SessionManager` (Start,
+ID-Erneuerung, Flash-Nachrichten, `HttpOnly`/`SameSite=Strict`), `UploadValidator` (Größe,
+Endung, MIME, verbotene Signaturen, 0x1C-Pflicht, NUL-Anteil), `ImageUploadValidator` (Logo:
+PNG/JPEG, max. 1 MiB, max. 2000 px, prüft `is_uploaded_file()`),
+`FileName::sanitize()`/`downloadName()`, `UploadException`.
+
+### `src/User/`
+
+| Klasse | Verantwortung |
+| --- | --- |
+| `Permission` | Rechtematrix: `CATALOG` (13 Bereiche = Kennungen des Funktionsbandes + `letter_templates` + `users`), `DESCRIPTIONS`, `forPath()` (bindende Reihenfolge: spezielle Pfade vor Präfixen, `/account*` → `null`), `normalize()` |
+| `User` | Angemeldete Person: Kennung, Anzeigename, Gruppen, Rechte; `hasPermission()`, `mayManageUsers()`, `groupText()` |
+| `UserInput` | Serverseitige Prüfung (Benutzername kleingeschrieben, Kennwortlänge, Anzeigename, Gruppen, Aktiv-Kennzeichen) |
+| `UserService` | Anmelden (`authenticate()` mit Sperre nach `MAX_FAILED_ATTEMPTS = 5` für `LOCK_MINUTES = 15`), Benutzer anlegen/ändern/`setPassword()`, eigenes Kennwort, Gruppen und Rechte-Matrix, `seedAdmin()`; Regel „der letzte Benutzerverwalter kann sich nicht aussperren“ |
+| `UserException` / `AuthException` | Feldmeldungen (HTTP 422) bzw. Anmeldefehler; Meldungstext ist immer „Bitte die markierten Angaben prüfen.“, die Gründe stehen in `fieldErrors()` |
 
 ### `src/Support/`
 
@@ -323,54 +351,101 @@ keine Parameterwerte), `MerlinDate` (US-Format `MM/DD/YYYY` ↔ Anzeige `TT.MM.J
 
 ## 7. Routing-Tabelle
 
-Alle Routen werden in `Kernel::router()` registriert. Es gibt **keine Benutzerverwaltung**
-und keine Rollen – der Zugriffsschutz erfolgt über Netzwerk/Reverse-Proxy.
+Alle Routen werden in `Kernel::router()` registriert und erhalten dort ein Recht aus
+`App\User\Permission`. Vor dem Routing prüft der Kernel die Anmeldung (`Auth::check()`); ohne
+Sitzung liefert ein `GET`/`HEAD` das Anmeldefenster über der abgedunkelten Oberfläche
+(HTTP 200), andere Methoden leiten mit Hinweis auf `/login` um. Ohne Recht führt eine
+angemeldete Anfrage mit Hinweis zurück auf `/`.
 
-| Methode | Pfad | Controller-Aktion | Zweck |
-| --- | --- | --- | --- |
-| GET | `/health` | `SystemController::health` | Healthcheck (ohne Session/CSRF) |
-| GET | `/` | `DashboardController::index` | Kennzahlen und letzte Berichte |
-| GET | `/import` | `ImportController::form` | Upload-Formular |
-| POST | `/import` | `ImportController::upload` | Datei prüfen und zwischenspeichern |
-| GET | `/import/{token}` | `ImportController::preview` | Vorschau des geprüften Imports |
-| POST | `/import/{token}/commit` | `ImportController::commit` | Import endgültig speichern |
-| POST | `/import/{token}/cancel` | `ImportController::cancel` | Zwischenspeicher verwerfen |
-| GET | `/reports` | `ReportController::index` | Berichtsübersicht + Suche |
-| GET | `/reports/{id}` | `ReportController::show` | Berichtsdetail |
-| GET | `/reports/{id}/pdf` | `ReportController::pdf` | PDF (`?raw=1`, `?download=1`) |
-| GET | `/imports` | `ImportLogController::index` | Importprotokoll |
-| GET | `/imports/{id}` | `ImportLogController::show` | Importdetail |
-| GET | `/patient-cards` | `PatientCardController::index` | Ausweisübersicht + Suche |
-| GET | `/patient-cards/new` | `PatientCardController::selectReport` | Bericht für neuen Ausweis wählen |
-| GET | `/patient-cards/settings` | `PatientCardSettingsController::index` | Stammdaten (Logo, Zentrum, Texte) |
-| GET | `/patient-cards/settings/logo` | `PatientCardSettingsController::logo` | Logo ausliefern |
-| POST | `/patient-cards/settings` | `PatientCardSettingsController::save` | Stammdaten speichern (neue Fassung) |
-| GET | `/patient-cards/patients/{patient}` | `PatientCardController::patient` | Ausweise + Nachsorge je Patient |
-| GET | `/patient-cards/reports/{id}` | `PatientCardController::wizard` | Assistent (`?step=1..6`) |
-| POST | `/patient-cards/reports/{id}` | `PatientCardController::generate` | Ausweis erzeugen |
-| GET | `/patient-cards/{id}` | `PatientCardController::show` | Ausweisdetail + Verlauf |
-| GET | `/patient-cards/{id}/pdf` | `PatientCardController::pdf` | Ausweis-PDF (`?download=1`) |
-| GET | `/system` | `SystemController::index` | Systeminformationen (Link zum Vorlageneditor, neuer Tab) |
-| GET | `/system/letter-templates` | `LetterTemplateController::editor` | Vorlageneditor |
-| POST | `/system/letter-templates` | `LetterTemplateController::save` | Neue Vorlagenfassung (JSON, 422 mit `errors`) |
-| POST | `/system/letter-templates/preview` | `LetterTemplateController::preview` | PDF-Vorschau einer ungespeicherten Vorlage |
-| GET | `/system/letter-templates/versions/{id}` | `LetterTemplateController::version` | Fassung als JSON |
-| GET | `/letters/{id}/reproduce` | `LetterController::reproduce` | PDF mit damaliger Vorlage neu erzeugen |
-| POST | `/letters/{id}/regenerate` | `LetterController::regenerate` | Neuausfertigung (`template=original\|current`) |
+| Methode | Pfad | Controller-Aktion | Zweck | Recht |
+| --- | --- | --- | --- | --- |
+| GET | `/health` | `SystemController::health` | Healthcheck (ohne Session/CSRF) | – (immer frei) |
+| GET | `/login` | `LoginController::form` | Anmeldefenster (`?weiter=`) | – (frei) |
+| POST | `/login` | `LoginController::login` | Anmeldung prüfen | – (frei) |
+| POST | `/logout` | `LoginController::logout` | Abmelden | – (frei) |
+| GET | `/account/password` | `AccountController::form` | Eigenes Kennwort ändern | – (jede angemeldete Person) |
+| POST | `/account/password` | `AccountController::change` | Eigenes Kennwort speichern | – (jede angemeldete Person) |
+| GET | `/` | `DashboardController::index` | Kennzahlen und letzte Berichte | `dashboard` |
+| GET | `/import` | `ImportController::form` | Upload-Formular (Patientenvorgang) | `import` |
+| POST | `/import` | `ImportController::upload` | Datei prüfen und zwischenspeichern (Patientenvorgang) | `import` |
+| GET | `/import/{token}` | `ImportController::preview` | Vorschau des geprüften Imports | `import` |
+| POST | `/import/{token}/commit` | `ImportController::commit` | Import endgültig speichern | `import` |
+| POST | `/import/{token}/cancel` | `ImportController::cancel` | Zwischenspeicher verwerfen | `import` |
+| GET | `/reports` | `ReportController::index` | Berichtsübersicht + Suche | `reports` |
+| GET | `/reports/{id}` | `ReportController::show` | Berichtsdetail | `reports` |
+| GET | `/reports/{id}/pdf` | `ReportController::pdf` | PDF (`?raw=1`, `?download=1`) | `reports` |
+| GET | `/imports` | `ImportLogController::index` | Importprotokoll | `imports` |
+| GET | `/imports/{id}` | `ImportLogController::show` | Importdetail | `imports` |
+| GET | `/patients` | `PatientController::index` | Patientenübersicht + Suche | `patients` |
+| GET | `/patients/new` | `PatientController::newForm` | Patient anlegen | `patients` |
+| POST | `/patients` | `PatientController::create` | Patient speichern (setzt ihn als aktiven Patienten) | `patients` |
+| POST | `/patients/select/clear` | `PatientController::clearActive` | Patientenauswahl aufheben | `patients` |
+| POST | `/patients/{id}/select` | `PatientController::select` | Patientenauswahl setzen | `patients` |
+| GET | `/patients/{id}/edit` | `PatientController::editForm` | Stammdaten bearbeiten | `patients` |
+| POST | `/patients/{id}` | `PatientController::update` | Stammdaten speichern | `patients` |
+| GET | `/patients/{id}/records/{slug}` | `PatientController::recordForm` | Baustein (Anamnese, Vormedikation, Befund, Epikrise …) | `patients` |
+| POST | `/patients/{id}/records/{slug}` | `PatientController::saveRecord` | Baustein speichern (neue Fassung) | `patients` |
+| POST | `/patients/{id}/records/{slug}/prefill` | `PatientController::prefillRecord` | Baustein aus einem Bericht vorbelegen | `patients` |
+| GET | `/patients/{id}` | `PatientController::show` | Patientenakte | `patients` |
+| GET | `/patient-cards` | `PatientCardController::index` | Ausweisübersicht + Suche | `patient_cards` |
+| GET | `/patient-cards/new` | `PatientCardController::selectReport` | Bericht für neuen Ausweis wählen (Patientenvorgang) | `patient_cards` |
+| GET | `/patient-cards/settings` | `PatientCardSettingsController::index` | Stammdaten (Logo, Zentrum, Texte) | `patient_card_settings` |
+| GET | `/patient-cards/settings/logo` | `PatientCardSettingsController::logo` | Logo ausliefern | `patient_card_settings` |
+| POST | `/patient-cards/settings` | `PatientCardSettingsController::save` | Stammdaten speichern (neue Fassung) | `patient_card_settings` |
+| GET | `/patient-cards/patients/{patient}` | `PatientCardController::patient` | Ausweise + Nachsorge je Patient (Patientenvorgang) | `patient_cards` |
+| GET | `/patient-cards/reports/{id}` | `PatientCardController::wizard` | Assistent (`?step=1..6`, Patientenvorgang) | `patient_cards` |
+| POST | `/patient-cards/reports/{id}` | `PatientCardController::generate` | Ausweis erzeugen (Patientenvorgang) | `patient_cards` |
+| GET | `/patient-cards/{id}` | `PatientCardController::show` | Ausweisdetail + Verlauf | `patient_cards` |
+| GET | `/patient-cards/{id}/pdf` | `PatientCardController::pdf` | Ausweis-PDF (`?download=1`) | `patient_cards` |
+| GET | `/letters` | `LetterController::index` | Briefübersicht + Suche | `letters` |
+| GET | `/letters/new` | `LetterController::newLetter` | Brief-Assistent starten (Patientenvorgang) | `letters` |
+| POST | `/letters` | `LetterController::create` | Brief(e) erzeugen (Patientenvorgang) | `letters` |
+| GET | `/letters/patients/{patient}` | `LetterController::patient` | Briefe eines Patienten (Patientenvorgang) | `letters` |
+| GET | `/letters/{id}` | `LetterController::show` | Briefdetail | `letters` |
+| GET | `/letters/{id}/pdf` | `LetterController::pdf` | Brief-PDF | `letters` |
+| GET | `/letters/{id}/reproduce` | `LetterController::reproduce` | PDF mit damaliger Vorlage neu erzeugen | `letters` |
+| POST | `/letters/{id}/regenerate` | `LetterController::regenerate` | Neuausfertigung (`template=original\|current`) | `letters` |
+| GET | `/system` | `SystemController::index` | Systeminformationen (Link zum Vorlageneditor) | `system` |
+| GET | `/system/logs` | `SystemController::logs` | Fehlerprotokoll mit Suche | `logs` |
+| GET | `/system/settings` | `SystemSettingsController::index` | Praxis-Informationen und Logo | `system_settings` |
+| GET | `/system/settings/logo` | `SystemSettingsController::logo` | Logo ausliefern | `system_settings` |
+| POST | `/system/settings` | `SystemSettingsController::save` | Praxis-Informationen speichern (neue Fassung) | `system_settings` |
+| GET | `/system/letter-templates` | `LetterTemplateController::editor` | Vorlageneditor | `letter_templates` |
+| POST | `/system/letter-templates` | `LetterTemplateController::save` | Neue Vorlagenfassung (JSON, 422 mit `errors`) | `letter_templates` |
+| POST | `/system/letter-templates/preview` | `LetterTemplateController::preview` | PDF-Vorschau einer ungespeicherten Vorlage | `letter_templates` |
+| GET | `/system/letter-templates/source` | `LetterTemplateController::source` | Vorlagenquellen als JSON | `letter_templates` |
+| GET | `/system/letter-templates/versions/{id}` | `LetterTemplateController::version` | Fassung als JSON | `letter_templates` |
+| GET | `/system/users` | `UserController::index` | Benutzerverwaltung (Konten und Gruppen) | `users` |
+| GET | `/system/users/new` | `UserController::newForm` | Benutzer anlegen | `users` |
+| POST | `/system/users` | `UserController::create` | Benutzer speichern | `users` |
+| GET | `/system/users/groups` | `UserController::groups` | Gruppenübersicht | `users` |
+| POST | `/system/users/groups` | `UserController::createGroup` | Gruppe anlegen | `users` |
+| GET | `/system/users/groups/{id}` | `UserController::groupForm` | Gruppe mit Rechtematrix | `users` |
+| POST | `/system/users/groups/{id}` | `UserController::saveGroup` | Gruppe und Rechte speichern | `users` |
+| POST | `/system/users/groups/{id}/delete` | `UserController::deleteGroup` | Gruppe löschen (Systemgruppen sind geschützt) | `users` |
+| GET | `/system/users/{id}/edit` | `UserController::editForm` | Benutzer bearbeiten | `users` |
+| POST | `/system/users/{id}/password` | `UserController::setPassword` | Kennwort setzen | `users` |
+| POST | `/system/users/{id}` | `UserController::update` | Benutzer speichern | `users` |
 
 **Reihenfolge beachten:** Die festen Pfade (`/patient-cards/new`, `/patient-cards/settings`,
-`/patient-cards/reports/{id}`, `/patient-cards/patients/{patient}`) sind in `Kernel::router()`
-**vor** `/patient-cards/{id}` registriert, damit sie nicht als Kennung interpretiert werden.
+`/patient-cards/reports/{id}`, `/patient-cards/patients/{patient}`, `/system/users/new`,
+`/system/users/groups`) sind in `Kernel::router()` **vor** ihren `{id}`-Gegenstücken
+registriert, damit sie nicht als Kennung interpretiert werden. `Permission::forPath()` prüft in
+derselben bindenden Reihenfolge (`/imports` vor `/import`, `/patient-cards/settings` vor
+`/patient-cards`, `/system/<bereich>` vor `/system`).
 
-Unbekannte Pfade → 404, falsche Methode → 405, abgelaufenes CSRF-Token → 400.
-**Neue Route:** Controller-Aktion anlegen → in `Kernel::router()` registrieren → Template
-in `templates/` ergänzen → Navigation in `templates/layout.php` prüfen.
+Unbekannte Pfade → 404, falsche Methode → 405, abgelaufenes CSRF-Token → 400, fehlende
+Anmeldung → Anmeldefenster bzw. Weiterleitung auf `/login`, fehlendes Recht → Hinweis und
+Weiterleitung auf `/`.
+**Neue Route:** Controller-Aktion anlegen → in `Kernel::router()` mit Recht registrieren →
+Template in `templates/` ergänzen → Navigation in `templates/layout.php` über
+`$permitted(...)` prüfen → `tests/Unit/PermissionTest.php` (Katalog = Funktionsband) anpassen.
 
 ---
 
 ## 8. Datenbankschema
 
-Maßgeblich sind `database/migrations/001_initial.sql` und `002_patient_card.sql`;
+Maßgeblich sind die Dateien in `database/migrations/` (001 bis 013);
 `database/schema.sql` ist **generiert** (`php bin/build-schema.php`). Ein Test stellt sicher,
 dass beide identisch sind.
 
@@ -390,6 +465,15 @@ dass beide identisch sind.
 | `patient_card_settings_versions` | Unveränderliche Fassung je Speicherung; jeder Ausweis verweist auf seine Fassung |
 | `patient_card_master_data` | Zusammengeführte Angaben je Patient (Adresse, Notfallkontakt, Hausarzt, Kontrolle), eindeutig je Patient |
 | `patient_cards` | Erzeugter Ausweis: Patient/Bericht, `sequence_no`, `card_version`, Snapshot (JSON), PDF als Blob mit SHA-256 und Größe, Dateiname |
+| `users` | Benutzerkonten: `username` (ascii_bin, eindeutig), Anzeigename, `password_hash` (niemals Klartext), `is_active`, `failed_attempts`, `locked_until`, `last_login_at`, `password_changed_at` |
+| `user_groups` | Gruppen (Rollen) mit `code`, `label`, `is_system` (nicht löschbar), `sort_order`; vorgegeben: `admin` (10), `mfa` (20), `arzt` (30) |
+| `user_group_members` | Zuordnung Benutzer ↔ Gruppe (`ON DELETE CASCADE`, trägt keine fachlichen Daten) |
+| `user_group_permissions` | Rechtematrix Gruppe × Bereichskennung; fehlt eine Zeile, ist der Bereich für die Gruppe gesperrt |
+
+Migration 013 legt die drei vorgegebenen Gruppen mit ihren Startrechten an: *Admin* erhält alle
+13 Bereiche, *MFA* Dashboard, Import, Berichte, Importprotokoll, Patientenakte, Ausweise und
+Briefe, *Arzt* zusätzlich Ausweis-Stammdaten, Briefvorlagen, Systeminformationen und
+Fehlerprotokoll. Benutzer werden **nie gelöscht**, sondern deaktiviert.
 
 Grundsätze:
 
@@ -424,6 +508,9 @@ gitignored, `.env.example` ist die Vorlage.
 | `UPLOAD_MAX_SIZE` | `5M` | `5M`, `512K`, `1G` oder Bytes; PHP-Limits werden daraus abgeleitet |
 | `PDF_RAW_APPENDIX_DEFAULT` | `0` | Rohdatenanhang im PDF standardmäßig anfügen |
 | `SESSION_SECURE_COOKIE` | `0` | `1` bei vorgeschaltetem HTTPS-Proxy |
+| `ADMIN_USERNAME` | `admin` | Anmeldename des Administrators der Erstinstallation |
+| `ADMIN_PASSWORD` | `bitte-aendern-admin-passwort` | Kennwort des Administrators (Pflicht zur Änderung; `Config::adminPasswordIsDefault()` warnt) |
+| `AUTH_IDLE_MINUTES` | `30` | Automatische Abmeldung nach dieser Ruhezeit (1–1440) |
 | `WEB_BIND_ADDRESS`, `WEB_PORT` | `127.0.0.1`, `8080` | Host-Bindung der Weboberfläche |
 | `APP_DATA_DIR` | `/var/www/storage` | Logs, Sessions, Pending-Uploads |
 | `IMPORT_DATA_DIR` | `/data/imports` | Archiv der Originaldateien |
@@ -523,7 +610,21 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
 
 - **Netz:** standardmäßig nur `127.0.0.1`; das Datenbanknetz `backend` ist `internal`.
   Für Zugriff im Praxisnetz Reverse-Proxy mit TLS vorsehen und `SESSION_SECURE_COOKIE=1`
-  setzen. **Es gibt keine Benutzerverwaltung** – Zugriff über Netz/Proxy beschränken.
+  setzen.
+- **Anmeldung:** Jede Anfrage außer `/health`, `/login` und `/logout` setzt eine gültige
+  Sitzung voraus. Ohne Sitzung liefert ein `GET`/`HEAD` die Oberfläche mit dem Anmeldefenster
+  als Overlay (Hintergrund abgedunkelt und unscharf gefiltert, HTTP 200); alle anderen Methoden
+  werden mit Hinweis auf `/login` umgeleitet. Die Sitzung läuft nach `AUTH_IDLE_MINUTES` ohne
+  Bedienung ab (gleitendes Fenster, `Auth::check()`).
+- **Rechte:** Rechtematrix Gruppe × Bereich (`user_group_permissions`), geprüft in
+  `Kernel::accessDenied()` über `Auth::can()`; die Rechte werden bei jeder Anfrage frisch
+  gelesen, damit Änderungen sofort wirken. Ohne Recht: Hinweis und Weiterleitung auf `/`
+  (kein 403, um keine Rückschlüsse zu erlauben).
+- **Kennwörter:** ausschließlich `password_hash()`/`password_verify()` (bcrypt), keine
+  Klartextspalte, kein Kennwort in Logs. Das Administratorkennwort kommt aus
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD` und wird von `bin/seed-admin.php` gesetzt. Anmeldeversuche
+  sind auf 5 Fehlversuche begrenzt (danach 15 Minuten Sperre); unbekannter Benutzer und falsches
+  Kennwort liefern dieselbe Meldung und laufen über einen Dummy-Hash (keine Zeitunterschiede).
 - **Uploads:** Größenlimit, nur `.txt`/`.log`, MIME-/Magic-Byte-Prüfung, 0x1C-Pflicht,
   bereinigte Dateinamen, Zwischenspeicher außerhalb des Webroots mit Zufallstoken (1 h),
   Archiv schreibgeschützt.
@@ -555,7 +656,10 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
    `chown www-data`, `chmod 0750`.
 2. `php bin/php-limits.php` → `zz-hsm2med-limits.ini` (Upload-/POST-Limits).
 3. Bei `apache2-foreground` und `SKIP_MIGRATIONS != 1`: `runuser -u www-data -- php bin/migrate.php --wait=120`.
-4. `exec docker-php-entrypoint "$@"`.
+4. `runuser -u www-data -- php bin/seed-admin.php` legt den Administrator aus
+   `ADMIN_USERNAME`/`ADMIN_PASSWORD` an (idempotent; ein bestehendes Kennwort wird nicht
+   überschrieben).
+5. `exec docker-php-entrypoint "$@"`.
 
 ### Import über die Weboberfläche
 
@@ -592,9 +696,13 @@ eingesetzt.
 (`db-docs`, `web-docs`) und ruft `docs/screenshots/capture.py` (Playwright/Chromium,
 `pdftoppm`) auf. Produktivdaten werden nicht berührt. Das Skript legt selbst Beispieldaten an
 (Import der Testdatei, Stammdaten inkl. Beispiel-Logo, Patientenausweis) und erzeugt die Bilder
-`01`–`22`. Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht.
+`01`–`59`. Es meldet sich zuerst über das Anmeldefenster an (Zugangsdaten der
+Dokumentationsinstanz: `ADMIN_USERNAME=docs-admin`, `ADMIN_PASSWORD=docs-screenshot-kennwort`,
+siehe `docker-compose.yml`) und bricht ab, wenn die Oberfläche ohne Anmeldung erreichbar wäre.
+Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht.
 `web-docs` bindet das Projektverzeichnis **nicht** ein: nach Änderungen an Templates oder
-`src/` zuerst `docker compose build web`, sonst entstehen Bilder aus altem Code.
+`src/` zuerst `docker compose build web`, sonst entstehen Bilder aus altem Code
+(mit `--build` im Screenshot-Lauf geht beides in einem Schritt).
 
 ---
 
@@ -624,7 +732,7 @@ eingesetzt.
 | Neuen Parameter kategorisieren | `config/parameter_mapping.php` (`by_id`/`by_name`/`name_patterns`) anpassen, `version` erhöhen, `docker compose up -d --build` |
 | Neue Kategorie einführen | `categories` ergänzen (Label + `sort`), Zuordnungen anpassen, `version` erhöhen |
 | Schema ändern | neue Datei `database/migrations/00N_*.sql`, `php bin/migrate.php`, `php bin/build-schema.php`, `database/schema.sql` mitcommitten |
-| Neue Seite/Route | Controller in `src/Http/Controller/`, Route in `Kernel::router()`, Template in `templates/`, Link in `templates/layout.php` (niemals eine PHP-Datei in `public/` – nur `index.php` wird ausgeführt) |
+| Neue Seite/Route | Controller in `src/Http/Controller/`, Route in `Kernel::router()` **mit Recht**, Template in `templates/`, Link in `templates/layout.php` über `$permitted(...)` (niemals eine PHP-Datei in `public/` – nur `index.php` wird ausgeführt) |
 | Neues Parser-Fehlerkennzeichen | in `MerlinParser`/`ImportValidator` erzeugen, Code + Art in README-Tabelle und in `templates/import/preview.php` ergänzen, Test in `tests/Unit/MerlinParserTest.php` |
 | PDF-Layout ändern | `PdfGenerator` anpassen; bei strukturellen Snapshot-Änderungen `REPORT_VERSION` und `SUPPORTED_REPORT_VERSION` erhöhen und Versionszweig ergänzen |
 | Ausweis-Layout ändern | `PatientCardPdfGenerator` anpassen (Vorlage `.reference/idcard_ann.png` beachten); bei strukturellen Snapshot-Änderungen `PatientCardService::CARD_VERSION` und `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` erhöhen; bestehende Ausweise bleiben unverändert |
@@ -633,6 +741,9 @@ eingesetzt.
 | Brief-Layout strukturell ändern | `LetterService::LETTER_VERSION` und `LetterPdfGenerator::SUPPORTED_LETTER_VERSION` erhöhen, alten Zweig erhalten (wie `LegacyLetterPdfGenerator`) |
 | Template ändern | Rendering im Browser **und** über `tests/Integration/PatientCardViewTest.php` (echter Controller + `View`) prüfen – `php -l` erkennt Template-Fehler nicht |
 | Neues CLI-Werkzeug | `bin/<name>.php` mit `require __DIR__ . '/../src/bootstrap.php'`, `PHP_SAPI !== 'cli'`-Guard, definierte Exit-Codes, README-Abschnitt aktualisieren |
+| Neuer Bereich/Recht | Konstante + `CATALOG` + `DESCRIPTIONS` in `src/User/Permission.php` (Schlüssel **muss** dem Funktionsband entsprechen), `forPath()` ergänzen, Routen in `Kernel::router()` mit dem Recht registrieren, Links mit `$permitted(...)` schützen, Rechte in Migration/`seed-admin`-Startgruppen bedenken, `tests/Unit/PermissionTest.php` |
+| Neue Benutzerverwaltungs-Seite | `UserController` + Template in `templates/users/`, Route mit `Permission::USERS`, Regel „der letzte Benutzerverwalter kann sich nicht aussperren“ (`UserService::guardUserAdministration()`) beachten, `tests/Integration/LoginViewTest.php` |
+| Kennwort-/Anmeldelogik ändern | `src/User/UserService.php` (`MAX_FAILED_ATTEMPTS`, `LOCK_MINUTES`, `authenticate()`), `src/Security/Auth.php` (Ruhezeit), `tests/Integration/AuthTest.php` und `tests/Integration/UserServiceTest.php` |
 | Konfigurationsvariable | `Config` (+ Validierung), `docker-compose.yml`, `.env.example` und README-Tabelle ergänzen |
 | Neuer Test | Klasse in `tests/Unit`/`tests/Integration`, `docker compose --profile test run --rm tests php tests/run.php <Filter>` |
 
@@ -648,6 +759,7 @@ eingesetzt.
 | `README.md` | Vollständige Betriebs-, Installations- und Bedienungsdokumentation (Quelle der Wahrheit für Nutzerverhalten) |
 | `database/migrations/001_initial.sql` | Maßgebliches Schema inkl. Kommentaren zu Snapshot-Grundsätzen |
 | `database/migrations/002_patient_card.sql` | Schema des Patientenausweises (Identitätsschlüssel, Stammdaten und -fassungen, Logos, Ausweise mit PDF-Blob) |
+| `database/migrations/013_users_and_groups.sql` | Schema der Benutzerverwaltung (Benutzer, Gruppen, Mitgliedschaften, Rechtematrix) inkl. der vorgegebenen Gruppen *Admin*, *MFA* und *Arzt* |
 | `database/schema.sql` | Generiertes Gesamtschema (muss zu den Migrationen passen) |
 | `config/parameter_mapping.php` | Kategorien und Zuordnungsregeln inkl. `version` |
 | `docker-compose.yml` | Dienste, Profile (`test`, `docs`), Netze, Volumes |

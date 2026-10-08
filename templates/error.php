@@ -6,6 +6,7 @@
  * @var string $message
  * @var ?string $details
  * @var ?string $reference
+ * @var Closure(string): bool $permitted
  */
 ?>
 <section class="card">
@@ -16,7 +17,7 @@
     <?php endif; ?>
     <p>
         <a class="button" href="/"><?= $icon('dashboard') ?> <span>Zur Startseite</span></a>
-        <?php if (($reference ?? null) !== null): ?>
+        <?php if (($reference ?? null) !== null && $permitted('/system/logs')): ?>
             <a class="button" href="/system/logs?<?= $e(http_build_query(['ref' => $reference])) ?>"><?= $icon('log') ?> <span>Im Fehlerprotokoll anzeigen</span></a>
         <?php endif; ?>
     </p>
