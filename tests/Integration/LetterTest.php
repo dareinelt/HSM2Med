@@ -256,6 +256,41 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame('aus Patientenausweis Nr. 1', $letter['snapshot']['mrt']['source_label']);
     }
 
+    /** Praxis-Informationen und Ruecksendeangaben werden in Snapshot und PDF uebernommen. */
+    public function testLetterTakesPracticeAndReturnAddressFromSettings(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+
+        (new PatientCardSettingsService($this->cards, new ImageUploadValidator(), $this->clock))->save([
+            'center_name' => 'Praxis am Markt',
+            'center_address' => "Marktplatz 3\n54321 Musterstadt",
+            'practice_phone' => '05432/112233',
+            'practice_email' => 'praxis@example.de',
+            'return_name' => 'Praxis am Markt',
+            'return_street' => 'Postfach 12',
+            'return_postal_code' => '54320',
+            'return_city' => 'Musterstadt',
+            'notice_text' => 'Hinweis.',
+            'flight_notice_de' => 'Hinweis Flug.',
+            'flight_notice_en' => 'Flight notice.',
+        ], null, false);
+
+        $result = $this->createLetter();
+        $snapshot = $this->letters->letter($result['letter_id'])['snapshot'];
+        $this->assertSame('Praxis am Markt', $snapshot['master']['center_name']);
+        $this->assertSame('05432/112233', $snapshot['master']['practice_phone']);
+        $this->assertSame('praxis@example.de', $snapshot['master']['practice_email']);
+        $this->assertSame('Postfach 12', $snapshot['master']['return_street']);
+        $this->assertSame('54320', $snapshot['master']['return_postal_code']);
+        $this->assertSame('Musterstadt', $snapshot['master']['return_city']);
+
+        $text = PdfText::text((string) $this->letters->pdfContent($result['letter_id']));
+        $this->assertContains('Telefon 05432/112233 · praxis@example.de', $text);
+        $this->assertContains('Praxis am Markt · Postfach 12 · 54320 Musterstadt', $text);
+    }
+
     /** Spaetere Aenderungen an Bausteinen und Ausweisen lassen erzeugte Briefe unveraendert. */
     public function testSnapshotIsImmutableAgainstLaterChanges(): void
     {

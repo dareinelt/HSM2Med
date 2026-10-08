@@ -616,4 +616,65 @@ final class PatientCardTest extends DatabaseTestCase
         $this->assertContains('LASTNAME, FIRSTNAME', $text, 'Angaben aus dem Bericht bleiben erhalten');
         $this->assertSame(1, $this->rowCount('patient_card_settings_versions'), 'Fassung wird beim Erstellen angelegt');
     }
+
+    /** Test 11: Praxis-Informationen und Rücksendeangaben werden geprueft und versioniert. */
+    public function testPracticeAndReturnAddressSettingsAreVersioned(): void
+    {
+        $settings = $this->settingsService();
+        $version1 = $settings->save([
+            'center_name' => 'Praxis am Markt',
+            'center_address' => "Marktplatz 3\n54321 Musterstadt",
+            'practice_phone' => '05432/112233',
+            'practice_fax' => '05432/112244',
+            'practice_email' => 'praxis@example.de',
+            'practice_website' => 'www.praxis-am-markt.de',
+            'return_name' => 'Praxis am Markt',
+            'return_street' => 'Postfach 12',
+            'return_postal_code' => '54320',
+            'return_city' => 'Musterstadt',
+            'notice_text' => 'Hinweis.',
+            'flight_notice_de' => 'Hinweis Flug.',
+            'flight_notice_en' => 'Flight notice.',
+        ], null, false)['version_id'];
+
+        $loaded = $settings->load()['settings'];
+        $this->assertSame('05432/112233', $loaded['practice_phone']);
+        $this->assertSame('praxis@example.de', $loaded['practice_email']);
+        $this->assertSame('Postfach 12', $loaded['return_street']);
+        $this->assertSame('54320', $loaded['return_postal_code']);
+        $this->assertSame('Musterstadt', $loaded['return_city']);
+
+        // Eine ungueltige E-Mail-Adresse verhindert die neue Fassung.
+        $exception = $this->assertThrows(
+            PatientCardException::class,
+            fn () => $settings->save([
+                'practice_email' => 'keine-adresse',
+                'return_name' => str_repeat('x', PatientCardSettingsService::MAX_RETURN_NAME + 1),
+            ], null, false),
+        );
+        $this->assertTrue(isset($exception->fieldErrors()['practice_email']));
+        $this->assertTrue(isset($exception->fieldErrors()['return_name']));
+        $this->assertSame(1, $settings->load()['versions']);
+
+        // Die Fassung bleibt unveraendert lesbar, auch wenn nur die Hinweistexte neu gespeichert
+        // werden (die Praxis-Informationen werden dann unveraendert uebernommen).
+        $version2 = $settings->save([
+            'center_name' => 'Praxis am Markt',
+            'center_address' => "Marktplatz 3\n54321 Musterstadt",
+            'practice_phone' => '05432/112233',
+            'practice_fax' => '05432/112244',
+            'practice_email' => 'praxis@example.de',
+            'practice_website' => 'www.praxis-am-markt.de',
+            'return_name' => 'Praxis am Markt',
+            'return_street' => 'Postfach 12',
+            'return_postal_code' => '54320',
+            'return_city' => 'Musterstadt',
+            'notice_text' => 'Neuer Hinweis.',
+        ], null, false)['version_id'];
+
+        $this->assertSame($version1 + 1, $version2);
+        $this->assertSame('05432/112233', $this->repository()->settingsVersion($version2)['practice_phone']);
+        $this->assertSame('Postfach 12', $this->repository()->settingsVersion($version2)['return_street']);
+        $this->assertSame('Hinweis.', $this->repository()->settingsVersion($version1)['notice_text']);
+    }
 }

@@ -38,8 +38,18 @@ final class LetterTemplate
 
     /** Platzhalter => Beschreibung (fuer Editor und Pruefung). */
     public const array PLACEHOLDERS = [
-        'center_name' => 'Name des Nachsorgezentrums',
-        'center_address_line' => 'Anschrift des Zentrums in einer Zeile',
+        'center_name' => 'Name der Praxis (aus den Praxis-Informationen)',
+        'center_address_line' => 'Anschrift der Praxis in einer Zeile',
+        'practice_contact_line' => 'Kontaktangaben der Praxis in einer Zeile (Telefon, Fax, E-Mail, Website)',
+        'practice_phone' => 'Telefon der Praxis',
+        'practice_fax' => 'Fax der Praxis',
+        'practice_email' => 'E-Mail der Praxis',
+        'practice_website' => 'Website der Praxis',
+        'return_name' => 'Name in der Rücksendeangabe',
+        'return_street' => 'Straße in der Rücksendeangabe',
+        'return_postal_code' => 'Postleitzahl in der Rücksendeangabe',
+        'return_city' => 'Ort in der Rücksendeangabe',
+        'return_address_line' => 'Rücksendeangabe in einer Zeile (eigene Angaben, sonst Praxisanschrift)',
         'salutation' => 'Anrede des Empfängers (aus den Stammdaten)',
         'patient_name' => 'Patientenname (NACHNAME, VORNAME)',
         'first_name' => 'Vorname',
@@ -67,9 +77,10 @@ final class LetterTemplate
         return [
             'letterhead' => [
                 'label' => 'Briefkopf',
-                'description' => 'Logo, Name und Anschrift des Nachsorgezentrums (aus den Ausweis-Stammdaten) im 45 mm hohen Kopfbereich.',
+                'description' => 'Logo, Name, Anschrift und Kontaktangaben der Praxis (aus den Praxis-Informationen im Bereich System) im 45 mm hohen Kopfbereich.',
                 'options' => [
                     'show_logo' => ['label' => 'Logo anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_contact' => ['label' => 'Kontaktangaben anzeigen (Telefon, Fax, E-Mail, Website)', 'type' => 'bool', 'default' => true],
                 ],
                 'texts' => [
                     'extra' => ['label' => 'Zusatzzeilen unter der Anschrift', 'multiline' => true, 'default' => ''],
@@ -77,12 +88,12 @@ final class LetterTemplate
             ],
             'return_address' => [
                 'label' => 'Rücksendeangabe',
-                'description' => 'Kleine Absenderzeile oberhalb der Empfängeranschrift (Anschriftfeld, Zusatz- und Vermerkzone).',
+                'description' => 'Kleine Absenderzeile oberhalb der Empfängeranschrift (Anschriftfeld, Zusatz- und Vermerkzone). Standard ist {return_address_line}: die Rücksendeangaben aus dem Bereich System, ersatzweise Name und Anschrift der Praxis.',
                 'options' => [
                     'show' => ['label' => 'Rücksendeangabe drucken', 'type' => 'bool', 'default' => true],
                 ],
                 'texts' => [
-                    'text' => ['label' => 'Rücksendeangabe', 'multiline' => false, 'default' => '{center_name} · {center_address_line}'],
+                    'text' => ['label' => 'Rücksendeangabe', 'multiline' => false, 'default' => '{return_address_line}'],
                 ],
             ],
             'recipient' => [

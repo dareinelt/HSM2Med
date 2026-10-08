@@ -189,9 +189,32 @@ final class LetterPdfGenerator
             $value = trim($value);
             return $value === '' ? '' : DateInput::format(substr($value, 0, 10));
         };
+        $centerName = trim((string) ($master['center_name'] ?? ''));
+        $centerAddressLine = implode(' · ', $addressLines);
+        $phone = trim((string) ($master['practice_phone'] ?? ''));
+        $fax = trim((string) ($master['practice_fax'] ?? ''));
+        $email = trim((string) ($master['practice_email'] ?? ''));
+        $website = trim((string) ($master['practice_website'] ?? ''));
+        $contact = array_values(array_filter([
+            $phone === '' ? '' : 'Telefon ' . $phone,
+            $fax === '' ? '' : 'Fax ' . $fax,
+            $email,
+            $website,
+        ], static fn (string $part): bool => $part !== ''));
+
         return [
-            'center_name' => trim((string) ($master['center_name'] ?? '')),
-            'center_address_line' => implode(' · ', $addressLines),
+            'center_name' => $centerName,
+            'center_address_line' => $centerAddressLine,
+            'practice_contact_line' => implode(' · ', $contact),
+            'practice_phone' => $phone,
+            'practice_fax' => $fax,
+            'practice_email' => $email,
+            'practice_website' => $website,
+            'return_name' => trim((string) ($master['return_name'] ?? '')),
+            'return_street' => trim((string) ($master['return_street'] ?? '')),
+            'return_postal_code' => trim((string) ($master['return_postal_code'] ?? '')),
+            'return_city' => trim((string) ($master['return_city'] ?? '')),
+            'return_address_line' => self::returnAddressLine($master, $centerName, $centerAddressLine),
             'salutation' => self::salutationText($letter),
             'patient_name' => trim((string) ($patient['patient_name'] ?? '')),
             'first_name' => trim((string) ($patient['first_name'] ?? '')),
@@ -202,6 +225,46 @@ final class LetterPdfGenerator
             'letter_date' => $date((string) ($letter['document']['letter_date'] ?? '')),
             'sequence_no' => (string) ($letter['sequence_no'] ?? ''),
         ];
+    }
+
+    /**
+     * Ruecksendeangabe in einer Zeile: eigene Angaben aus den Stammdaten, sonst Name und
+     * Anschrift der Praxis.
+     *
+     * @param array<string, mixed> $master
+     */
+    public static function returnAddressLine(array $master, ?string $centerName = null, ?string $centerAddressLine = null): string
+    {
+        $parts = array_values(array_filter([
+            trim((string) ($master['return_name'] ?? '')),
+            trim((string) ($master['return_street'] ?? '')),
+            trim(trim((string) ($master['return_postal_code'] ?? '')) . ' ' . trim((string) ($master['return_city'] ?? ''))),
+        ], static fn (string $part): bool => $part !== ''));
+        if ($parts !== []) {
+            return implode(' · ', $parts);
+        }
+
+        if ($centerName === null || $centerAddressLine === null) {
+            $centerName = trim((string) ($master['center_name'] ?? ''));
+            $lines = array_values(array_filter(array_map(
+                'trim',
+                explode("\n", str_replace(["\r\n", "\r"], "\n", (string) ($master['center_address'] ?? ''))),
+            ), static fn (string $line): bool => $line !== ''));
+            $centerAddressLine = implode(' · ', $lines);
+        }
+
+        return implode(' · ', array_values(array_filter([$centerName, $centerAddressLine], static fn (string $part): bool => $part !== '')));
+    }
+
+    /**
+     * Zusatzzeilen des Briefkopfs: Anschrift, Kontaktangaben und freier Zusatztext der Vorlage.
+     */
+    private function letterheadContactLine(): string
+    {
+        if (!$this->zoneOption('letterhead', 'show_contact', true)) {
+            return '';
+        }
+        return $this->values['practice_contact_line'];
     }
 
     /**
@@ -248,6 +311,10 @@ final class LetterPdfGenerator
         $address = trim((string) ($this->letter['master']['center_address'] ?? ''));
         if ($address !== '') {
             $y = $this->boundedLines(self::LEFT, $y + 1.0, $textWidth, $address, 'regular', 8.5, self::INK, self::HEAD_BOTTOM);
+        }
+        $contact = $this->letterheadContactLine();
+        if ($contact !== '') {
+            $y = $this->boundedLines(self::LEFT, $y + 1.0, $textWidth, $contact, 'regular', 8.5, self::MUTED, self::HEAD_BOTTOM);
         }
         $extra = $this->zoneText('letterhead', 'extra');
         if ($extra !== '') {

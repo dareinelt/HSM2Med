@@ -21,6 +21,28 @@ use PDO;
  */
 final class PatientCardRepository extends PatientRepository
 {
+    /**
+     * Spalten der Stammdaten-Fassung in der Reihenfolge der Einfuege- und Aktualisierungsbefehle.
+     *
+     * @var list<string>
+     */
+    private const array SETTINGS_COLUMNS = [
+        'center_name',
+        'center_address',
+        'practice_phone',
+        'practice_fax',
+        'practice_email',
+        'practice_website',
+        'return_name',
+        'return_street',
+        'return_postal_code',
+        'return_city',
+        'notice_text',
+        'flight_notice_de',
+        'flight_notice_en',
+        'logo_id',
+    ];
+
     // ------------------------------------------------------------------- Stammdaten
 
     /**
@@ -64,37 +86,39 @@ final class PatientCardRepository extends PatientRepository
      */
     public function saveSettings(array $values, string $now): int
     {
+        $columns = self::SETTINGS_COLUMNS;
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+        $assignments = implode(', ', array_map(
+            static fn (string $column): string => $column . ' = VALUES(' . $column . ')',
+            $columns,
+        ));
         $stmt = $this->pdo->prepare(
-            'INSERT INTO patient_card_settings (id, center_name, center_address, notice_text, flight_notice_de, flight_notice_en, logo_id, updated_at)'
-            . ' VALUES (1, ?, ?, ?, ?, ?, ?, ?)'
-            . ' ON DUPLICATE KEY UPDATE center_name = VALUES(center_name), center_address = VALUES(center_address),'
-            . ' notice_text = VALUES(notice_text), flight_notice_de = VALUES(flight_notice_de),'
-            . ' flight_notice_en = VALUES(flight_notice_en), logo_id = VALUES(logo_id), updated_at = VALUES(updated_at)'
+            'INSERT INTO patient_card_settings (id, ' . implode(', ', $columns) . ', updated_at)'
+            . ' VALUES (1, ' . $placeholders . ', ?)'
+            . ' ON DUPLICATE KEY UPDATE ' . $assignments . ', updated_at = VALUES(updated_at)'
         );
-        $stmt->execute([
-            $values['center_name'] ?? null,
-            $values['center_address'] ?? null,
-            $values['notice_text'] ?? null,
-            $values['flight_notice_de'] ?? null,
-            $values['flight_notice_en'] ?? null,
-            $values['logo_id'] ?? null,
-            $now,
-        ]);
+        $stmt->execute([...$this->settingsValues($values), $now]);
 
         $version = $this->pdo->prepare(
-            'INSERT INTO patient_card_settings_versions (center_name, center_address, notice_text, flight_notice_de, flight_notice_en, logo_id, created_at)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO patient_card_settings_versions (' . implode(', ', $columns) . ', created_at)'
+            . ' VALUES (' . $placeholders . ', ?)'
         );
-        $version->execute([
-            $values['center_name'] ?? null,
-            $values['center_address'] ?? null,
-            $values['notice_text'] ?? null,
-            $values['flight_notice_de'] ?? null,
-            $values['flight_notice_en'] ?? null,
-            $values['logo_id'] ?? null,
-            $now,
-        ]);
+        $version->execute([...$this->settingsValues($values), $now]);
         return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * @param array<string, string|null> $values
+     * @return list<string|null>
+     */
+    private function settingsValues(array $values): array
+    {
+        $result = [];
+        foreach (self::SETTINGS_COLUMNS as $column) {
+            $value = $values[$column] ?? null;
+            $result[] = $value === null ? null : (string) $value;
+        }
+        return $result;
     }
 
     // ------------------------------------------------------------------------- Logos
