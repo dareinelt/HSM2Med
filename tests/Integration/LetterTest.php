@@ -114,6 +114,10 @@ final class LetterTest extends DatabaseTestCase
             'medication' => [['substance' => 'Metoprolol', 'dose' => '47,5', 'unit' => 'mg', 'schedule' => '1-0-0']],
             'author_name' => 'Dr. med. Beispiel',
         ]);
+        $this->records->save($this->patientId, PatientRecordType::Befund, [
+            'text' => 'Regelmäßiger Eigenrhythmus, keine Sondenauffälligkeit.',
+            'author_name' => 'Dr. med. Beispiel',
+        ]);
         $this->records->save($this->patientId, PatientRecordType::Epicrisis, [
             'text' => 'Kontrollierte Abfrage im Rahmen der Nachsorge.',
             'author_name' => 'Dr. med. Beispiel',
@@ -346,7 +350,7 @@ final class LetterTest extends DatabaseTestCase
         ]);
     }
 
-    /** Der Befundteil des Berichts wird mit seinen Messwerten eingefroren. */
+    /** Der Befund des Arztes und der Befundteil des Berichts werden mit ihren Messwerten eingefroren. */
     public function testReportPartIsFrozenIntoTheLetter(): void
     {
         $reportId = $this->importAndSelectPatient();
@@ -361,6 +365,14 @@ final class LetterTest extends DatabaseTestCase
         $this->assertTrue($snapshot['report']['rows'] !== []);
         $this->assertTrue($snapshot['report']['groups'] !== []);
         $this->assertContains('Bericht Nr. ' . $reportId, $snapshot['report']['meta']);
+
+        // Der Aktenbaustein "Befund" wird als Freitext mit Fassung eingefroren.
+        $this->assertTrue($snapshot['befund']['present']);
+        $this->assertSame(1, $snapshot['befund']['version']);
+        $this->assertSame('Regelmäßiger Eigenrhythmus, keine Sondenauffälligkeit.', $snapshot['befund']['text']);
+        $this->assertSame('Dr. med. Beispiel', $snapshot['befund']['author_name']);
+        $this->assertSame($snapshot['befund']['record_id'], $snapshot['source']['record_versions']['befund']['record_id']);
+        $this->assertSame(1, $snapshot['source']['record_versions']['befund']['version']);
     }
 
     /** Ohne die beiden Bestaetigungen entsteht kein Brief. */
@@ -498,7 +510,7 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame([], $prepared['appendix']['sections']);
         $this->assertFalse($prepared['appendix']['present']);
         $this->assertFalse($prepared['mrt']['available']);
-        $this->assertSame(6, count($prepared['warnings']), 'Drei Textbausteine, Anhang, Bericht und MRT-Angabe fehlen.');
+        $this->assertSame(7, count($prepared['warnings']), 'Vier Textbausteine, Anhang, Bericht und MRT-Angabe fehlen.');
 
         $this->importAndSelectPatient();
         $this->fillRecords();

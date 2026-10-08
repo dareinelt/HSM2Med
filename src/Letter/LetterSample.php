@@ -81,6 +81,7 @@ final class LetterSample
                 ],
             ],
             'epicrisis' => $record('Beispieltext der Epikrise. Hier erscheint der aktuelle Stand des Bausteins „Epikrise“.', 1),
+            'befund' => $record('Beispieltext des Befunds. Hier erscheint der aktuelle Stand des Bausteins „Befund“ aus der Patientenakte.', 2),
             'device_check' => $record('', 0),
             'report' => [
                 'report_id' => 0,

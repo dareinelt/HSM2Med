@@ -113,14 +113,24 @@ Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` u
 | `patient` | Patientendaten | ja | – | `heading`, `label_name`, `label_birth`, `label_identifier`, `label_address`, `label_phone` |
 | `anamnesis` | Anamnese | ja | `show_meta` | `heading` |
 | `premedication` | Vormedikation | ja | `show_meta` | `heading`, `col_substance`, `col_dose`, `col_schedule`, `col_reason`, `col_period` |
-| `report` | Befund (Bericht) | ja | `show_meta` | `heading` |
+| `befund` | Befund | ja | `show_meta` | `heading` |
 | `epicrisis` | Epikrise | ja | `show_meta` | `heading` |
 | `closing` | Grußformel | ja | – | `text`, `signature` (mehrzeilig) |
 | `text` | Freier Textbaustein | **nein** | – | `heading`, `text` (mehrzeilig) |
+| `reports` | Berichte | ja | `show_meta` | `heading` |
 
-Standardreihenfolge: `subject, salutation, patient, anamnesis, premedication, report, epicrisis, closing`.
+Standardreihenfolge: `subject, salutation, patient, anamnesis, premedication, befund, epicrisis, closing, reports`.
 Eindeutige Bausteine lassen sich aus-, aber nicht löschen (`enabled: false`). Freie Textbausteine
 können beliebig oft ergänzt und gelöscht werden.
+
+Der Baustein `reports` steht als Anhang am Ende des Briefes: Er druckt den Befundteil des
+zugeordneten Berichts (Geräte-, Sonden- und Messwerte) **immer auf einer neuen Seite** unter der
+Grußformel und entfällt vollständig, wenn dem Brief kein Bericht zugeordnet ist. Der Baustein
+`befund` druckt dagegen den Freitext des Aktenbausteins *Befund* (Patientenakte) im Brieftext.
+
+Fassungen aus der Zeit vor dem Aktenbaustein *Befund* führen den Blocktyp `report`
+(*Befund (Bericht)*); `LetterTemplate::normalize()` bildet ihn auf `befund` ab, sodass alte
+Vorlagenfassungen unverändert weiterlaufen.
 
 ### 4.3 Anrede (`{salutation}`)
 

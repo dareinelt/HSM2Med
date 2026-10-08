@@ -503,6 +503,7 @@
                         .filter(([label]) => label.trim() !== '')
                         .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })]))];
             case 'anamnesis':
+            case 'befund':
             case 'epicrisis':
                 return [headingNode(t.heading), metaNode(block, 'Fassung vom ' + todayText + ' · Beispiel-Anwender'),
                     h('span', { class: 'te-p-sample', text: 'Text aus der Patientenakte (Beispiel). Leere Bausteine erscheinen als „' + empty + '“.' })];
@@ -511,9 +512,10 @@
                     h('table', { class: 'te-p-table' },
                         h('thead', {}, h('tr', {}, ...[t.col_substance, t.col_dose, t.col_schedule, t.col_reason, t.col_period].map((label) => h('th', { text: fill(label) })))),
                         h('tbody', {}, h('tr', {}, ...['Beispielpräparat A', '5 mg', '1-0-0', 'Beispielgrund', 'seit 01.01.2024'].map((value) => h('td', { text: value })))))];
-            case 'report':
+            case 'reports':
                 return [headingNode(t.heading), metaNode(block, 'Bericht vom ' + todayText + ' · Beispieldaten'),
-                    h('dl', { class: 'te-p-rows' }, ...[['Gerät', 'Beispielgerät DR'], ['Betriebsart', 'DDD'], ['Sonde RA', 'Impedanz 520 Ohm']].flatMap(([label, value]) => [h('dt', { text: label }), h('dd', { text: value })]))];
+                    h('dl', { class: 'te-p-rows' }, ...[['Gerät', 'Beispielgerät DR'], ['Betriebsart', 'DDD'], ['Sonde RA', 'Impedanz 520 Ohm']].flatMap(([label, value]) => [h('dt', { text: label }), h('dd', { text: value })])),
+                    h('span', { class: 'te-p-meta', text: 'Anhang unter der Grußformel · beginnt auf einer neuen Seite · entfällt ohne Bericht' })];
             case 'closing':
                 return [textNode(t.text, 'Keine Grußformel'), h('span', { class: 'te-p-signature', 'aria-hidden': 'true' }), textNode(t.signature, null)];
             case 'text':

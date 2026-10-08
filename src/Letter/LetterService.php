@@ -45,7 +45,7 @@ final class LetterService
 
     /** Datenteile eines Snapshots, die eine Neuausfertigung unveraendert uebernimmt. */
     private const array DATA_PARTS = [
-        'master', 'patient', 'anamnesis', 'premedication', 'epicrisis', 'device_check',
+        'master', 'patient', 'anamnesis', 'premedication', 'epicrisis', 'befund', 'device_check',
         'report', 'appendix', 'mrt', 'source', 'recipient',
     ];
 
@@ -53,6 +53,7 @@ final class LetterService
     public const array TEXT_TYPES = [
         PatientRecordType::Anamnesis,
         PatientRecordType::Premedication,
+        PatientRecordType::Befund,
         PatientRecordType::Epicrisis,
     ];
 
@@ -149,7 +150,7 @@ final class LetterService
             $warnings[] = 'Es liegt keine Schrittmacher-/ICD-Abfrage vor; der Brief erhält keinen Anhang.';
         }
         if ($report === null) {
-            $warnings[] = 'Es ist kein Bericht ausgewählt; der Befundteil „Schrittmacher-/ICD-Abfrage" entfällt.';
+            $warnings[] = 'Es ist kein Bericht ausgewählt; der Baustein „Berichte" (Befundteil des Berichts) entfällt.';
         }
         if (($mrt['available'] ?? false) !== true) {
             $warnings[] = 'Im neuesten Patientenausweis ist keine MRT-Tauglichkeit angegeben; im Anhang erscheint die Angabe der Abfrage.';
@@ -682,6 +683,7 @@ final class LetterService
             'anamnesis' => $this->recordPart($records[PatientRecordType::Anamnesis->value] ?? null),
             'premedication' => $this->recordPart($records[PatientRecordType::Premedication->value] ?? null),
             'epicrisis' => $this->recordPart($records[PatientRecordType::Epicrisis->value] ?? null),
+            'befund' => $this->recordPart($records[PatientRecordType::Befund->value] ?? null),
             'device_check' => $this->recordPart($records[PatientRecordType::DeviceCheck->value] ?? null),
             'report' => $report === null ? null : $this->reportPart($report),
             'appendix' => $appendix,

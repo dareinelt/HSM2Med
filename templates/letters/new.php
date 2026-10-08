@@ -23,7 +23,7 @@ $activePatient = $activePatient ?? null;
     <div>
         <h1><?= $icon('mail-new', 'app-icon app-icon--lg') ?><span>Brief erstellen</span></h1>
         <p class="lead">Der Brief entsteht ausschließlich aus vorhandenen Daten. Zuerst wird der Patient
-            gewählt; der Bericht als Befundteil ist optional.</p>
+            gewählt; der Bericht für den Baustein „Berichte" ist optional.</p>
     </div>
     <div class="actions">
         <a class="button" href="/letters"><?= $icon('back') ?> <span>Zur Übersicht</span></a>

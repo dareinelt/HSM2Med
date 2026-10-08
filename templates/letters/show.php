@@ -32,6 +32,7 @@ $sameTemplate = $frozenTemplate !== null && (int) ($letter['template_version_id'
 $textParts = [
     'Anamnese' => (array) ($snapshot['anamnesis'] ?? []),
     'Vormedikation' => (array) ($snapshot['premedication'] ?? []),
+    'Befund' => (array) ($snapshot['befund'] ?? []),
     'Epikrise' => (array) ($snapshot['epicrisis'] ?? []),
 ];
 ?>
@@ -69,9 +70,9 @@ $textParts = [
             <?php endif; ?></td></tr>
             <tr><th>Briefdatum</th><td><?= $e($view::dateTime($document['letter_date'] ?? '', true)) ?></td></tr>
             <tr><th>Erstellt</th><td><?= $e($view::dateTime($letter['created_at'])) ?></td></tr>
-            <tr><th>Bericht (Befundteil)</th><td>
+            <tr><th>Berichte</th><td>
                 <?php if ($report === null): ?>
-                    <span class="muted">ohne Bericht – der Befundteil entfällt</span>
+                    <span class="muted">ohne Bericht – der Baustein „Berichte" entfällt</span>
                 <?php else: ?>
                     <a href="/reports/<?= $e($letter['report_id']) ?>">Nr. <?= $e($letter['report_id']) ?></a>
                     <br><small class="muted"><?= $e($report['meta'] ?? '') ?></small>
@@ -207,11 +208,12 @@ $textParts = [
         <?php endif; ?>
     <?php endforeach; ?>
 
-    <h3>Befund „Schrittmacher-/ICD-Abfrage"</h3>
+    <h3>Berichte (Befundteil des Berichts)</h3>
     <?php if (!is_array($report)): ?>
-        <p class="muted">Kein Bericht zugeordnet – der Befundteil entfällt.</p>
+        <p class="muted">Kein Bericht zugeordnet – der Baustein „Berichte" entfällt.</p>
     <?php else: ?>
         <p class="muted"><?= $e($report['meta'] ?? '') ?></p>
+        <p class="muted">Im PDF steht dieser Abschnitt als Anhang unter der Grußformel auf einer neuen Seite.</p>
         <?php if (($report['rows'] ?? []) !== []): ?>
             <table class="kv">
                 <?php foreach ($report['rows'] as $row): ?>

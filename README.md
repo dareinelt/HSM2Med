@@ -50,8 +50,8 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 - PDF-Berichte (eigene, abhängigkeitsfreie PDF-Erzeugung) – optional mit
   Rohdatenanhang, jederzeit reproduzierbar aus der Datenbank.
 - **Patientenakte**: Patienten lassen sich **vor** dem Import anlegen und pflegen. Anamnese,
-  Vormedikation, Epikrise und Notiz sowie die **Schrittmacher-/ICD-Abfrage** werden als eigene,
-  versionierte Bausteine am Patienten gespeichert – analog zu Berichten aus dem Import oder
+  Vormedikation, Befund, Epikrise und Notiz sowie die **Schrittmacher-/ICD-Abfrage** werden als
+  eigene, versionierte Bausteine am Patienten gespeichert – analog zu Berichten aus dem Import oder
   Patientenausweisen. Die Abfrage bildet den Wunschkatalog des ärztlichen Dienstes als
   geräteabhängiges Formular ab und lässt sich aus dem letzten Bericht vorbelegen.
 - **Patientenausweis** (zwei Seiten DIN A4) aus einem importierten Bericht: Assistent in sechs
@@ -69,8 +69,10 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 - Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
   Flugsicherheitstexte) mit eigener Fassung je Ausweis.
 - **Brief zur Schrittmacher-/ICD-Abfrage**: automatisch erzeugter Brief aus der Patientenakte.
-  Er enthält Anamnese, Vormedikation und Epikrise als Textteile, den Befundteil
-  „Schrittmacher-/ICD-Abfrage" (nur wenn ein Bericht zugeordnet wurde) und als Anhang die
+  Er enthält Anamnese, Vormedikation, Befund und Epikrise als Textteile, den Baustein
+  **Berichte** – den Befundteil „Schrittmacher-/ICD-Abfrage" des zugeordneten Berichts als
+  Anhang unter der Grußformel auf einer neuen Seite (nur wenn ein Bericht zugeordnet wurde) –
+  und als Anhang die
   vollständige Tabelle der Schrittmacher-/ICD-Abfrage samt MRT-Tauglichkeit aus dem
   Patientenausweis. Assistent in sechs Schritten, zwei ausdrückliche Bestätigungen,
   unveränderlicher Snapshot mit SHA-256-geprüftem PDF. Der Brief darf mehrseitig sein –
@@ -215,7 +217,7 @@ automatisch ausgeblendet.
 | **Dashboard** | Kennzahlen und zuletzt importierte Berichte |
 | **Import** | Datei wählen → *Datei prüfen* → Vorschau → *Import endgültig speichern* oder *Verwerfen* |
 | **Berichte** | Liste und Suche; Detailansicht mit Patient, Gerät, Sonden, Kategorien, Importprotokoll und Originaldaten |
-| **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Epikrise/Notiz und Schrittmacher-/ICD-Abfrage als versionierte Bausteine |
+| **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Befund/Epikrise/Notiz und Schrittmacher-/ICD-Abfrage als versionierte Bausteine |
 | **Briefe** | Brief zur Schrittmacher-/ICD-Abfrage aus der Akte erzeugen, durchsuchen und als unveränderliches PDF abrufen |
 | **Importprotokoll** | Alle Importe inkl. fehlgeschlagener, mit Warnungen/Fehlern je Datensatz |
 | **Systeminformationen** | Versionen, Datenbank- und Migrationsstatus, Limits |
@@ -279,7 +281,7 @@ neuesten 8 MiB des Protokolls.
 ## Patientenakte
 
 Patienten können **unabhängig von einem Import** angelegt werden. Damit sind Anamnese,
-Vormedikation und Epikrise schon vor dem Importprozess erfassbar; der Import ordnet den
+Vormedikation, Befund und Epikrise schon vor dem Importprozess erfassbar; der Import ordnet den
 Bericht später über die Identität demselben Patienten zu. Die Akte selbst erzeugt keine
 medizinischen Bewertungen: gespeichert wird ausschließlich, was eingegeben wurde. Aus diesen
 Bausteinen erzeugt die Anwendung den [Brief zur
@@ -331,6 +333,7 @@ Bausteintyp existiert genau ein aktueller Stand, dazu die vollständige Historie
 |---|---|
 | **Anamnese** | Freitext (Beschwerden, Vorerkrankungen, Implantationsgrund) |
 | **Vormedikation** | Tabelle (Wirkstoff, Dosis, Einheit, Einnahme, Grund, von, bis) mit ergänzendem Freitext |
+| **Befund** | Freitext (ärztlicher Befund zur Untersuchung) |
 | **Epikrise** | Freitext (Zusammenfassung des Verlaufs) |
 | **Notiz** | Freitext (freie Anmerkung zur Akte) |
 | **Schrittmacher-/ICD-Abfrage** | Geräteabhängiges Formular nach Vorlage `config/device_check_template.php` (siehe unten) |
@@ -554,8 +557,9 @@ abhängigkeitsfreien PDF-Writer.
 ## Brief zur Schrittmacher-/ICD-Abfrage
 
 Der Brief wird **automatisch aus der Patientenakte** erzeugt – aus den versionierten
-Bausteinen Anamnese, Vormedikation und Epikrise, dem Befundteil der gewählten Untersuchung
-und der vollständigen Schrittmacher-/ICD-Abfrage als Anhang. Er enthält keine medizinische
+Bausteinen Anamnese, Vormedikation, Befund und Epikrise, dem Befundteil der gewählten
+Untersuchung als Anhang unter der Grußformel (Baustein **Berichte**, immer auf einer neuen
+Seite) und der vollständigen Schrittmacher-/ICD-Abfrage als Anhang. Er enthält keine medizinische
 Bewertung und keine Diagnose; übernommen wird ausschließlich, was erfasst wurde.
 
 ![Briefübersicht](docs/screenshots/43-brief-uebersicht.png)
@@ -566,9 +570,9 @@ Bewertung und keine Diagnose; übernommen wird ausschließlich, was erfasst wurd
 
 ![Patient wählen](docs/screenshots/36-brief-patient-waehlen.png)
 
-**2. Bericht zuordnen (optional)** – der Bericht liefert den Befundteil. Wird kein Bericht
-gewählt, entfällt der Befundteil; der Brief wird trotzdem erzeugt. Der Assistent zeigt vorab,
-welche Bausteine fehlen:
+**2. Bericht zuordnen (optional)** – der Bericht liefert den Baustein **Berichte** (Befundteil
+des Berichts). Wird kein Bericht gewählt, entfällt dieser Anhang; der Brief wird trotzdem
+erzeugt. Der Assistent zeigt vorab, welche Bausteine fehlen:
 
 ![Bericht zuordnen](docs/screenshots/38-brief-assistent-bericht.png)
 
@@ -589,8 +593,8 @@ Anschrift, der Patient nur auf Wunsch. Mindestens ein Empfänger ist Pflicht.
 
 ![Empfänger wählen](docs/screenshots/50-brief-assistent-empfaenger.png)
 
-**5. Zusammenfassung** – Patient, Briefnummer(n), Empfänger, Befundteil, Textteile, Anhang und
-MRT-Tauglichkeit vor dem Erzeugen:
+**5. Zusammenfassung** – Patient, Briefnummer(n), Empfänger, Baustein *Berichte*, Textteile,
+Anhang und MRT-Tauglichkeit vor dem Erzeugen:
 
 ![Zusammenfassung](docs/screenshots/40-brief-assistent-zusammenfassung.png)
 
@@ -605,7 +609,8 @@ Bei fehlender Bestätigung antwortet der Server mit HTTP 422 und zeigt die Meldu
 
 Die Detailansicht zeigt Dokumentnummer, Briefdatum, Erstellungszeitpunkt, den zugeordneten
 Bericht, den Anhang, die eingefrorene Stammdaten- und Patientenfassung, Dateiname, Größe und
-SHA-256 des PDF, die eingefrorenen Bausteinfassungen, den Brieftext, den Befundteil und die
+SHA-256 des PDF, die eingefrorenen Bausteinfassungen, den Brieftext, den Baustein *Berichte*
+(Befundteil des Berichts, im PDF als Anhang unter der Grußformel auf einer neuen Seite) und die
 vollständige Abfragetabelle. Der Brief ist **unveränderlich**: Snapshot und PDF werden in einer
 Transaktion gespeichert und nie überschrieben; das PDF ist allein aus dem Snapshot
 reproduzierbar.
@@ -648,11 +653,18 @@ Tachykardie (VT1, VT2, VF mit Erkennung und Therapie) sowie Bemerkungen. Die
 MRT-Tauglichkeit stammt aus dem neuesten Patientenausweis; fehlt sie dort, wird die Angabe der
 Abfrage gedruckt.
 
+Die folgenden Seiten zeigen einen Brief der aktuellen Fassung (2), erzeugt mit der
+Standardvorlage: Seite 1 mit den Textteilen **Anamnese**, **Vormedikation**, **Befund** und
+**Epikrise**, Seite 2 mit der Grußformel, Seite 3 der Anhang **Berichte** (Befundteil des
+zugeordneten Berichts) und Seite 4 der Anhang mit der vollständigen Abfragetabelle.
+
 ![Brief Seite 1](docs/screenshots/46-brief-pdf-seite-1.png)
 
 ![Brief Seite 2](docs/screenshots/46-brief-pdf-seite-2.png)
 
 ![Brief Seite 3](docs/screenshots/46-brief-pdf-seite-3.png)
+
+![Brief Seite 4](docs/screenshots/46-brief-pdf-seite-4.png)
 
 Jede Seite trägt die Fußzeile „Automatisch erzeugter Brief auf Basis der Patientenakte – keine
 medizinische Bewertung oder Diagnose.", den Erstellungszeitpunkt mit Dokumentnummer und
@@ -866,11 +878,11 @@ erDiagram
   spätere Änderungen an `config/patient_card_measurements.php` betreffen nur neue Ausweise.
 - **patient_letters** ist ein unveränderliches Dokument: `snapshot` (JSON) friert Patientendaten,
   die Fassung der globalen Stammdaten (`settings_version_id`), die Fassungen der Bausteine
-  (Anamnese, Vormedikation, Epikrise, Schrittmacher-/ICD-Abfrage), die Befunddaten des
+  (Anamnese, Vormedikation, Befund, Epikrise, Schrittmacher-/ICD-Abfrage), die Befunddaten des
   gewählten Berichts und die aufgelösten Anhangsabschnitte ein. `pdf_content` (MEDIUMBLOB) und
   `pdf_sha256` werden gemeinsam mit dem Snapshot in einer Transaktion gespeichert und nie
   überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
-  (`NULL` = kein Befundteil). `sequence_no` ist die laufende Nummer je Patient,
+  (`NULL` = kein Baustein „Berichte"). `sequence_no` ist die laufende Nummer je Patient,
   `letter_version` die Fassung je Patient und Bericht (`UNIQUE (patient_id, sequence_no)`).
 - **letter_template_versions** ist der unveränderliche Fassungsverlauf der Briefvorlagen. Jede
   Empfängerart (`template_type`: `patient`, `family_doctor`, `referring_physician`) hat ihren
@@ -982,8 +994,8 @@ Aufbewahrungsfristen sowie das Verzeichnis der Verarbeitungstätigkeiten.
 Die Anwendung überträgt keine Daten nach außen. Für Tests und Screenshots wird
 ausschließlich die anonymisierte Beispieldatei (`tests/fixtures/merlin_sample.log`) verwendet.
 Protokolldateien enthalten technische Meldungen, aber keine Parameterwerte.
-Die Patientenakte enthält Freitextangaben zu Anamnese, Vormedikation und Epikrise; auch frühere
-Fassungen werden aufbewahrt und unterliegen denselben Lösch- und Aufbewahrungsfristen.
+Die Patientenakte enthält Freitextangaben zu Anamnese, Vormedikation, Befund und Epikrise; auch
+frühere Fassungen werden aufbewahrt und unterliegen denselben Lösch- und Aufbewahrungsfristen.
 
 ## Tests
 
@@ -1068,19 +1080,20 @@ docker compose --profile docs down -v
 ```
 
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Patient mit
-Anamnese, Vormedikation, Epikrise und Schrittmacher-/ICD-Abfrage, Import der Testdatei,
+Anamnese, Vormedikation, Befund, Epikrise und Schrittmacher-/ICD-Abfrage, Import der Testdatei,
 Stammdaten mit Beispiel-Logo, Patientenausweis, Brief zur Schrittmacher-/ICD-Abfrage) und erzeugt
 daraus die Bilder `01`–`53`, darunter Hausarzt und überweisender Arzt in den Stammdaten
 (`49`), die Empfängerauswahl des Brief-Assistenten (`50`), den Vorlageneditor (`51`–`53`), die Sperre des Importvorgangs ohne Patienten (`47`), den
 automatisch aktiven Patienten (`48`), Assistent, Konfliktdialog, Patientenakte, die Abfrage mit
 Vorbelegung und Sperrung der MRT-Tauglichkeit, beide Seiten des Ausweis-PDF, der Brief-Assistent
-(Schritte 2–6, drei Empfänger), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–3 des
+(Schritte 2–6, drei Empfänger), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–4 des
 Brief-PDF. Das Skript prüft dabei zugleich die harten Anforderungen: Der Import leitet ohne
 aktiven Patienten auf die Patientenübersicht um, das Anlegen eines Patienten setzt ihn als
 aktiven Patienten, das Ausweis-PDF hat **genau
 zwei** Seiten, Seite 1 nennt die MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die
-Abfrage wird gespeichert; das Brief-PDF hat **mindestens zwei** Seiten und enthält Titel,
-Anamnese, Vormedikation, Epikrise, den Befundteil, den Anhang, die MRT-Tauglichkeit und die
+Abfrage wird gespeichert; das Brief-PDF hat **mindestens vier** Seiten und enthält Titel,
+Anamnese, Vormedikation, Befund, Epikrise, den Baustein „Berichte" (Befundteil des Berichts als
+Anhang unter der Grußformel auf einer neuen Seite), den Anhang, die MRT-Tauglichkeit und die
 Tachykardie-Abschnitte sowie die Anschrift des Hausarztes im Anschriftfeld. Der Build des
 Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an

@@ -111,6 +111,10 @@ final class LetterViewTest extends DatabaseTestCase
             ]],
             'author_name' => 'Dr. med. Beispiel',
         ]);
+        $this->records->save($this->patientId, PatientRecordType::Befund, [
+            'text' => 'Regelmäßiger Eigenrhythmus, keine Sondenauffälligkeit.',
+            'author_name' => 'Dr. med. Beispiel',
+        ]);
         $this->records->save($this->patientId, PatientRecordType::Epicrisis, [
             'text' => 'Beschwerdefreie Vorstellung zur Routinekontrolle.',
             'author_name' => 'Dr. med. Beispiel',
@@ -351,7 +355,7 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('Es liegt keine Schrittmacher-/ICD-Abfrage vor', $response->body);
         $this->assertContains('kein Anhang (keine Abfrage vorhanden)', $response->body);
         $this->assertContains('Im neuesten Patientenausweis ist keine MRT-Tauglichkeit angegeben', $response->body);
-        $this->assertContains('Kein Bericht ausgewählt – der Befundteil entfällt.', $response->body);
+        $this->assertContains('Kein Bericht ausgewählt – der Baustein „Berichte" entfällt.', $response->body);
     }
 
     /** Unbekannte Patienten und fremde Berichte werden als Fehler behandelt, nicht gerendert. */
@@ -414,8 +418,10 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('Brieftext', $show->body);
         $this->assertContains('Anamnese', $show->body);
         $this->assertContains('Vormedikation', $show->body);
+        $this->assertContains('Befund', $show->body);
+        $this->assertContains('Regelmäßiger Eigenrhythmus, keine Sondenauffälligkeit.', $show->body);
         $this->assertContains('Epikrise', $show->body);
-        $this->assertContains('Befund „Schrittmacher-/ICD-Abfrage"', $show->body);
+        $this->assertContains('Berichte (Befundteil des Berichts)', $show->body);
         $this->assertContains('Anhang: vollständige Schrittmacher-/ICD-Abfrage', $show->body);
         $this->assertContains('Programmierung Bradykardie', $show->body);
         $this->assertContains('Weitere Briefe dieses Patienten', $show->body);
@@ -518,7 +524,7 @@ final class LetterViewTest extends DatabaseTestCase
         $payload = json_decode($saved->body, true);
         $this->assertTrue($payload['ok']);
         $this->assertSame(2, $payload['current']['version_no']);
-        $this->assertSame('closing', $payload['current']['content']['blocks'][0]['type']);
+        $this->assertSame('reports', $payload['current']['content']['blocks'][0]['type']);
         $this->assertCount(2, $payload['versions']);
         $this->assertSame('Reihenfolge umgekehrt', $payload['versions'][0]['comment']);
 
