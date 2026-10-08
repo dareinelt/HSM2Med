@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\PatientCard;
 
+use App\Patient\PatientRepository;
 use PDO;
 
 /**
@@ -14,121 +15,12 @@ use PDO;
  *  * Stammdatenaenderungen erzeugen eine neue, unveraenderliche Fassung
  *    (patient_card_settings_versions); Ausweise verweisen auf ihre Fassung.
  *  * Ausweise und Logos werden nie ueberschrieben.
+ *
+ * Patienten und Patienten-Stammdaten liegen in PatientRepository und werden von hier
+ * geerbt: die Patientenakte und der Patientenausweis greifen auf dieselben Daten zu.
  */
-final class PatientCardRepository
+final class PatientCardRepository extends PatientRepository
 {
-    public function __construct(private readonly PDO $pdo)
-    {
-    }
-
-    // ---------------------------------------------------------------- Patienten
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    public function findPatientsByIdentity(string $identityKey): array
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT id, patient_identifier, patient_name, last_name, first_name, date_of_birth, date_of_birth_raw'
-            . ' FROM patients WHERE identity_key = ? ORDER BY id'
-        );
-        $stmt->execute([$identityKey]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function patient(int $patientId): ?array
-    {
-        $stmt = $this->pdo->prepare('SELECT * FROM patients WHERE id = ?');
-        $stmt->execute([$patientId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row === false ? null : $row;
-    }
-
-    public function patientIdentifierInUse(string $identifier): bool
-    {
-        $stmt = $this->pdo->prepare('SELECT 1 FROM patients WHERE patient_identifier = ? LIMIT 1');
-        $stmt->execute([$identifier]);
-        return $stmt->fetchColumn() !== false;
-    }
-
-    public function createPatient(
-        ?string $identifier,
-        string $patientName,
-        string $lastName,
-        string $firstName,
-        string $dateOfBirth,
-        ?string $dateOfBirthRaw,
-        string $now,
-    ): int {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO patients (patient_identifier, patient_name, last_name, first_name, date_of_birth, date_of_birth_raw, created_at, updated_at)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([$identifier, $patientName, $lastName, $firstName, $dateOfBirth, $dateOfBirthRaw, $now, $now]);
-        return (int) $this->pdo->lastInsertId();
-    }
-
-    /**
-     * Ergaenzt Identitaetsangaben an einem vorhandenen Patienten (nur fehlende Werte).
-     */
-    public function fillPatientIdentity(int $patientId, string $lastName, string $firstName, string $dateOfBirth, ?string $dateOfBirthRaw, string $now): void
-    {
-        $stmt = $this->pdo->prepare(
-            'UPDATE patients SET last_name = COALESCE(last_name, ?), first_name = COALESCE(first_name, ?),'
-            . ' date_of_birth = COALESCE(date_of_birth, ?), date_of_birth_raw = COALESCE(date_of_birth_raw, ?), updated_at = ?'
-            . ' WHERE id = ?'
-        );
-        $stmt->execute([$lastName, $firstName, $dateOfBirth, $dateOfBirthRaw, $now, $patientId]);
-    }
-
-    public function reportPatientId(int $reportId): ?int
-    {
-        $stmt = $this->pdo->prepare('SELECT patient_id FROM reports WHERE id = ?');
-        $stmt->execute([$reportId]);
-        $value = $stmt->fetchColumn();
-        return $value === false || $value === null ? null : (int) $value;
-    }
-
-    /**
-     * Verknuepft einen Bericht mit dem bestaetigten Patienten (Zusammenfuehrung).
-     */
-    public function linkReportToPatient(int $reportId, int $patientId): void
-    {
-        $stmt = $this->pdo->prepare('UPDATE reports SET patient_id = ? WHERE id = ?');
-        $stmt->execute([$patientId, $reportId]);
-    }
-
-    // ------------------------------------------------------------ Stammdaten je Patient
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function masterData(int $patientId): ?array
-    {
-        $stmt = $this->pdo->prepare('SELECT * FROM patient_card_master_data WHERE patient_id = ?');
-        $stmt->execute([$patientId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row === false ? null : $row;
-    }
-
-    /**
-     * @param array<string, string|null> $values
-     */
-    public function saveMasterData(int $patientId, array $values, string $now): void
-    {
-        $columns = array_keys($values);
-        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-        $updates = implode(', ', array_map(static fn (string $column): string => sprintf('%s = VALUES(%s)', $column, $column), $columns));
-        $sql = 'INSERT INTO patient_card_master_data (patient_id, ' . implode(', ', $columns) . ', created_at, updated_at)'
-            . ' VALUES (?, ' . $placeholders . ', ?, ?)'
-            . ' ON DUPLICATE KEY UPDATE ' . $updates . ', updated_at = VALUES(updated_at)';
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$patientId, ...array_values($values), $now, $now]);
-    }
-
     // ------------------------------------------------------------------- Stammdaten
 
     /**

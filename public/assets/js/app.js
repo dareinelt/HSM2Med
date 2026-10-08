@@ -101,4 +101,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Wiederholbare Zeilen (z. B. Arzneimittelzeilen der Vormedikation)
+    document.querySelectorAll('[data-repeat]').forEach((container) => {
+        const template = container.querySelector('template[data-repeat-template]');
+        const list = container.querySelector('[data-repeat-rows]');
+        const addButton = container.querySelector('[data-repeat-add]');
+        if (!template || !list || !addButton) {
+            return;
+        }
+        const limit = parseInt(container.dataset.repeatLimit || '0', 10);
+        const rows = () => Array.from(list.querySelectorAll('[data-repeat-row]'));
+        const sync = () => {
+            const count = rows().length;
+            addButton.disabled = limit > 0 && count >= limit;
+            rows().forEach((row, index) => {
+                row.querySelectorAll('[name]').forEach((field) => {
+                    field.name = field.name.replace(/medication\[[^\]]*\]/, 'medication[' + index + ']');
+                });
+                const remove = row.querySelector('[data-repeat-remove]');
+                if (remove) {
+                    remove.disabled = count <= 1;
+                }
+            });
+        };
+        addButton.addEventListener('click', () => {
+            const markup = template.innerHTML.replace(/__INDEX__/g, String(rows().length));
+            list.insertAdjacentHTML('beforeend', markup);
+            sync();
+            const added = rows().pop();
+            const first = added && added.querySelector('input');
+            if (first) {
+                first.focus();
+            }
+        });
+        list.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-repeat-remove]');
+            if (!button || rows().length <= 1) {
+                return;
+            }
+            event.preventDefault();
+            const row = button.closest('[data-repeat-row]');
+            if (row) {
+                row.remove();
+                sync();
+            }
+        });
+        sync();
+    });
 });

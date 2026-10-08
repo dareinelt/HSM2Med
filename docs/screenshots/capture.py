@@ -45,6 +45,24 @@ FLIGHT_NOTICE_EN = (
     "this card and ask for a screening that avoids the hand-held scanner."
 )
 
+# Beispielakte (frei erfunden, kein Patientenbezug).
+AKTE_LAST_NAME = "Beispielpatient"
+AKTE_FIRST_NAME = "Berta"
+AKTE_BIRTH_DATE = "04.05.1949"
+AKTE_IDENTIFIER = "MUSTER-1001"
+AKTE_INDICATION = "Bradykardie mit Synkope, geplante Schrittmacherimplantation"
+AKTE_ANAMNESIS = (
+    "Belastungsdyspnoe seit etwa drei Monaten, zuletzt auch in Ruhe.\n"
+    "Synkope am 12.06.2026 mit Sturz ohne Verletzungsfolge.\n"
+    "Arterielle Hypertonie, Z.n. Katarakt-Operation beidseits.\n"
+    "Keine Allergien bekannt, keine Antikoagulation."
+)
+AKTE_AUTHOR = "Dr. med. Anna Beispiel"
+AKTE_PREMEDICATION = [
+    ("Bisoprolol", "2,5", "mg", "1-0-0", "Bradykardie", "01.03.2024"),
+    ("Ramipril", "5", "mg", "1-0-0", "Arterielle Hypertonie", "01.03.2024"),
+]
+
 
 def shot(page: Page, name: str, full_page: bool = True) -> None:
     target = OUT / f"{name}.png"
@@ -165,6 +183,52 @@ def main() -> int:
 
         page.goto(f"{BASE_URL}/")
         shot(page, "11-dashboard")
+
+        # --- Patientenakte: Patient vor dem Import anlegen ---------------------
+        page.goto(f"{BASE_URL}/patients")
+        shot(page, "24-akte-uebersicht")
+
+        page.goto(f"{BASE_URL}/patients/new")
+        shot(page, "25-akte-anlegen")
+
+        page.fill("input[name=last_name]", AKTE_LAST_NAME)
+        page.fill("input[name=first_name]", AKTE_FIRST_NAME)
+        page.fill("input[name=date_of_birth]", AKTE_BIRTH_DATE)
+        page.fill("input[name=patient_identifier]", AKTE_IDENTIFIER)
+        page.fill("input[name=street]", "Aktenweg 3")
+        page.fill("input[name=postal_code]", "12345")
+        page.fill("input[name=city]", "Musterstadt")
+        page.fill("input[name=phone]", "01234 567893")
+        page.fill("textarea[name=indication]", AKTE_INDICATION)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+        patient_url = page.url
+        shot(page, "26-akte-patient")
+
+        page.goto(f"{patient_url}/records/anamnesis")
+        page.fill("textarea[name=text]", AKTE_ANAMNESIS)
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+        shot(page, "27-akte-anamnese")
+
+        page.goto(f"{patient_url}/records/premedication")
+        for index, (substance, dose, unit, schedule, reason, since) in enumerate(AKTE_PREMEDICATION):
+            if index > 0:
+                page.click("[data-repeat-add]")
+            page.fill(f'input[name="medication[{index}][substance]"]', substance)
+            page.fill(f'input[name="medication[{index}][dose]"]', dose)
+            page.fill(f'input[name="medication[{index}][unit]"]', unit)
+            page.fill(f'input[name="medication[{index}][schedule]"]', schedule)
+            page.fill(f'input[name="medication[{index}][reason]"]', reason)
+            page.fill(f'input[name="medication[{index}][from]"]', since)
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+        shot(page, "28-akte-vormedikation")
+
+        page.goto(f"{patient_url}")
+        shot(page, "29-akte-patient-mit-bausteinen")
 
         # --- Patientenausweis: Stammdaten, Assistent, Konflikte, Historie -------
         report_id = report_url.rstrip("/").split("/")[-1]

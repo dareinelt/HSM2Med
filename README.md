@@ -19,20 +19,21 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 4. [Start, Stopp, Aktualisierung](#start-stopp-aktualisierung)
 5. [Offline-Betrieb](#offline-betrieb)
 6. [Bedienung der Weboberfläche](#bedienung-der-weboberfläche)
-7. [Patientenausweis erstellen](#patientenausweis-erstellen)
-8. [Kommandozeile (CLI)](#kommandozeile-cli)
-9. [Importformat](#importformat)
-10. [Parserverhalten und Fehlerbehandlung](#parserverhalten-und-fehlerbehandlung)
-11. [Datenmodell, Snapshots und Versionierung](#datenmodell-snapshots-und-versionierung)
-12. [PDF-Berichte](#pdf-berichte)
-13. [Parameterzuordnung erweitern](#parameterzuordnung-erweitern)
-14. [Sicherheitskonzept](#sicherheitskonzept)
-15. [Datenschutz](#datenschutz)
-16. [Tests](#tests)
-17. [Screenshots für die Dokumentation](#screenshots-für-die-dokumentation)
-18. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
-19. [Fehlerbehebung](#fehlerbehebung)
-20. [Projektstruktur](#projektstruktur)
+7. [Patientenakte](#patientenakte)
+8. [Patientenausweis erstellen](#patientenausweis-erstellen)
+9. [Kommandozeile (CLI)](#kommandozeile-cli)
+10. [Importformat](#importformat)
+11. [Parserverhalten und Fehlerbehandlung](#parserverhalten-und-fehlerbehandlung)
+12. [Datenmodell, Snapshots und Versionierung](#datenmodell-snapshots-und-versionierung)
+13. [PDF-Berichte](#pdf-berichte)
+14. [Parameterzuordnung erweitern](#parameterzuordnung-erweitern)
+15. [Sicherheitskonzept](#sicherheitskonzept)
+16. [Datenschutz](#datenschutz)
+17. [Tests](#tests)
+18. [Screenshots für die Dokumentation](#screenshots-für-die-dokumentation)
+19. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
+20. [Fehlerbehebung](#fehlerbehebung)
+21. [Projektstruktur](#projektstruktur)
 
 ## Funktionsumfang
 
@@ -47,6 +48,9 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   Dateiname, Zeitraum), Importprotokoll und Systemstatus.
 - PDF-Berichte (eigene, abhängigkeitsfreie PDF-Erzeugung) – optional mit
   Rohdatenanhang, jederzeit reproduzierbar aus der Datenbank.
+- **Patientenakte**: Patienten lassen sich **vor** dem Import anlegen und pflegen. Anamnese,
+  Vormedikation und Epikrise werden als eigene, versionierte Bausteine am Patienten gespeichert –
+  analog zu Berichten aus dem Import oder Patientenausweisen.
 - **Patientenausweis** (zwei Seiten DIN A4) aus einem importierten Bericht: Assistent in sechs
   Schritten, Identitätsprüfung über Nachname + Vorname + Geburtsdatum, Konfliktentscheidung je
   Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie. Seite 2
@@ -142,6 +146,7 @@ docker compose up -d   # ohne --build
 | **Dashboard** | Kennzahlen und zuletzt importierte Berichte |
 | **Import** | Datei wählen → *Datei prüfen* → Vorschau → *Import endgültig speichern* oder *Verwerfen* |
 | **Berichte** | Liste und Suche; Detailansicht mit Patient, Gerät, Sonden, Kategorien, Importprotokoll und Originaldaten |
+| **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Epikrise/Notiz als versionierte Bausteine |
 | **Importprotokoll** | Alle Importe inkl. fehlgeschlagener, mit Warnungen/Fehlern je Datensatz |
 | **Systeminformationen** | Versionen, Datenbank- und Migrationsstatus, Limits |
 
@@ -172,6 +177,82 @@ ausdrücklicher Bestätigung erneut importiert werden; Dateien ohne Merlin-Forma
 ![Importdetail](docs/screenshots/07-import-detail.png)
 
 ![Systemstatus](docs/screenshots/08-systemstatus.png)
+
+## Patientenakte
+
+Patienten können **unabhängig von einem Import** angelegt werden. Damit sind Anamnese,
+Vormedikation und Epikrise schon vor dem Importprozess erfassbar; der Import ordnet den
+Bericht später über die Identität demselben Patienten zu. Die Akte selbst erzeugt keine
+medizinischen Bewertungen: gespeichert wird ausschließlich, was eingegeben wurde.
+
+![Patientenübersicht](docs/screenshots/24-akte-uebersicht.png)
+
+### Anlegen vor dem Import
+
+**1. Patient anlegen** (`/patients/new`) – Pflichtfelder sind Nachname, Vorname und
+Geburtsdatum; optional sind Patienten-ID, Anschrift, Telefon und Indikation. Das Geburtsdatum
+wird als `TT.MM.JJJJ` erfasst (zusätzlich erkannt: `JJJJ-MM-TT`, `TT/MM/JJJJ`, `TT-MM-JJJJ`) und
+als ISO-Datum gespeichert; unplausible oder in der Zukunft liegende Daten werden abgelehnt.
+Das Formular meldet Fehler je Feld mit HTTP 422 und behält die Eingaben.
+
+![Patient anlegen](docs/screenshots/25-akte-anlegen.png)
+
+**2. Dublettenprüfung** – die Identität eines Patienten ist **Nachname + Vorname +
+Geburtsdatum** (Groß-/Kleinschreibung und umgebende Leerzeichen bleiben ohne Bedeutung).
+Existiert dazu bereits ein Patient, listet das Formular die Treffer auf und verlangt die
+ausdrückliche Bestätigung *„Es handelt sich um einen anderen Patienten"*. Ohne diese
+Bestätigung wird nichts gespeichert. Die Patienten-ID ist ebenfalls eindeutig: eine bereits
+vergebene ID wird abgewiesen.
+
+### Versionierte Bausteine
+
+Ein Baustein ist ein benannter Teil der Akte, der als **unveränderliche Fassung** gespeichert
+wird – analog zu den Berichten aus dem Import und zu den Patientenausweisen. Je Patient und
+Bausteintyp existiert genau ein aktueller Stand, dazu die vollständige Historie.
+
+| Baustein | Erfassung |
+|---|---|
+| **Anamnese** | Freitext (Beschwerden, Vorerkrankungen, Implantationsgrund) |
+| **Vormedikation** | Tabelle (Wirkstoff, Dosis, Einheit, Einnahme, Grund, von, bis) mit ergänzendem Freitext |
+| **Epikrise** | Freitext (Zusammenfassung des Verlaufs) |
+| **Notiz** | Freitext (freie Anmerkung zur Akte) |
+
+Jede Speicherung erzeugt eine neue Fassung mit laufender Nummer, Zeitstempel und optionalem
+Autor (`Fassung 2, vom 07.10.2026, erfasst von Dr. med. Anna Beispiel`). Inhaltsgleiche
+Eingaben erzeugen **keine** neue Fassung; verglichen wird ein SHA-256 über den
+normalisierten Inhalt. Freitext ist auf 20 000 Zeichen begrenzt, der Autor auf 255 Zeichen,
+die Vormedikation auf 50 Zeilen. Datumsangaben in Medikamentenzeilen werden wie das
+Geburtsdatum normalisiert gespeichert und in der Akte als `TT.MM.JJJJ` angezeigt; eine leere
+Spalte *bis* bedeutet „fortlaufend".
+
+![Patientenakte](docs/screenshots/26-akte-patient.png)
+
+![Anamnese mit Fassungshistorie](docs/screenshots/27-akte-anamnese.png)
+
+![Vormedikation](docs/screenshots/28-akte-vormedikation.png)
+
+![Akte mit gespeicherten Bausteinen](docs/screenshots/29-akte-patient-mit-bausteinen.png)
+
+### Suche und Zuordnung
+
+Die Übersicht (`/patients`) sucht nach Name (Freitext), Patienten-ID und Geburtsdatum
+(`TT.MM.JJJJ`) und zeigt je Patient die Anzahl verknüpfter Berichte und Bausteine sowie den
+Zeitpunkt der letzten Bausteinänderung. Ein Bericht aus dem Import wird über dieselbe
+Identität zugeordnet; die Akte verlinkt auf die Ausweise und die Nachsorge des Patienten
+(`/patient-cards/patients/{id}`).
+
+### Routen
+
+| Route | Zweck |
+|---|---|
+| `GET /patients` | Übersicht mit Suche und Seitenaufteilung |
+| `GET /patients/new` | Formular für einen neuen Patienten |
+| `POST /patients` | Patient anlegen (bei Dublette nur mit Bestätigung) |
+| `GET /patients/{id}` | Akte mit Stammdaten, Bausteinen und Berichten |
+| `GET /patients/{id}/edit` | Stammdaten bearbeiten |
+| `POST /patients/{id}` | Stammdaten speichern |
+| `GET /patients/{id}/records/{slug}` | Baustein bearbeiten (`anamnesis`, `premedication`, `epicrisis`, `note`) |
+| `POST /patients/{id}/records/{slug}` | Baustein speichern (neue Fassung) |
 
 ## Patientenausweis erstellen
 
@@ -377,6 +458,8 @@ erDiagram
     imports ||--o{ import_errors : protokolliert
     patients ||--o{ devices : besitzt
     patients ||--o{ reports : betrifft
+    patients ||--o{ patient_records : fuehrt
+    patient_records ||--o{ patient_record_versions : fasst
     devices ||--o{ leads : hat
     devices ||--o{ reports : betrifft
     reports ||--o{ report_leads : verweist
@@ -392,6 +475,12 @@ erDiagram
   Einheit, Rohdatensatz, Position) **inklusive** der Kategorie zum Importzeitpunkt.
 - **patients/devices/leads** sind Stammdaten zur Verknüpfung; sie werden nur ergänzt,
   nie überschrieben. Historische Berichte verwenden ausschließlich ihre Snapshots.
+- **patient_records** ist der Behälter je Patient und Bausteintyp (genau einer je
+  Kombination, `UNIQUE (patient_id, record_type)`); der Inhalt liegt ausschließlich in
+  **patient_record_versions**. Jede Änderung erzeugt dort eine neue Fassung mit
+  fortlaufender `version`, `content` (JSON), `content_text` (Textfassung für Anzeige und
+  spätere Verwendung) und `content_hash` (SHA-256 des kanonischen JSON, verhindert
+  inhaltsgleiche neue Fassungen). Frühere Fassungen werden nie überschrieben oder gelöscht.
 - Alle Fremdschlüssel verwenden `ON DELETE RESTRICT`; Berichte werden nicht gelöscht.
 - Jeder Bericht speichert `report_version`, `parser_version` und `mapping_version`.
   Die PDF-Erzeugung wählt das Layout anhand der `report_version`. Eine Änderung der
@@ -481,6 +570,8 @@ Aufbewahrungsfristen sowie das Verzeichnis der Verarbeitungstätigkeiten.
 Die Anwendung überträgt keine Daten nach außen. Für Tests und Screenshots wird
 ausschließlich die anonymisierte Beispieldatei (`tests/fixtures/merlin_sample.log`) verwendet.
 Protokolldateien enthalten technische Meldungen, aber keine Parameterwerte.
+Die Patientenakte enthält Freitextangaben zu Anamnese, Vormedikation und Epikrise; auch frühere
+Fassungen werden aufbewahrt und unterliegen denselben Lösch- und Aufbewahrungsfristen.
 
 ## Tests
 
@@ -506,10 +597,15 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
 - **Patientenausweis:** Namenszerlegung und Identitätsschlüssel, Eingabeprüfung,
   Logo-Prüfung, PDF-Layout (Seitenzahl, Seitenumbruch), Erzeugung aus einem Bericht,
   Konflikterkennung, Unveränderlichkeit bestehender Ausweise.
+- **Patientenakte:** Eingabeprüfung der Stammdaten (Datumsformate, Pflichtfelder,
+  Patienten-ID-Länge, Telefonzeichen, Steuerzeichen, Dublettenbestätigung), Bausteine
+  (Freitext, Vormedikationszeilen, Datumsnormalisierung, Grenzwerte, inhaltsgleiche Eingabe
+  ohne neue Fassung), Anlegen ohne Import, Identität und Dubletten, Suche und Pagination
+  sowie Fassungshistorie.
 - **Oberflächen (Integration):** Die Templates werden mit den echten Controllern gerendert
-  (`tests/Integration/PatientCardViewTest.php`). Damit fallen Fehler in der HTML-Schicht
-  (fehlende Template-Variablen, unbekannte Klassen, unvollständige Formulare, fehlende
-  CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
+  (`tests/Integration/PatientCardViewTest.php`, `tests/Integration/PatientViewTest.php`).
+  Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
+  unvollständige Formulare, fehlende CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
 
 ## Screenshots für die Dokumentation
 
@@ -523,8 +619,9 @@ docker compose --profile docs down
 ```
 
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Import der
-Testdatei, Stammdaten mit Beispiel-Logo, Patientenausweis) und erzeugt daraus die Bilder
-`01`–`22`, darunter Assistent, Konfliktdialog und beide Seiten des Ausweis-PDF. Der Build des
+Testdatei, Stammdaten mit Beispiel-Logo, Patient mit Anamnese und Vormedikation,
+Patientenausweis) und erzeugt daraus die Bilder `01`–`29`, darunter Assistent,
+Konfliktdialog, Patientenakte und beide Seiten des Ausweis-PDF. Der Build des
 Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
 Templates oder `src/` ist `docker compose build web` erforderlich.
@@ -582,6 +679,7 @@ src/                 Anwendungscode (Namespace App\)
   Http/              Kernel, Router, Controller, View
   Import/            Parser, Validierung, ImportService, Archiv
   Mapping/           Parameterzuordnung
+  Patient/           Patientenakte (Patient, Bausteine, Fassungen)
   Report/            Berichtsdaten, Zusammenfassung, PDF (Pdf/)
   Repository/        Datenbankabfragen
   Security/          Session, CSRF, Uploadprüfung

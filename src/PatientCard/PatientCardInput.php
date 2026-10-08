@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\PatientCard;
 
-use DateTimeImmutable;
-use DateTimeZone;
+use App\Support\DateInput;
 
 /**
  * Gepruefte und normalisierte Eingaben des Patientenausweis-Assistenten.
@@ -212,35 +211,16 @@ final class PatientCardInput
      */
     public static function parseDate(string $value): ?string
     {
-        $value = trim($value);
-        if ($value === '') {
-            return null;
-        }
-        $formats = ['d.m.Y', 'Y-m-d', 'd/m/Y', 'd-m-Y'];
-        foreach ($formats as $format) {
-            $date = DateTimeImmutable::createFromFormat('!' . $format, $value, new DateTimeZone('UTC'));
-            $errors = DateTimeImmutable::getLastErrors();
-            if ($date !== false && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
-                return $date->format('Y-m-d');
-            }
-        }
-        return null;
+        return DateInput::parse($value);
     }
 
     public static function formatDate(?string $value): string
     {
-        if ($value === null || $value === '') {
-            return '';
-        }
-        $date = self::parseDate($value);
-        if ($date === null) {
-            return $value;
-        }
-        return (new DateTimeImmutable($date))->format('d.m.Y');
+        return DateInput::format($value);
     }
 
     private static function today(): string
     {
-        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d');
+        return DateInput::today();
     }
 }

@@ -10,6 +10,7 @@ use App\Http\Controller\ImportController;
 use App\Http\Controller\ImportLogController;
 use App\Http\Controller\PatientCardController;
 use App\Http\Controller\PatientCardSettingsController;
+use App\Http\Controller\PatientController;
 use App\Http\Controller\ReportController;
 use App\Http\Controller\SystemController;
 use App\Security\Csrf;
@@ -58,6 +59,7 @@ final class Kernel
         $system = new SystemController($this->app, $this->view);
         $cards = new PatientCardController($this->app, $this->view);
         $cardSettings = new PatientCardSettingsController($this->app, $this->view);
+        $patients = new PatientController($this->app, $this->view);
 
         $router = new Router();
         $router->get('/', $dashboard->index(...));
@@ -71,6 +73,14 @@ final class Kernel
         $router->get('/reports/{id}/pdf', $reports->pdf(...));
         $router->get('/imports', $imports->index(...));
         $router->get('/imports/{id}', $imports->show(...));
+        $router->get('/patients', $patients->index(...));
+        $router->get('/patients/new', $patients->newForm(...));
+        $router->post('/patients', $patients->create(...));
+        $router->get('/patients/{id}/edit', $patients->editForm(...));
+        $router->post('/patients/{id}', $patients->update(...));
+        $router->get('/patients/{id}/records/{slug}', $patients->recordForm(...));
+        $router->post('/patients/{id}/records/{slug}', $patients->saveRecord(...));
+        $router->get('/patients/{id}', $patients->show(...));
         $router->get('/patient-cards', $cards->index(...));
         $router->get('/patient-cards/new', $cards->selectReport(...));
         $router->get('/patient-cards/settings', $cardSettings->index(...));

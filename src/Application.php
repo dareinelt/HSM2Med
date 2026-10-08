@@ -13,6 +13,10 @@ use App\Import\ImportValidator;
 use App\Import\MerlinParser;
 use App\Import\PendingUploadStore;
 use App\Mapping\ParameterMapping;
+use App\Patient\PatientRecordRepository;
+use App\Patient\PatientRecordService;
+use App\Patient\PatientRepository;
+use App\Patient\PatientService;
 use App\PatientCard\MeasurementTemplate;
 use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
@@ -37,6 +41,10 @@ final class Application
     private ?Logger $logger = null;
     private ?ParameterMapping $mapping = null;
     private ?MeasurementTemplate $measurementTemplate = null;
+    private ?PatientRepository $patientRepository = null;
+    private ?PatientRecordRepository $patientRecordRepository = null;
+    private ?PatientService $patientService = null;
+    private ?PatientRecordService $patientRecordService = null;
 
     public function __construct(
         public readonly Config $config,
@@ -104,6 +112,30 @@ final class Application
     public function patientCardRepository(): PatientCardRepository
     {
         return new PatientCardRepository($this->pdo());
+    }
+
+    public function patientRepository(): PatientRepository
+    {
+        return $this->patientRepository ??= new PatientRepository($this->pdo());
+    }
+
+    public function patientRecordRepository(): PatientRecordRepository
+    {
+        return $this->patientRecordRepository ??= new PatientRecordRepository($this->pdo());
+    }
+
+    public function patientService(): PatientService
+    {
+        return $this->patientService ??= new PatientService($this->pdo(), $this->patientRepository(), $this->clock);
+    }
+
+    public function patientRecordService(): PatientRecordService
+    {
+        return $this->patientRecordService ??= new PatientRecordService(
+            $this->patientRecordRepository(),
+            $this->patientRepository(),
+            $this->clock,
+        );
     }
 
     public function patientCardService(): PatientCardService
