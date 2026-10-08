@@ -163,7 +163,7 @@ final class PatientRecordInputTest extends TestCase
 
     public function testRecordTypeCatalog(): void
     {
-        $this->assertCount(5, PatientRecordType::all());
+        $this->assertCount(6, PatientRecordType::all());
         $this->assertSame('Vormedikation', PatientRecordType::Premedication->label());
         $this->assertTrue(PatientRecordType::Premedication->isStructured());
         $this->assertFalse(PatientRecordType::Anamnesis->isStructured());
@@ -171,6 +171,10 @@ final class PatientRecordInputTest extends TestCase
         $this->assertSame(PatientRecordType::DeviceCheck, PatientRecordType::fromValue('device_check'));
         $this->assertTrue(PatientRecordType::DeviceCheck->isDeviceCheck());
         $this->assertFalse(PatientRecordType::DeviceCheck->isStructured());
+        $this->assertSame(PatientRecordType::Befund, PatientRecordType::fromValue('befund'));
+        $this->assertSame('Befund', PatientRecordType::Befund->label());
+        $this->assertFalse(PatientRecordType::Befund->isStructured());
+        $this->assertFalse(PatientRecordType::Befund->isDeviceCheck());
         $this->assertNull(PatientRecordType::fromValue('unbekannt'));
         $this->assertNull(PatientRecordType::fromValue(null));
     }

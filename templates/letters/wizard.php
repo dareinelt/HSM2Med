@@ -91,8 +91,9 @@ $selectedRecipients = array_values(array_filter(
 
     <section class="card wizard-step" data-step="2" id="schritt-2">
         <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> 2 · Bericht zuordnen (optional)</h2>
-        <p class="muted">Der Bericht liefert den Befundteil „Schrittmacher-/ICD-Abfrage". Ohne Bericht entfällt
-            dieser Teil; der Brief enthält dann Anamnese, Vormedikation, Epikrise und den Anhang.</p>
+        <p class="muted">Der Bericht liefert den Baustein „Berichte" – Geräte-, Sonden- und Messwerte des Befundteils,
+            der als Anhang unter der Grußformel auf einer neuen Seite steht. Ohne Bericht entfällt dieser Baustein;
+            der Brief enthält dann Anamnese, Vormedikation, Befund, Epikrise und den Anhang.</p>
         <?= $err('report_id') ?>
         <?php if ($reports === []): ?>
             <p class="muted">Für diesen Patienten ist kein Bericht importiert.</p>
@@ -123,9 +124,9 @@ $selectedRecipients = array_values(array_filter(
         <?php endif; ?>
         <p>
             <?php if ($selectedReportId === null): ?>
-                <span class="badge">Kein Bericht ausgewählt – der Befundteil entfällt.</span>
+                <span class="badge">Kein Bericht ausgewählt – der Baustein „Berichte" entfällt.</span>
             <?php else: ?>
-                <a href="/letters/new?patient=<?= $e($patientId) ?>">Bericht abwählen (Brief ohne Befundteil)</a>
+                <a href="/letters/new?patient=<?= $e($patientId) ?>">Bericht abwählen (Brief ohne „Berichte")</a>
             <?php endif; ?>
         </p>
         <?php if ($report !== null): ?>
@@ -262,10 +263,11 @@ $selectedRecipients = array_values(array_filter(
                 </ul>
             </td></tr>
             <tr><th>Briefnummer</th><td>ab Nr. <?= $e($nextSequence) ?> für diesen Patienten (je Empfänger eine Nummer)</td></tr>
-            <tr><th>Befundteil</th><td><?= $report === null
+            <tr><th>Befund</th><td>Aktenbaustein „Befund" (aktuelle Fassung), erscheint im Brieftext</td></tr>
+            <tr><th>Berichte</th><td><?= $report === null
                 ? 'ohne Bericht (entfällt)'
-                : 'Bericht Nr. ' . $e($report->id()) . ($reportDateLabel === '' ? '' : ' vom ' . $e($reportDateLabel)) ?></td></tr>
-            <tr><th>Brieftext</th><td>Anamnese, Vormedikation, Epikrise (jeweils aktuelle Fassung)</td></tr>
+                : 'Bericht Nr. ' . $e($report->id()) . ($reportDateLabel === '' ? '' : ' vom ' . $e($reportDateLabel)) . ' – als Anhang auf neuer Seite' ?></td></tr>
+            <tr><th>Brieftext</th><td>Anamnese, Vormedikation, Befund, Epikrise (jeweils aktuelle Fassung)</td></tr>
             <tr><th>Anhang</th><td><?= $appendixSections === []
                 ? 'kein Anhang (keine Abfrage vorhanden)'
                 : $e(count($appendixSections)) . ' Abschnitt(e), mehrseitig mit wiederholter Kopfzeile' ?></td></tr>

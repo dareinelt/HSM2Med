@@ -213,6 +213,15 @@ final class LetterFactory
                 'text' => 'Kontrollierte Abfrage im Rahmen der Nachsorge. Keine Sondenauffälligkeit.',
                 'entries' => [],
             ],
+            'befund' => [
+                'present' => true,
+                'record_id' => 5,
+                'version' => 2,
+                'version_created_at' => '2026-10-05 14:20:00',
+                'author_name' => 'Dr. med. Beispiel',
+                'text' => 'Regelmäßiger Eigenrhythmus, keine Sondenauffälligkeit. Programmierung unverändert.',
+                'entries' => [],
+            ],
             'device_check' => [
                 'present' => true,
                 'record_id' => 4,
@@ -270,6 +279,7 @@ final class LetterFactory
                     'anamnesis' => ['record_id' => 1, 'version' => 3],
                     'premedication' => ['record_id' => 2, 'version' => 2],
                     'epicrisis' => ['record_id' => 3, 'version' => 1],
+                    'befund' => ['record_id' => 5, 'version' => 2],
                     'device_check' => ['record_id' => 4, 'version' => 5],
                 ],
             ],

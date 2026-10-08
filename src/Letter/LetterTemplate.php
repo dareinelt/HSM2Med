@@ -238,13 +238,13 @@ final class LetterTemplate
                     'col_period' => ['label' => 'Spalte Zeitraum', 'multiline' => false, 'default' => 'Zeitraum'],
                 ],
             ],
-            'report' => [
-                'label' => 'Befund (Bericht)',
-                'description' => 'Geräte-, Sonden- und Messwerte des zugeordneten Berichts; entfällt ohne Bericht.',
+            'befund' => [
+                'label' => 'Befund',
+                'description' => 'Eingefrorene Fassung des Aktenbausteins Befund (Freitext des Arztes); entfällt ohne Befund.',
                 'unique' => true,
-                'options' => ['show_meta' => ['label' => 'Herkunft des Berichts zeigen', 'type' => 'bool', 'default' => true]],
+                'options' => ['show_meta' => $meta],
                 'texts' => [
-                    'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Befund: Schrittmacher-/ICD-Abfrage'],
+                    'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Befund'],
                 ],
             ],
             'epicrisis' => [
@@ -276,15 +276,31 @@ final class LetterTemplate
                     'text' => ['label' => 'Text', 'multiline' => true, 'default' => ''],
                 ],
             ],
+            'reports' => [
+                'label' => 'Berichte',
+                'description' => 'Befundteil des zugeordneten Berichts (Geräte-, Sonden- und Messwerte) als Anhang am Briefende; beginnt immer auf einer neuen Seite und entfällt ohne Bericht.',
+                'unique' => true,
+                'options' => ['show_meta' => ['label' => 'Herkunft des Berichts zeigen', 'type' => 'bool', 'default' => true]],
+                'texts' => [
+                    'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Berichte'],
+                ],
+            ],
         ];
     }
 
     /**
-     * Reihenfolge der Bausteine in der Standardvorlage.
+     * Reihenfolge der Bausteine in der Standardvorlage. Der Baustein "Berichte" steht am Ende
+     * und wird als Anhang unter der Grussformel auf einer neuen Seite gedruckt.
      */
     private const array DEFAULT_ORDER = [
-        'subject', 'salutation', 'patient', 'anamnesis', 'premedication', 'report', 'epicrisis', 'closing',
+        'subject', 'salutation', 'patient', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports',
     ];
+
+    /**
+     * Bausteine frueherer Vorlagenfassungen, die unter neuem Typ weitergefuehrt werden.
+     * "report" war der Befundteil des Berichts und ist jetzt der Aktenbaustein "befund".
+     */
+    private const array LEGACY_BLOCK_TYPES = ['report' => 'befund'];
 
     /**
      * Vorlagen je Empfaengerart: Patient, Hausarzt und ueberweisender Arzt werden getrennt
@@ -417,6 +433,7 @@ final class LetterTemplate
                 continue;
             }
             $type = self::string($raw['type'] ?? '');
+            $type = self::LEGACY_BLOCK_TYPES[$type] ?? $type;
             if (!isset($definitions[$type])) {
                 $errors[$path] = sprintf('Unbekannter Baustein „%s".', $type);
                 continue;

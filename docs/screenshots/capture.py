@@ -58,6 +58,11 @@ AKTE_ANAMNESIS = (
     "Keine Allergien bekannt, keine Antikoagulation."
 )
 AKTE_AUTHOR = "Dr. med. Anna Beispiel"
+AKTE_BEFUND = (
+    "Regelmaessiger Eigenrhythmus unter Ruhebedingungen, keine Sondenauffaelligkeit.\n"
+    "Reizschwellen und Wahrnehmung stabil, Programmierung unveraendert gelassen.\n"
+    "Kontrolle der Sonde in sechs Monaten."
+)
 AKTE_PREMEDICATION = [
     ("Bisoprolol", "2,5", "mg", "1-0-0", "Bradykardie", "01.03.2024"),
     ("Ramipril", "5", "mg", "1-0-0", "Arterielle Hypertonie", "01.03.2024"),
@@ -426,6 +431,12 @@ def main() -> int:
         page.click("form button[type=submit]")
         page.wait_for_load_state()
 
+        page.goto(f"{akte_url}/records/befund")
+        page.fill("textarea[name=text]", AKTE_BEFUND)
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+
         page.goto(f"{akte_url}/records/epicrisis")
         page.fill("textarea[name=text]", AKTE_EPICRISIS)
         page.fill("input[name=author_name]", AKTE_AUTHOR)
@@ -455,7 +466,7 @@ def main() -> int:
         page.goto(f"{BASE_URL}/letters/new")
         shot(page, "36-brief-patient-waehlen")
 
-        # Schritt 2: Bericht als Befundteil zuordnen (ohne Bericht entfaellt der Befundteil).
+        # Schritt 2: Bericht fuer den Baustein "Berichte" zuordnen (ohne Bericht entfaellt der Anhang).
         page.goto(f"{BASE_URL}/letters/new?patient={card_patient_id}")
         shot(page, "37-brief-assistent-bericht-waehlen")
 
@@ -550,20 +561,25 @@ def main() -> int:
             "46-brief-pdf-seite-1",
             "46-brief-pdf-seite-2",
             "46-brief-pdf-seite-3",
+            "46-brief-pdf-seite-4",
         ])
 
-        # Der Brief ist mehrseitig: Brieftext und Anhang mit der vollstaendigen Abfragetabelle.
+        # Der Brief ist mehrseitig: Brieftext, Anhang "Berichte" auf neuer Seite und
+        # Anhang mit der vollstaendigen Abfragetabelle.
         letter_pages = pdf_pages(directory, letter_pdf_bytes, "45-brief-pruefung")
-        if letter_pages < 2:
-            print(f"Brief-PDF hat {letter_pages} Seiten statt mindestens 2.", file=sys.stderr)
+        if letter_pages < 4:
+            print(f"Brief-PDF hat {letter_pages} Seiten statt mindestens 4.", file=sys.stderr)
             return 1
         letter_text = pdf_text(directory, letter_pdf_bytes, "45-brief-pruefung")
         for needle in (
             "Brief zur Schrittmacher-/ICD-Abfrage",
             "Anamnese",
             "Vormedikation",
-            "Befund: Schrittmacher-/ICD-Abfrage",
+            "Befund",
+            "Regelmaessiger Eigenrhythmus",
             "Epikrise",
+            "Berichte",
+            "Bericht Nr. 1",
             "Anhang: Schrittmacher-/ICD-Abfrage (vollständige Tabelle)",
             "MRT-Tauglichkeit",
             "Tachykardie",

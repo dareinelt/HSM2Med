@@ -345,4 +345,102 @@ final class LetterPdfTest extends TestCase
         $this->assertSame('Nachsorgezentrum Beispielstadt · Musterweg 5 · 12345 Beispielstadt', $values['return_address_line']);
         $this->assertSame('12345', $values['return_postal_code']);
     }
+
+    /** Test 17: Der Baustein "Befund" druckt den Freitext des Arztes mit Fassungsstand. */
+    public function testBefundBlockPrintsRecordText(): void
+    {
+        $text = PdfText::text($this->generateWithTemplate());
+
+        $this->assertContains('Befund', $text);
+        $this->assertContains('Regelmäßiger Eigenrhythmus, keine Sondenauffälligkeit. Programmierung unverändert.', $text);
+        $this->assertContains('Fassung 2 · erfasst von Dr. med. Beispiel', $text);
+        // Der Befund steht im Brieftext vor der Epikrise.
+        $this->assertTrue(strpos($text, 'Regelmäßiger Eigenrhythmus') < strpos($text, 'Kontrollierte Abfrage im Rahmen der Nachsorge'));
+    }
+
+    /** Test 18: Der Baustein "Berichte" steht als Anhang unter der Grussformel auf einer neuen Seite. */
+    public function testReportsBlockIsAnAppendixOnANewPage(): void
+    {
+        $pages = PdfText::pages($this->generateWithTemplate());
+        $closing = null;
+        $reports = null;
+        foreach ($pages as $index => $page) {
+            if ($closing === null && str_contains($page, 'Mit freundlichen Grüßen')) {
+                $closing = $index;
+            }
+            if ($reports === null && str_contains($page, 'Berichte')) {
+                $reports = $index;
+            }
+        }
+
+        $this->assertTrue($closing !== null, 'Die Grussformel fehlt.');
+        $this->assertTrue($reports !== null, 'Der Anhang "Berichte" fehlt.');
+        $this->assertSame($closing + 1, $reports, 'Der Anhang beginnt auf der Seite nach der Grussformel.');
+        $this->assertNotContains('Mit freundlichen Grüßen', $pages[$reports]);
+        // Der Anhang zeigt den Befundteil des Berichts.
+        $this->assertContains('Bericht Nr. 1 vom 07.10.2026', $pages[$reports]);
+        $this->assertContains('SN-123456', $pages[$reports]);
+        $this->assertContains('Sonde RA', $pages[$reports]);
+    }
+
+    /** Test 19: Ohne Bericht entfaellt der Baustein "Berichte" samt Seitenumbruch. */
+    public function testReportsBlockIsOmittedWithoutReport(): void
+    {
+        $pdf = $this->generateWithTemplate(['report' => null]);
+        $text = PdfText::text($pdf);
+
+        $this->assertNotContains('Berichte', $text);
+        $this->assertNotContains('SN-123456', $text);
+        // Der Anhang "Berichte" braucht genau eine Seite weniger.
+        $this->assertSame(PdfText::pageCount($this->generateWithTemplate()) - 1, PdfText::pageCount($pdf));
+        // Der uebrige Brief bleibt vollstaendig.
+        $this->assertContains('Mit freundlichen Grüßen', $text);
+        $this->assertContains('Anhang: Schrittmacher-/ICD-Abfrage', $text);
+    }
+
+    /** Test 20: Alte Briefe ohne Aktenbaustein "Befund" zeigen den Berichtsbefundteil unveraendert. */
+    public function testBefundBlockFallsBackToReportForOldLetters(): void
+    {
+        $snapshot = LetterFactory::snapshot(['letter_version' => 2, 'letter_template_version' => '1']);
+        unset($snapshot['befund']);
+        $content = LetterTemplate::default();
+        $snapshot['template'] = [
+            'version_id' => 1,
+            'version_no' => 1,
+            'name' => $content['name'],
+            'content_sha256' => '',
+            'content' => $content,
+        ];
+        $text = PdfText::text((new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt()));
+
+        $this->assertContains('Befund', $text);
+        $this->assertContains('SN-123456', $text);
+    }
+
+    /** Test 21: Alte Briefe mit dem Vorlagenblock "report" und ohne Aktenbaustein "Befund" werden reproduziert. */
+    public function testLegacyReportBlockStillRenders(): void
+    {
+        $snapshot = LetterFactory::snapshot(['letter_version' => 2, 'letter_template_version' => '1']);
+        unset($snapshot['befund']);
+        $content = LetterTemplate::default();
+        foreach ($content['blocks'] as $index => $block) {
+            if ($block['type'] === 'befund') {
+                $content['blocks'][$index]['type'] = 'report';
+            }
+            if ($block['type'] === 'reports') {
+                $content['blocks'][$index]['enabled'] = false;
+            }
+        }
+        $snapshot['template'] = [
+            'version_id' => 1,
+            'version_no' => 1,
+            'name' => $content['name'],
+            'content_sha256' => '',
+            'content' => $content,
+        ];
+        $text = PdfText::text((new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt()));
+
+        $this->assertContains('SN-123456', $text);
+        $this->assertContains('Bericht Nr. 1 vom 07.10.2026', $text);
+    }
 }

@@ -456,10 +456,11 @@ final class LetterPdfGenerator
                 'patient' => $this->patientBlock($y, $block),
                 'anamnesis' => $this->recordBlock($y, $block, (array) ($this->letter['anamnesis'] ?? [])),
                 'premedication' => $this->premedicationBlock($y, $block, (array) ($this->letter['premedication'] ?? [])),
-                'report' => $this->reportBlock($y, $block, $this->letter['report'] ?? null),
+                'befund' => $this->befundBlock($y, $block),
                 'epicrisis' => $this->recordBlock($y, $block, (array) ($this->letter['epicrisis'] ?? [])),
                 'closing' => $this->closingBlock($y, $block),
                 'text' => $this->textBlock($y, $block),
+                'reports' => $this->reportsBlock($y, $block),
                 default => $y,
             };
         }
@@ -536,7 +537,7 @@ final class LetterPdfGenerator
     }
 
     /**
-     * Textbaustein der Akte (Anamnese, Epikrise) mit Stand der Fassung.
+     * Textbaustein der Akte (Anamnese, Befund, Epikrise) mit Stand der Fassung.
      *
      * @param array<string, mixed> $block
      * @param array<string, mixed> $record
@@ -587,15 +588,54 @@ final class LetterPdfGenerator
     }
 
     /**
+     * Befund des Arztes aus der Akte (Freitext) mit Stand der Fassung.
+     *
+     * Briefe, die vor Einfuehrung des Aktenbausteins "Befund" erzeugt wurden, fuehren den
+     * Befundteil des Berichts an dieser Stelle; sie werden unveraendert reproduziert.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function befundBlock(float $y, array $block): float
+    {
+        $record = $this->letter['befund'] ?? null;
+        if (is_array($record)) {
+            return $this->recordBlock($y, $block, $record);
+        }
+        return $this->reportBlock($y, $block, $this->letter['report'] ?? null);
+    }
+
+    /**
      * Befundteil aus dem verknuepften Bericht; ohne Bericht entfaellt der Abschnitt.
      *
      * @param array<string, mixed> $block
      */
     private function reportBlock(float $y, array $block, mixed $report): float
     {
+        return is_array($report) ? $this->reportContent($y, $block, $report) : $y;
+    }
+
+    /**
+     * Baustein "Berichte": Befundteil des Berichts als Anhang unter der Grussformel. Der
+     * Abschnitt beginnt auf einer neuen Seite und entfaellt ohne Bericht.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function reportsBlock(float $y, array $block): float
+    {
+        $report = $this->letter['report'] ?? null;
         if (!is_array($report)) {
             return $y;
         }
+        $this->pdf->addPage();
+        return $this->reportContent(self::NEXT_TOP, $block, $report);
+    }
+
+    /**
+     * @param array<string, mixed> $block
+     * @param array<string, mixed> $report
+     */
+    private function reportContent(float $y, array $block, array $report): float
+    {
         $meta = ($block['options']['show_meta'] ?? true) === true ? trim((string) ($report['meta'] ?? '')) : '';
         $y = $this->sectionStart($y, $this->blockValue($block, 'heading'), $meta);
         $rows = self::valueRows($report['rows'] ?? []);

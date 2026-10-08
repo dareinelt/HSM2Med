@@ -14,6 +14,7 @@ enum PatientRecordType: string
 {
     case Anamnesis = 'anamnesis';
     case Premedication = 'premedication';
+    case Befund = 'befund';
     case Epicrisis = 'epicrisis';
     case Note = 'note';
     case DeviceCheck = 'device_check';
@@ -23,6 +24,7 @@ enum PatientRecordType: string
         return match ($this) {
             self::Anamnesis => 'Anamnese',
             self::Premedication => 'Vormedikation',
+            self::Befund => 'Befund',
             self::Epicrisis => 'Epikrise',
             self::Note => 'Notiz',
             self::DeviceCheck => 'Schrittmacher-/ICD-Abfrage',
@@ -34,6 +36,7 @@ enum PatientRecordType: string
         return match ($this) {
             self::Anamnesis => 'Beschwerden, Vorerkrankungen, Implantationsgrund',
             self::Premedication => 'Dauermedikation als Tabelle, Ergänzungen als Freitext',
+            self::Befund => 'Ärztlicher Befund zur Untersuchung als Freitext',
             self::Epicrisis => 'Zusammenfassung des Verlaufs',
             self::Note => 'Freie Anmerkung zur Akte',
             self::DeviceCheck => 'Gerät, Sonden, Messdaten und Programmierung – Vorlage des ärztlichen Dienstes',
