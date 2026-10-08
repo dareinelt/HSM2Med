@@ -28,7 +28,14 @@ final class Kernel
 
     public function __construct(private readonly Application $app)
     {
-        $this->view = new View($app->rootDir . '/templates');
+        // Der aktive Patient wird erst beim Rendern ermittelt (die Sitzung startet spaeter).
+        $this->view = new View($app->rootDir . '/templates', static function () use ($app): ?array {
+            try {
+                return $app->activePatientSummary();
+            } catch (Throwable) {
+                return null;
+            }
+        });
     }
 
     public function handle(Request $request): Response
@@ -41,6 +48,10 @@ final class Kernel
             if ($request->method === 'POST' && !Csrf::isValid($request->post['_csrf'] ?? null)) {
                 throw new HttpException(400, 'Die Sitzung ist abgelaufen oder die Anfrage ist ungültig. Bitte die Seite neu laden und erneut versuchen.');
             }
+            if ($this->requiresPatientSelection($request)) {
+                SessionManager::flash('info', 'Der Patientenvorgang ist führend: Bitte zuerst einen Patienten auswählen oder neu anlegen.');
+                return Response::redirect('/patients');
+            }
             return $this->router()->dispatch($request);
         } catch (HttpException $e) {
             return $this->error($e->status, $e->getMessage(), null);
@@ -49,6 +60,15 @@ final class Kernel
             $details = $this->app->config->isProduction() ? null : $e::class . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString();
             return $this->error(500, 'Es ist ein technischer Fehler aufgetreten. Referenz: ' . $reference, $details);
         }
+    }
+
+    /**
+     * Der Patientenvorgang ist fuehrend: patientenbezogene Vorgaenge (Import, Patientenausweis,
+     * Brief) sind ohne ausgewaehlten Patienten gesperrt. Listen und Berichte bleiben erreichbar.
+     */
+    public function requiresPatientSelection(Request $request): bool
+    {
+        return $this->router()->requiresPatient($request) && !$this->app->activePatient()->isSelected();
     }
 
     private function router(): Router
@@ -65,8 +85,10 @@ final class Kernel
 
         $router = new Router();
         $router->get('/', $dashboard->index(...));
-        $router->get('/import', $import->form(...));
-        $router->post('/import', $import->upload(...));
+        // Patientenvorgang fuehrend: die patientenbezogenen Vorgaenge setzen eine
+        // Patientenauswahl voraus (Import, Ausweis erstellen, Brief erstellen).
+        $router->get('/import', $import->form(...), true);
+        $router->post('/import', $import->upload(...), true);
         $router->get('/import/{token}', $import->preview(...));
         $router->post('/import/{token}/commit', $import->commit(...));
         $router->post('/import/{token}/cancel', $import->cancel(...));
@@ -78,6 +100,8 @@ final class Kernel
         $router->get('/patients', $patients->index(...));
         $router->get('/patients/new', $patients->newForm(...));
         $router->post('/patients', $patients->create(...));
+        $router->post('/patients/select/clear', $patients->clearActive(...));
+        $router->post('/patients/{id}/select', $patients->select(...));
         $router->get('/patients/{id}/edit', $patients->editForm(...));
         $router->post('/patients/{id}', $patients->update(...));
         $router->get('/patients/{id}/records/{slug}', $patients->recordForm(...));
@@ -85,19 +109,19 @@ final class Kernel
         $router->post('/patients/{id}/records/{slug}/prefill', $patients->prefillRecord(...));
         $router->get('/patients/{id}', $patients->show(...));
         $router->get('/patient-cards', $cards->index(...));
-        $router->get('/patient-cards/new', $cards->selectReport(...));
+        $router->get('/patient-cards/new', $cards->selectReport(...), true);
         $router->get('/patient-cards/settings', $cardSettings->index(...));
         $router->get('/patient-cards/settings/logo', $cardSettings->logo(...));
         $router->post('/patient-cards/settings', $cardSettings->save(...));
-        $router->get('/patient-cards/patients/{patient}', $cards->patient(...));
-        $router->get('/patient-cards/reports/{id}', $cards->wizard(...));
-        $router->post('/patient-cards/reports/{id}', $cards->generate(...));
+        $router->get('/patient-cards/patients/{patient}', $cards->patient(...), true);
+        $router->get('/patient-cards/reports/{id}', $cards->wizard(...), true);
+        $router->post('/patient-cards/reports/{id}', $cards->generate(...), true);
         $router->get('/patient-cards/{id}', $cards->show(...));
         $router->get('/patient-cards/{id}/pdf', $cards->pdf(...));
         $router->get('/letters', $letters->index(...));
-        $router->get('/letters/new', $letters->newLetter(...));
-        $router->post('/letters', $letters->create(...));
-        $router->get('/letters/patients/{patient}', $letters->patient(...));
+        $router->get('/letters/new', $letters->newLetter(...), true);
+        $router->post('/letters', $letters->create(...), true);
+        $router->get('/letters/patients/{patient}', $letters->patient(...), true);
         $router->get('/letters/{id}', $letters->show(...));
         $router->get('/letters/{id}/pdf', $letters->pdf(...));
         $router->get('/system', $system->index(...));

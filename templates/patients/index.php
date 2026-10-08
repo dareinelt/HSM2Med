@@ -12,21 +12,38 @@
  * @var int $total
  * @var int $page
  * @var int $pages
+ * @var int|null $activePatientId
  * @var Closure $query
  */
 $hasFilter = $filters['q'] !== '' || $filters['identifier'] !== '' || $birth !== '';
+$activePatientId = $activePatientId ?? null;
 ?>
 <div class="page-head">
     <div>
         <h1><?= $icon('patients', 'app-icon app-icon--lg') ?><span>Patienten</span></h1>
         <p class="lead">Patienten können vor dem Import angelegt werden. Anamnese, Vormedikation, Epikrise
-            und Notizen werden als versionierte Bausteine am Patienten geführt.</p>
+            und Notizen werden als versionierte Bausteine am Patienten geführt. Der Patientenvorgang ist
+            führend: Import, Patientenausweis und Brief setzen einen aktiven Patienten voraus.</p>
     </div>
     <div class="actions">
         <a class="button primary" href="/patients/new"><?= $icon('user-plus') ?> <span>Patient anlegen</span></a>
         <a class="button" href="/patient-cards"><?= $icon('cards') ?> <span>Patientenausweise</span></a>
     </div>
 </div>
+
+<?php if ($activePatientId === null): ?>
+    <div class="alert alert-info" role="status">
+        <?= $icon('info') ?>
+        <span>Kein Patient gewählt. Import, Patientenausweis und Brief sind erst nach Auswahl eines Patienten
+            möglich – hier auswählen oder <a href="/patients/new">einen Patienten anlegen</a>.</span>
+    </div>
+<?php else: ?>
+    <div class="alert alert-success" role="status">
+        <?= $icon('check') ?>
+        <span>Aktiver Patient: Nr. <?= $e($activePatientId) ?>. Import, Patientenausweis und Brief beziehen sich
+            auf diesen Patienten.</span>
+    </div>
+<?php endif; ?>
 
 <section class="card">
     <form method="get" action="/patients" class="filters">
@@ -62,12 +79,13 @@ $hasFilter = $filters['q'] !== '' || $filters['identifier'] !== '' || $birth !==
                 <thead>
                 <tr>
                     <th>Nr.</th><th>Name</th><th>Geburtsdatum</th><th>Patienten-ID</th>
-                    <th>Bausteine</th><th>Berichte</th><th>Bausteine zuletzt</th><th>Geändert</th><th></th>
+                    <th>Bausteine</th><th>Berichte</th><th>Bausteine zuletzt</th><th>Geändert</th>
+                    <th>Aktiver Patient</th><th></th>
                 </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($rows as $p): ?>
-                    <tr>
+                <?php foreach ($rows as $p): $isActive = $activePatientId === (int) $p['id']; ?>
+                    <tr<?= $isActive ? ' class="is-active-patient"' : '' ?>>
                         <td><?= $e($p['id']) ?></td>
                         <td><a href="/patients/<?= $e($p['id']) ?>"><?= $e($p['patient_name']) ?></a></td>
                         <td><?= $e($view::dateTime($p['date_of_birth'], true)) ?></td>
@@ -76,6 +94,16 @@ $hasFilter = $filters['q'] !== '' || $filters['identifier'] !== '' || $birth !==
                         <td><?= $e($p['report_count']) ?></td>
                         <td><?= $e($p['records_updated_at'] === null ? '' : $view::dateTime((string) $p['records_updated_at'])) ?></td>
                         <td><?= $e($view::dateTime($p['updated_at'])) ?></td>
+                        <td class="nowrap">
+                            <?php if ($isActive): ?>
+                                <span class="badge badge-ok"><?= $icon('check', 'app-icon app-icon--sm') ?> aktiv</span>
+                            <?php else: ?>
+                                <form method="post" action="/patients/<?= $e($p['id']) ?>/select" class="inline">
+                                    <?= $csrf() ?>
+                                    <button type="submit" data-once><?= $icon('patients') ?> <span data-label>Auswählen</span></button>
+                                </form>
+                            <?php endif; ?>
+                        </td>
                         <td class="nowrap">
                             <a href="/patients/<?= $e($p['id']) ?>">Akte</a> ·
                             <a href="/patients/<?= $e($p['id']) ?>/edit">bearbeiten</a> ·

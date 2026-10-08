@@ -124,4 +124,46 @@ final class RibbonTest extends TestCase
             $this->assertTrue(in_array($expected, $hrefs, true), 'Ziel fehlt im Funktionsband: ' . $expected);
         }
     }
+
+    // Oberflaeche 10. Der Patientenvorgang ist fuehrend: nur patientenbezogene Ziele sind gesperrt.
+    public function testPatientRequiredTargets(): void
+    {
+        foreach (['/import', '/patient-cards/new', '/letters/new'] as $gated) {
+            $this->assertTrue(Ribbon::requiresPatient($gated), 'Ziel muss einen Patienten voraussetzen: ' . $gated);
+        }
+
+        foreach ([
+            '/', '/reports', '/reports/1', '/imports', '/patients', '/patients/new',
+            '/patient-cards', '/patient-cards/settings', '/letters', '/letters/1', '/system',
+        ] as $open) {
+            $this->assertFalse(Ribbon::requiresPatient($open), 'Ziel darf keinen Patienten voraussetzen: ' . $open);
+        }
+    }
+
+    // Oberflaeche 11. Die gesperrten Ziele sind genau die Ziele des Funktionsbandes,
+    // die einen Patientenbezug herstellen – Listen und Berichte bleiben erreichbar.
+    public function testGatedTargetsExistInTheRibbon(): void
+    {
+        $targets = Ribbon::patientRequiredTargets();
+        sort($targets);
+
+        $this->assertSame(['/import', '/letters/new', '/patient-cards/new'], $targets);
+
+        $hrefs = [];
+        foreach (Ribbon::tabs() as $tab) {
+            $hrefs[] = $tab['href'];
+            foreach ($tab['groups'] as $group) {
+                foreach ($group['items'] as $item) {
+                    $hrefs[] = $item['href'];
+                }
+            }
+        }
+        foreach (Ribbon::quickAccess() as $item) {
+            $hrefs[] = $item['href'];
+        }
+
+        foreach ($targets as $target) {
+            $this->assertTrue(in_array($target, $hrefs, true), 'Gesperrtes Ziel fehlt im Funktionsband: ' . $target);
+        }
+    }
 }

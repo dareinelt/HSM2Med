@@ -57,6 +57,7 @@ final class PatientController extends Controller
             'total' => $result['total'],
             'page' => $page,
             'pages' => max(1, (int) ceil($result['total'] / self::PER_PAGE)),
+            'activePatientId' => $this->app->activePatient()->id(),
             'query' => static fn (array $extra): string => http_build_query(array_filter(
                 $extra + ['q' => $filters['q'], 'identifier' => $filters['identifier'], 'birth' => $birth],
                 static fn ($v): bool => $v !== '' && $v !== null,
@@ -85,12 +86,46 @@ final class PatientController extends Controller
             return $this->renderForm(null, $input->allValues(), $e->fieldErrors(), $duplicates, $e->getMessage());
         }
 
+        // Das Neuanlegen waehlt den Patienten automatisch als aktiven Patienten.
+        $patientId = (int) $result['patient_id'];
+        $this->app->activePatient()->select($patientId);
+
         SessionManager::flash('success', sprintf(
-            'Patient Nr. %d wurde angelegt. Anamnese, Vormedikation und Epikrise können jetzt vor dem Import erfasst werden.',
-            (int) $result['patient_id'],
+            'Patient Nr. %d wurde angelegt und als aktiver Patient ausgewählt. Anamnese, Vormedikation und Epikrise können jetzt vor dem Import erfasst werden.',
+            $patientId,
         ));
 
-        return Response::redirect('/patients/' . $result['patient_id']);
+        return Response::redirect('/patients/' . $patientId);
+    }
+
+    /**
+     * Setzt den Patienten der Sitzung als aktiven Patienten (fuehrender Patientenvorgang).
+     *
+     * @param array<string, string> $params
+     */
+    public function select(Request $request, array $params): Response
+    {
+        $patientId = self::id($params);
+        $patient = $this->loadPatient($patientId);
+        $this->app->activePatient()->select($patientId);
+
+        SessionManager::flash('success', sprintf(
+            '%s ist jetzt der aktive Patient. Import, Patientenausweis und Brief beziehen sich auf diesen Patienten.',
+            $patient['patient_name'],
+        ));
+
+        return Response::redirect('/patients/' . $patientId);
+    }
+
+    /**
+     * Hebt die Patientenauswahl auf; patientenbezogene Vorgaenge sind danach gesperrt.
+     */
+    public function clearActive(Request $request): Response
+    {
+        $this->app->activePatient()->clear();
+
+        SessionManager::flash('info', 'Die Patientenauswahl wurde aufgehoben. Bitte einen Patienten auswählen, um Import, Patientenausweis oder Brief zu starten.');
+        return Response::redirect('/patients');
     }
 
     /**
@@ -108,6 +143,7 @@ final class PatientController extends Controller
             'records' => $this->app->patientRecordService()->overview($patientId),
             'types' => PatientRecordType::all(),
             'reports' => $this->app->patientService()->reports($patientId),
+            'activePatientId' => $this->app->activePatient()->id(),
         ], 'patients'));
     }
 

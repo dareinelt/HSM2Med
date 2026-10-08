@@ -176,6 +176,40 @@ def main() -> int:
         page.goto(f"{BASE_URL}/")
         shot(page, "01-dashboard-leer")
 
+        # Der Patientenvorgang ist fuehrend: ohne aktiven Patienten leitet der
+        # Import auf die Patientenauswahl um.
+        page.goto(f"{BASE_URL}/import")
+        if "Kein Patient gewählt" not in page.content():
+            raise SystemExit("Der Hinweis auf den fehlenden Patienten fehlt.")
+        shot(page, "47-patientenvorgang-gesperrt")
+
+        # --- Patientenakte: Patient anlegen, wird automatisch aktiv ------------
+        page.goto(f"{BASE_URL}/patients")
+        shot(page, "24-akte-uebersicht")
+
+        page.goto(f"{BASE_URL}/patients/new")
+        shot(page, "25-akte-anlegen")
+
+        page.fill("input[name=last_name]", AKTE_LAST_NAME)
+        page.fill("input[name=first_name]", AKTE_FIRST_NAME)
+        page.fill("input[name=date_of_birth]", AKTE_BIRTH_DATE)
+        page.fill("input[name=patient_identifier]", AKTE_IDENTIFIER)
+        page.fill("input[name=street]", "Aktenweg 3")
+        page.fill("input[name=postal_code]", "12345")
+        page.fill("input[name=city]", "Musterstadt")
+        page.fill("input[name=phone]", "01234 567893")
+        page.fill("textarea[name=indication]", AKTE_INDICATION)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+        patient_url = page.url
+        shot(page, "26-akte-patient")
+
+        page.goto(f"{BASE_URL}/patients")
+        if "Aktiver Patient" not in page.content():
+            raise SystemExit("Der neu angelegte Patient wurde nicht aktiv gesetzt.")
+        shot(page, "48-patient-aktiv")
+
+        # --- Import: jetzt ist der Patientenvorgang freigeschaltet -------------
         page.goto(f"{BASE_URL}/import")
         shot(page, "02-import-formular")
 
@@ -217,27 +251,7 @@ def main() -> int:
         page.goto(f"{BASE_URL}/")
         shot(page, "11-dashboard")
 
-        # --- Patientenakte: Patient vor dem Import anlegen ---------------------
-        page.goto(f"{BASE_URL}/patients")
-        shot(page, "24-akte-uebersicht")
-
-        page.goto(f"{BASE_URL}/patients/new")
-        shot(page, "25-akte-anlegen")
-
-        page.fill("input[name=last_name]", AKTE_LAST_NAME)
-        page.fill("input[name=first_name]", AKTE_FIRST_NAME)
-        page.fill("input[name=date_of_birth]", AKTE_BIRTH_DATE)
-        page.fill("input[name=patient_identifier]", AKTE_IDENTIFIER)
-        page.fill("input[name=street]", "Aktenweg 3")
-        page.fill("input[name=postal_code]", "12345")
-        page.fill("input[name=city]", "Musterstadt")
-        page.fill("input[name=phone]", "01234 567893")
-        page.fill("textarea[name=indication]", AKTE_INDICATION)
-        page.click("form button[type=submit]")
-        page.wait_for_load_state()
-        patient_url = page.url
-        shot(page, "26-akte-patient")
-
+        # --- Bausteine der Akte: Anamnese, Vormedikation -----------------------
         page.goto(f"{patient_url}/records/anamnesis")
         page.fill("textarea[name=text]", AKTE_ANAMNESIS)
         page.fill("input[name=author_name]", AKTE_AUTHOR)

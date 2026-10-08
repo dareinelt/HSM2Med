@@ -13,9 +13,11 @@
  * @var array<int, string> $steps
  * @var array<string, string> $errors
  * @var string|null $message
+ * @var array{id:int,name:string,birth:string,identifier:string}|null $activePatient
  */
 $errors = $errors ?? [];
 $message = $message ?? null;
+$activePatient = $activePatient ?? null;
 ?>
 <div class="page-head">
     <div>
@@ -41,6 +43,25 @@ $message = $message ?? null;
 <?php foreach ($errors as $error): ?>
     <p class="field-error" role="alert"><?= $e($error) ?></p>
 <?php endforeach; ?>
+
+<?php if ($activePatient !== null): ?>
+    <section class="card">
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> Aktiver Patient (vorausgewählt)</h2>
+        <p class="muted">Der Patientenvorgang ist führend: Der Brief bezieht sich auf
+            <strong><?= $e($activePatient['name']) ?></strong>
+            (Nr. <?= $e($activePatient['id']) ?><?= $activePatient['birth'] !== '' ? ', geb. ' . $e($view::dateTime($activePatient['birth'], true)) : '' ?>).</p>
+        <div class="actions">
+            <a class="button primary" href="/letters/new?patient=<?= $e($activePatient['id']) ?>"><?= $icon('mail-new') ?> <span>Brief für diesen Patienten erstellen</span></a>
+            <a class="button" href="/patients/<?= $e($activePatient['id']) ?>"><?= $icon('patients') ?> <span>Akte öffnen</span></a>
+        </div>
+    </section>
+<?php else: ?>
+    <div class="alert alert-info" role="status">
+        <?= $icon('info') ?>
+        <span>Es ist kein Patient ausgewählt. Bitte unten einen Patienten wählen oder
+            <a href="/patients/new">einen Patienten anlegen</a> – dieser wird dann automatisch als aktiver Patient gesetzt.</span>
+    </div>
+<?php endif; ?>
 
 <section class="card">
     <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Patient wählen</h2>
@@ -68,9 +89,13 @@ $message = $message ?? null;
                 </thead>
                 <tbody>
                 <?php foreach ($rows as $p): ?>
-                    <tr>
+                    <tr<?= $activePatient !== null && $activePatient['id'] === (int) $p['id'] ? ' class="is-active-patient"' : '' ?>>
                         <td><?= $e($p['id']) ?></td>
-                        <td><?= $e($p['patient_name']) ?></td>
+                        <td><?= $e($p['patient_name']) ?>
+                            <?php if ($activePatient !== null && $activePatient['id'] === (int) $p['id']): ?>
+                                <span class="badge badge-ok">aktiv</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?= $e($view::dateTime($p['date_of_birth'], true)) ?></td>
                         <td><?= $e($p['patient_identifier'] ?? '') ?></td>
                         <td><?= $e($p['report_count']) ?></td>
