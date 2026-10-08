@@ -25,6 +25,17 @@ $text = static function (string $name, string $label, string $hint = '', int $ma
         . ($hint === '' ? '' : '<small class="muted">' . $e($hint) . '</small>')
         . $err($name) . '</div>';
 };
+$salutation = static function (string $name, string $label, string $type) use ($val, $err, $e): string {
+    $options = '<option value="">keine Angabe</option>';
+    foreach (\App\Letter\LetterSalutation::choices($type) as $value => $choiceLabel) {
+        $options .= '<option value="' . $e($value) . '"' . ($val($name) === $value ? ' selected' : '') . '>' . $e($choiceLabel) . '</option>';
+    }
+    return '<div class="field">'
+        . '<label for="f-' . $e($name) . '">' . $e($label) . '</label>'
+        . '<select id="f-' . $e($name) . '" name="' . $e($name) . '">' . $options . '</select>'
+        . '<small class="muted">' . $e(\App\Letter\LetterSalutation::hint($type)) . '</small>'
+        . $err($name) . '</div>';
+};
 $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
 ?>
 <div class="page-head">
@@ -73,6 +84,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
     <div class="field-row">
         <?= $text('last_name', 'Nachname', 'Pflichtfeld', 255, true) ?>
         <?= $text('first_name', 'Vorname', 'Pflichtfeld', 255, true) ?>
+        <?= $salutation('salutation', 'Anrede', \App\Letter\LetterRecipient::PATIENT) ?>
         <div class="field">
             <label for="f-date_of_birth">Geburtsdatum (TT.MM.JJJJ)</label>
             <input type="text" id="f-date_of_birth" name="date_of_birth" maxlength="32"
@@ -95,6 +107,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
     <p class="muted">Anschrift für Briefe an den Hausarzt. Für einen Brief sind Name oder Praxis sowie
         Postleitzahl und Ort erforderlich.</p>
     <div class="field-row">
+        <?= $salutation('physician_salutation', 'Anrede', \App\Letter\LetterRecipient::FAMILY_DOCTOR) ?>
         <?= $text('physician_name', 'Name', 'z. B. Dr. med. Anna Weber') ?>
         <?= $text('physician_practice', 'Praxis') ?>
         <?= $text('physician_street', 'Straße und Hausnummer') ?>
@@ -107,6 +120,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
     <p class="muted">Anschrift für Briefe an den überweisenden Arzt. Für einen Brief sind Name oder Praxis
         sowie Postleitzahl und Ort erforderlich.</p>
     <div class="field-row">
+        <?= $salutation('referrer_salutation', 'Anrede', \App\Letter\LetterRecipient::REFERRING_PHYSICIAN) ?>
         <?= $text('referrer_name', 'Name', 'z. B. Dr. med. Jonas Klein') ?>
         <?= $text('referrer_practice', 'Praxis') ?>
         <?= $text('referrer_street', 'Straße und Hausnummer') ?>

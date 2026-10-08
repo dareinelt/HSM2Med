@@ -6,6 +6,8 @@ namespace Tests\Unit;
 
 use App\Letter\LetterException;
 use App\Letter\LetterPdfGenerator;
+use App\Letter\LetterRecipient;
+use App\Letter\LetterSalutation;
 use App\Letter\LetterTemplate;
 use DateTimeImmutable;
 use RuntimeException;
@@ -26,10 +28,11 @@ final class LetterTemplateTest extends TestCase
 
     /**
      * @param array<string, mixed> $content
+     * @param array<string, mixed> $overrides
      */
-    private function generate(array $content): string
+    private function generate(array $content, array $overrides = []): string
     {
-        $snapshot = LetterFactory::snapshot(['letter_version' => 2, 'letter_template_version' => '3']);
+        $snapshot = LetterFactory::snapshot(['letter_version' => 2, 'letter_template_version' => '3'] + $overrides);
         $snapshot['template'] = ['version_id' => 3, 'version_no' => 3, 'name' => $content['name'], 'content_sha256' => '', 'content' => $content];
         return (new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt());
     }
@@ -109,6 +112,57 @@ final class LetterTemplateTest extends TestCase
             $tooMany['blocks'][] = ['type' => 'text'];
         }
         $this->assertTrue(isset($this->assertThrows(LetterException::class, fn () => LetterTemplate::normalize($tooMany))->fieldErrors()['blocks']));
+    }
+
+    /** Die Vorlagenarten werden getrennt gepflegt: eigene Fassungen, gleicher Aufbau. */
+    public function testTemplateTypesHaveOwnDefaults(): void
+    {
+        $this->assertSame(
+            ['patient' => 'Patient', 'family_doctor' => 'Hausarzt', 'referring_physician' => 'Überweisender Arzt'],
+            LetterTemplate::types(),
+        );
+        $this->assertSame('Standardvorlage', LetterTemplate::defaultName(LetterRecipient::PATIENT));
+        $this->assertSame('Standardvorlage Hausarzt', LetterTemplate::defaultName(LetterRecipient::FAMILY_DOCTOR));
+        $this->assertSame('Standardvorlage Überweisender Arzt', LetterTemplate::defaultName(LetterRecipient::REFERRING_PHYSICIAN));
+        $this->assertSame(LetterTemplate::default(), LetterTemplate::default(LetterRecipient::PATIENT));
+
+        $definition = LetterTemplate::editorDefinition(LetterRecipient::REFERRING_PHYSICIAN);
+        $this->assertSame('referring_physician', $definition['type']);
+        $this->assertSame(LetterTemplate::types(), $definition['types']);
+        $this->assertSame('Standardvorlage Überweisender Arzt', $definition['default']['name']);
+
+        $physician = LetterTemplate::default(LetterRecipient::FAMILY_DOCTOR);
+        $this->assertSame($physician, LetterTemplate::normalize($physician), 'Auch die Aerztevorlage ist gueltig.');
+        $this->assertSame(array_column(LetterTemplate::default()['blocks'], 'type'), array_column($physician['blocks'], 'type'));
+        $this->assertTrue(LetterTemplate::isType(LetterRecipient::FAMILY_DOCTOR));
+        $this->assertFalse(LetterTemplate::isType('praxis'));
+    }
+
+    /** Die Anrede stammt aus dem Empfaenger-Snapshot, nicht aus der Vorlage. */
+    public function testSalutationComesFromRecipientSnapshot(): void
+    {
+        $template = LetterTemplate::default();
+        $this->assertSame('{salutation}', $template['blocks'][$this->blockIndex($template, 'salutation')]['texts']['text']);
+
+        $physician = $this->generate($template, [
+            'recipient' => [
+                'type' => LetterRecipient::REFERRING_PHYSICIAN,
+                'salutation' => 'Sehr geehrte Frau Kollegin,',
+                'salutation_value' => LetterSalutation::KOLLEGIN,
+            ],
+        ]);
+        $text = PdfText::text($physician);
+        $this->assertContains('Sehr geehrte Frau Kollegin,', $text);
+        $this->assertNotContains('{salutation}', $text, 'Der Platzhalter wird ersetzt.');
+
+        // Ohne eingefrorenen Text wird die Anrede aus dem Wert der Stammdaten berechnet.
+        $patient = $this->generate($template, [
+            'recipient' => ['type' => LetterRecipient::PATIENT, 'salutation' => '', 'salutation_value' => LetterSalutation::FRAU],
+        ]);
+        $this->assertContains('Sehr geehrte Frau LASTNAME,', PdfText::text($patient));
+
+        // Ohne Empfaengerangabe (Altbestand) erscheint die unpersoenliche Anrede.
+        $this->assertContains('Sehr geehrte Damen und Herren,', PdfText::text($this->generate($template)));
     }
 
     public function testFillReplacesKnownPlaceholdersOnly(): void

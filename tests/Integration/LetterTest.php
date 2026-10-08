@@ -10,6 +10,7 @@ use App\Import\ImportOutcome;
 use App\Letter\LetterException;
 use App\Letter\LetterInput;
 use App\Letter\LetterPdfGenerator;
+use App\Letter\LetterRecipient;
 use App\Letter\LetterService;
 use App\Patient\DeviceCheckTemplate;
 use App\Patient\PatientInput;
@@ -221,7 +222,7 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame('1', $letter['snapshot']['letter_template_version']);
         $this->assertSame(1, $letter['snapshot']['template']['version_no']);
         $this->assertSame($letter['snapshot']['template']['version_id'], (int) $letter['template_version_id']);
-        $this->assertSame('Standardvorlage', $letter['snapshot']['template']['content']['name']);
+        $this->assertSame('Standardvorlage Hausarzt', $letter['snapshot']['template']['content']['name']);
         $this->assertSame('LASTNAME', $letter['last_name']);
         $this->assertSame('2026-10-07', $letter['letter_date']);
         $this->assertSame('2026-10-07 08:00:00', $letter['created_at']);
@@ -508,10 +509,11 @@ final class LetterTest extends DatabaseTestCase
         $source = $this->letters->letter($first['letter_id']);
 
         $templates = $this->app->letterTemplateService();
-        $content = $templates->current()['content'];
+        $hausarzt = $templates->current(LetterRecipient::FAMILY_DOCTOR);
+        $content = $hausarzt['content'];
         $content['name'] = 'Hausvorlage';
         $content['blocks'][1]['texts']['text'] = 'Liebe Kolleginnen und Kollegen,';
-        $saved = $templates->save($content, 'Anrede geändert', $templates->current()['id']);
+        $saved = $templates->save($content, 'Anrede geändert', $hausarzt['id'], LetterRecipient::FAMILY_DOCTOR);
         $this->assertSame(2, $saved['version_no']);
 
         // Spaetere Daten aendern die Datengrundlage der Neuausfertigung nicht.

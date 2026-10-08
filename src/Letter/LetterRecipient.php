@@ -13,6 +13,10 @@ namespace App\Letter;
  *
  * Verwendbar ist ein Empfaenger, wenn ein Name (beim Arzt: Name oder Praxis) sowie
  * Postleitzahl und Ort vorliegen. Die Strasse ist empfohlen, aber keine Pflicht.
+ *
+ * Neben der Anschrift liefert der Empfaenger die Anrede (siehe LetterSalutation). Sie steht
+ * in den Stammdaten und wird im Snapshot eingefroren, damit ein gespeicherter Brief seine
+ * Anrede behaelt, auch wenn die Stammdaten spaeter geaendert werden.
  */
 final class LetterRecipient
 {
@@ -61,7 +65,8 @@ final class LetterRecipient
      * @param array<string, mixed> $patient Patient (first_name, last_name, patient_name)
      * @param array<string, mixed> $master Stammdaten
      * @return array{type: string, label: string, name: string, practice: string, street: string,
-     *     postal_code: string, city: string, lines: list<string>, available: bool, missing: list<string>}
+     *     postal_code: string, city: string, lines: list<string>, available: bool, missing: list<string>,
+     *     salutation: string, salutation_value: string}
      */
     public static function resolve(string $type, array $patient, array $master): array
     {
@@ -100,6 +105,8 @@ final class LetterRecipient
             static fn (string $line): bool => $line !== '',
         ));
 
+        $salutationValue = LetterSalutation::fromMaster($type, $master);
+
         return [
             'type' => $type,
             'label' => self::label($type),
@@ -111,6 +118,13 @@ final class LetterRecipient
             'lines' => $lines,
             'available' => $missing === [],
             'missing' => $missing,
+            'salutation' => LetterSalutation::text(
+                $type,
+                $salutationValue,
+                (string) ($patient['last_name'] ?? ''),
+                (string) ($patient['first_name'] ?? ''),
+            ),
+            'salutation_value' => $salutationValue,
         ];
     }
 
@@ -175,6 +189,8 @@ final class LetterRecipient
             'postal_code' => (string) $recipient['postal_code'],
             'city' => (string) $recipient['city'],
             'lines' => array_values(array_map('strval', (array) $recipient['lines'])),
+            'salutation' => (string) ($recipient['salutation'] ?? ''),
+            'salutation_value' => (string) ($recipient['salutation_value'] ?? ''),
         ];
     }
 }

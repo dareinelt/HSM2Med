@@ -223,7 +223,11 @@ final class LetterService
             $recipients[] = $recipient;
         }
         $now = $this->now();
-        $template = $this->templates->current();
+        $templates = [];
+        foreach ($recipients as $recipient) {
+            $type = (string) $recipient['type'];
+            $templates[$type] ??= $this->templates->current($type);
+        }
 
         $letters = [];
         $this->pdo->beginTransaction();
@@ -238,6 +242,7 @@ final class LetterService
                 $sequence = $this->repository->nextSequence($input->patientId);
                 $generatedAt = $this->clock->now();
                 $documentNumber = $this->documentNumber($input->patientId, $sequence, $generatedAt);
+                $template = $templates[(string) $recipient['type']];
 
                 $snapshot = $this->snapshot($prepared, $settings, $settingsVersionId, $sequence, $letterVersion, $documentNumber, $generatedAt);
                 $snapshot['recipient'] = LetterRecipient::snapshotPart($recipient);
@@ -364,7 +369,7 @@ final class LetterService
 
         $template = null;
         if ($templateMode === self::TEMPLATE_CURRENT) {
-            $template = $this->templates->current();
+            $template = $this->templates->current(self::recipientType($source['recipient_type'] ?? null));
         } elseif ($oldVersion === self::LETTER_VERSION) {
             $template = $this->snapshotTemplate($old, (int) ($source['template_version_id'] ?? 0));
         }
@@ -449,16 +454,20 @@ final class LetterService
 
     /**
      * Vorschau einer (auch ungespeicherten) Vorlage mit Beispieldaten und den aktuellen
-     * Stammdaten des Nachsorgezentrums. Es wird nichts gespeichert.
+     * Stammdaten des Nachsorgezentrums. Es wird nichts gespeichert. Die Empfaengerart bestimmt
+     * das Beispiel (Anschrift und Anrede) der Vorlage.
      *
      * @throws LetterException wenn die Vorlage ungueltig ist
      */
-    public function previewPdf(mixed $templateContent): string
+    public function previewPdf(mixed $templateContent, string $type = LetterRecipient::PATIENT): string
     {
         $content = LetterTemplate::normalize($templateContent);
         $settings = $this->cards->settings() ?? [];
         $generatedAt = $this->clock->now();
-        $snapshot = self::withTemplate(LetterSample::snapshot($settings, $generatedAt), [
+        $type = self::recipientType($type);
+        $sample = LetterSample::snapshot($settings, $generatedAt);
+        $sample['recipient'] = LetterSample::recipient($type);
+        $snapshot = self::withTemplate($sample, [
             'id' => 0,
             'version_no' => 0,
             'name' => (string) $content['name'],
@@ -467,6 +476,15 @@ final class LetterService
         ]);
         $snapshot['template']['version_no'] = 'Vorschau';
         return $this->generator->generate($snapshot, $this->logoImage($settings), $generatedAt);
+    }
+
+    /**
+     * Empfaengerart aus einem gespeicherten Wert; unbekannte oder fehlende Angaben gelten als
+     * Patient (Briefe vor Migration 008 ohne Empfaenger).
+     */
+    private static function recipientType(mixed $type): string
+    {
+        return is_string($type) && LetterRecipient::isType($type) ? $type : LetterRecipient::PATIENT;
     }
 
     /**

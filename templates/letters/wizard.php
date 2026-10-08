@@ -233,6 +233,11 @@ $selectedRecipients = array_values(array_filter(
                             <?php elseif ($recipient['street'] === ''): ?>
                                 <small class="muted">Hinweis: Straße und Hausnummer fehlen in den Stammdaten.</small>
                             <?php endif; ?>
+                            <?php if ($available && ($recipient['salutation_value'] ?? '') === ''): ?>
+                                <small class="hint">Hinweis: In den Stammdaten ist keine Anrede gepflegt.
+                                    Im Brief erscheint „<?= $e(\App\Letter\LetterSalutation::FALLBACK) ?>“.
+                                    <a href="/patients/<?= $e($patientId) ?>/edit">Stammdaten ergänzen</a></small>
+                            <?php endif; ?>
                         </span>
                     </label>
                 </div>

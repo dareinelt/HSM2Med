@@ -391,7 +391,7 @@ final class PatientController extends Controller
             'date_of_birth' => $dob === '' ? '' : DateInput::format($dob),
             'confirm_duplicate' => '',
         ];
-        foreach (PatientInput::TEXT_FIELDS as $field => $_) {
+        foreach (PatientInput::masterFields() as $field) {
             $values[$field] = (string) ($master[$field] ?? '');
         }
         return $values;
@@ -582,7 +582,7 @@ final class PatientController extends Controller
             'patient_identifier' => '',
             'confirm_duplicate' => '',
         ];
-        foreach (PatientInput::TEXT_FIELDS as $field => $_) {
+        foreach (PatientInput::masterFields() as $field) {
             $values[$field] = '';
         }
         return $values;

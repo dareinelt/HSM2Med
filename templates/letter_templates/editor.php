@@ -13,6 +13,8 @@
  * @var string $appName
  * @var string $appVersion
  * @var array{id: int, version_no: int, name: string} $current
+ * @var string $type Empfaengerart der bearbeiteten Vorlage
+ * @var array<string, string> $types Empfaengerarten (Wert => Beschriftung)
  * @var string $data JSON (mit JSON_HEX_TAG kodiert, daher unbedenklich im Script-Block)
  */
 ?><!DOCTYPE html>
@@ -111,6 +113,16 @@
         </div>
         <div class="te-pane__body">
             <div class="te-field">
+                <label for="te-type">Art der Vorlage</label>
+                <select id="te-type" data-te-type>
+                    <?php foreach ($types as $typeKey => $typeLabel): ?>
+                        <option value="<?= $e($typeKey) ?>"<?= $typeKey === $type ? ' selected' : '' ?>><?= $e($typeLabel) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="te-hint">Anrede, Empfänger und Anschriftfeld werden je Art getrennt gepflegt. Die Anrede
+                    selbst steht in den <a href="/patients" target="_blank" rel="noopener">Stammdaten des Patienten</a>.</p>
+            </div>
+            <div class="te-field">
                 <label for="te-name">Name der Vorlage</label>
                 <input type="text" id="te-name" data-te-name maxlength="200" autocomplete="off">
                 <p class="field-error" data-te-error="name" hidden></p>
@@ -189,9 +201,14 @@
     <div class="te-dialog__body">
         <h2 id="te-help-title"><?= $icon('help', 'app-icon app-icon--sm') ?> So funktioniert der Vorlageneditor</h2>
         <ol class="te-help">
+            <li><strong>Art der Vorlage:</strong> Patient, Hausarzt und überweisender Arzt haben je eine eigene
+                Vorlage. Die Auswahl oben links wechselt die Vorlage.</li>
             <li><strong>Bereich wählen:</strong> links in der Liste oder direkt in der Seitenvorschau anklicken.</li>
             <li><strong>Texte bearbeiten:</strong> rechts unter „Eigenschaften“. Platzhalter wie <code>{patient_name}</code>
                 werden beim Erstellen des Briefes ersetzt – per Klick auf einen Platzhalter einfügen.</li>
+            <li><strong>Baustein übernehmen:</strong> Rechtsklick auf einen Baustein öffnet „Übernehmen aus Vorlage“ –
+                damit lässt sich der Baustein aus der Vorlage einer anderen Art übernehmen (feste Bausteine ersetzen
+                den gleichartigen Baustein, freie Textbausteine werden am Ende angehängt).</li>
             <li><strong>Reihenfolge ändern:</strong> Bausteine des Brieftextes am Griff ziehen (links oder in der Vorschau)
                 oder mit den Pfeil-Schaltflächen verschieben.</li>
             <li><strong>Ein- und ausblenden:</strong> Häkchen am Baustein. Eigene Textbausteine können ergänzt und gelöscht werden.</li>
@@ -199,7 +216,9 @@
             <li><strong>Speichern:</strong> erzeugt eine neue Fassung. Bereits erstellte Briefe behalten ihre Fassung.</li>
         </ol>
         <p class="muted">Die Lage von Briefkopf, Anschriftfeld, Informationsblock, Falzmarken und Fußzeile ist durch
-            DIN 5008 (Form B) festgelegt; dort sind Texte und Optionen bearbeitbar.</p>
+            DIN 5008 (Form B) festgelegt; dort sind Texte und Optionen bearbeitbar. Die Anrede eines Briefes steht nicht
+            in der Vorlage, sondern in den Stammdaten des Patienten; der Baustein „Anrede“ enthält den Platzhalter
+            <code>{salutation}</code>.</p>
         <form method="dialog" class="te-dialog__actions">
             <button type="submit" class="primary">Verstanden</button>
         </form>
@@ -209,6 +228,7 @@
 <form method="post" action="/system/letter-templates/preview" target="_blank" class="te-hidden" data-te-preview-form>
     <?= $csrf() ?>
     <input type="hidden" name="content" value="" data-te-preview-content>
+    <input type="hidden" name="type" value="<?= $e($type) ?>" data-te-preview-type>
 </form>
 
 <template data-te-icons>

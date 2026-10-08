@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Patient;
 
+use App\Letter\LetterRecipient;
+use App\Letter\LetterSalutation;
 use App\PatientCard\PatientName;
 use App\Support\DateInput;
 
@@ -18,6 +20,10 @@ use App\Support\DateInput;
  * Leere Werte sind erlaubt (die Datenbank speichert sie als ''), Pflichtfelder sind
  * Nachname, Vorname und Geburtsdatum. Hausarzt und ueberweisender Arzt liefern die Anschrift
  * fuer Briefe an diese Empfaenger.
+ *
+ * Die Anrede des Briefes wird ebenfalls hier gepflegt – je Empfaengerart getrennt (siehe
+ * LetterSalutation). Sie ist freiwillig; ohne Angabe druckt der Brief "Sehr geehrte Damen
+ * und Herren,".
  */
 final class PatientInput
 {
@@ -48,6 +54,30 @@ final class PatientInput
 
     public const int MAX_IDENTIFIER = 191;
     public const int MAX_NAME = 255;
+
+    /**
+     * Auswahlfelder der Anrede: Feldname => Empfaengerart.
+     *
+     * @return array<string, string>
+     */
+    public static function salutationFields(): array
+    {
+        $fields = [];
+        foreach (LetterRecipient::TYPES as $type) {
+            $fields[LetterSalutation::field($type)] = $type;
+        }
+        return $fields;
+    }
+
+    /**
+     * Alle Felder der Stammdaten in der Reihenfolge des Formulars.
+     *
+     * @return list<string>
+     */
+    public static function masterFields(): array
+    {
+        return array_merge(array_keys(self::TEXT_FIELDS), array_keys(self::salutationFields()));
+    }
 
     /**
      * @param array<string, string> $values Freitextfelder (leer = nicht angegeben)
@@ -122,6 +152,15 @@ final class PatientInput
             $values[$field] = $value;
         }
 
+        foreach (self::salutationFields() as $field => $type) {
+            $value = trim($text($field));
+            if ($value !== '' && !in_array($value, LetterSalutation::values($type), true)) {
+                $errors[$field] = 'Bitte eine der angebotenen Anreden wählen.';
+                $value = '';
+            }
+            $values[$field] = $value;
+        }
+
         if ($errors !== []) {
             throw PatientException::validation($errors);
         }
@@ -175,7 +214,7 @@ final class PatientInput
     public function masterValues(): array
     {
         $data = [];
-        foreach (array_keys(self::TEXT_FIELDS) as $field) {
+        foreach (self::masterFields() as $field) {
             $data[$field] = $this->value($field);
         }
         return $data;

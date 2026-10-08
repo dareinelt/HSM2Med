@@ -378,6 +378,24 @@
 .te-help { padding-left: 1.2rem; }
 .te-help li { margin-bottom: .4rem; }
 
+/* --------------------------------------------- Kontextmenü (Baustein übernehmen) */
+.te-menu {
+    position: fixed;
+    z-index: 40;
+    min-width: 16rem;
+    max-width: 20rem;
+    padding: .3rem;
+    border: 1px solid var(--office-line-strong);
+    border-radius: 6px;
+    background: var(--office-ribbon);
+    box-shadow: 0 12px 40px rgba(16, 32, 56, .3);
+}
+.te-menu__title { margin: .25rem .5rem .35rem; color: var(--office-muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+.te-menu__item { display: block; width: 100%; padding: .35rem .5rem; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.te-menu__item:hover, .te-menu__item:focus-visible { background: var(--office-hover); outline: none; }
+.te-menu__name { display: block; }
+.te-menu__hint { display: block; color: var(--office-muted); }
+
 body.is-busy { cursor: progress; }
 
 /* --------------------------------------------------------- Schmale Fenster */

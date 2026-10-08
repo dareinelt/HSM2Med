@@ -135,7 +135,7 @@ final class PatientInputTest extends TestCase
         $input = PatientInput::fromPost($this->post(['street' => '', 'postal_code' => '', 'city' => '', 'phone' => '', 'indication' => '', 'patient_identifier' => '']));
 
         $this->assertNull($input->patientIdentifier, 'Leere Patienten-ID wird nicht gespeichert.');
-        $this->assertSame(array_fill_keys(array_keys(PatientInput::TEXT_FIELDS), ''), $input->masterValues());
+        $this->assertSame(array_fill_keys(PatientInput::masterFields(), ''), $input->masterValues());
     }
 
     /** Hausarzt und ueberweisender Arzt: gleiche Pruefung von Telefon und Postleitzahl. */

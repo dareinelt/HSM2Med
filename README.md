@@ -70,10 +70,13 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   unveränderlicher Snapshot mit SHA-256-geprüftem PDF. Der Brief darf mehrseitig sein –
   die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis. Briefe folgen
   **DIN 5008 (Form B)**. Empfänger per Checkbox: **Patient**, **Hausarzt** und
-  **Überweisender Arzt** – je Empfänger entsteht ein eigener Brief mit dessen Anschrift.
+  **Überweisender Arzt** – je Empfänger entsteht ein eigener Brief mit dessen Anschrift und
+  dessen Anrede aus den Stammdaten.
 - **Vorlageneditor für Briefe** (System → *Briefvorlage bearbeiten*, öffnet in neuem Tab):
   alle festen Texte bearbeiten, Bausteine per Drag and Drop anordnen, Live-Vorschau und
-  PDF-Vorschau. Vorlagen werden **versioniert**; jeder Brief kann mit seiner ursprünglichen
+  PDF-Vorschau. Vorlagen werden **je Empfängerart getrennt** (Patient, Hausarzt, Überweisender
+  Arzt) und **versioniert** gepflegt; einzelne Bausteine lassen sich per Rechtsklick aus einer
+  anderen Vorlage übernehmen. Jeder Brief kann mit seiner ursprünglichen
   Vorlage reproduziert oder – auf ausdrücklichen Wunsch – mit der aktuellen Vorlage neu
   ausgefertigt werden. Technische Referenz: [docs/editor-referenz.md](docs/editor-referenz.md).
 - CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
@@ -297,6 +300,13 @@ führt es auf die Akte; der neue Patient ist dort als aktiver Patient gekennzeic
 Die Hausarztangaben aus dem Patientenausweis-Assistenten stehen dort bereits:
 
 ![Hausarzt und überweisender Arzt](docs/screenshots/49-akte-aerzte.png)
+
+In denselben Stammdaten steht die **Anrede** für die Briefe: beim Patienten *Herr*, *Frau* oder
+*Divers*, bei Hausarzt und überweisendem Arzt *Kollege*, *Kollegin* oder *Unpersönlich*
+(Praxis/Klinik, „Sehr geehrte Damen und Herren,"). Sie wird je Empfänger gepflegt und in jedem
+Brief über den Platzhalter `{salutation}` eingesetzt (siehe
+[Briefvorlage](#briefvorlage-und-vorlageneditor)). Ohne Angabe druckt der Brief „Sehr geehrte
+Damen und Herren,"; der Brief-Assistent weist darauf hin.
 
 **2. Dublettenprüfung** – die Identität eines Patienten ist **Nachname + Vorname +
 Geburtsdatum** (Groß-/Kleinschreibung und umgebende Leerzeichen bleiben ohne Bedeutung).
@@ -561,11 +571,13 @@ erfassender Person und Zeitpunkt sowie die Hinweise, die der Brief enthalten wir
 
 **4. Empfänger wählen** – Checkboxen für **Patient**, **Hausarzt** und **Überweisender Arzt**
 mit der Anschrift aus den Stammdaten. Für **jeden** gewählten Empfänger entsteht ein eigener
-Brief (eigene Briefnummer, Dokumentnummer und PDF) mit dessen Anschrift im Anschriftfeld;
-Inhalt und Datengrundlage sind gleich. Wählbar ist ein Empfänger mit Name oder Praxis, PLZ und
+Brief (eigene Briefnummer, Dokumentnummer und PDF) mit dessen Anschrift im Anschriftfeld,
+seiner Anrede aus den Stammdaten und der **Vorlage seiner Empfängerart**; Inhalt und
+Datengrundlage sind gleich. Wählbar ist ein Empfänger mit Name oder Praxis, PLZ und
 Ort (die Straße ist optional); fehlt etwas, nennt der Assistent die fehlenden Angaben und
-verlinkt die Stammdaten. Vorausgewählt sind die Ärzte mit vollständiger Anschrift, der
-Patient nur auf Wunsch. Mindestens ein Empfänger ist Pflicht.
+verlinkt die Stammdaten. Ist keine Anrede gepflegt, weist er darauf hin, dass der Brief
+„Sehr geehrte Damen und Herren,“ druckt. Vorausgewählt sind die Ärzte mit vollständiger
+Anschrift, der Patient nur auf Wunsch. Mindestens ein Empfänger ist Pflicht.
 
 ![Empfänger wählen](docs/screenshots/50-brief-assistent-empfaenger.png)
 
@@ -648,12 +660,33 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 | GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
 | GET | `/letters/{id}/reproduce` | PDF erneut aus dem Snapshot mit der damaligen Vorlage erzeugen (nichts wird gespeichert) |
 | POST | `/letters/{id}/regenerate` | Neuausfertigung als neuer Brief: `template=original` oder `template=current` (nur mit `confirm_current_template=1`) |
-| GET | `/system/letter-templates` | Vorlageneditor (eigener Tab) |
-| POST | `/system/letter-templates` | Vorlage als neue Fassung speichern (JSON-Antwort, CSRF) |
+| GET | `/system/letter-templates` | Vorlageneditor (eigener Tab), `?type=patient|family_doctor|referring_physician` |
+| POST | `/system/letter-templates` | Vorlage als neue Fassung speichern (JSON-Antwort, CSRF; Feld `type`) |
 | POST | `/system/letter-templates/preview` | PDF-Vorschau einer ungespeicherten Vorlage mit Beispieldaten |
+| GET | `/system/letter-templates/source` | Aktuelle Vorlage einer Empfängerart als JSON (Bausteine übernehmen) |
 | GET | `/system/letter-templates/versions/{id}` | Gespeicherte Fassung als JSON (zum Laden in den Editor) |
 
 ### Briefvorlage und Vorlageneditor
+
+Vorlagen werden **je Empfängerart getrennt** gepflegt: **Patient**, **Hausarzt** und
+**Überweisender Arzt** haben jeweils eine eigene Standardvorlage mit eigenem Fassungsverlauf.
+Die Art wird im Funktionsband gewählt; ein Wechsel fragt bei ungespeicherten Änderungen nach.
+Einzelne Bausteine lassen sich per **Rechtsklick** auf einen Baustein über *Übernehmen aus
+Vorlage → Vorlagenname* aus der Vorlage einer anderen Art übernehmen (eindeutige Bausteine
+ersetzen den gleichartigen, freie Textbausteine werden angehängt; wirksam wird das erst beim
+Speichern).
+
+Die **Anrede** steht nicht in der Vorlage, sondern in den Stammdaten des Empfängers; die
+Vorlage enthält dafür den Platzhalter `{salutation}`. Beim Anlegen bzw. Bearbeiten der
+Stammdaten wird sie je Empfänger gepflegt:
+
+| Empfänger | Auswahl | Anrede im Brief |
+|---|---|---|
+| Patient | Herr, Frau, Divers | `Sehr geehrter Herr Mustermann,` · `Sehr geehrte Frau Mustermann,` · `Guten Tag Mustermann, Erika,` |
+| Hausarzt / Überweisender Arzt | Kollege, Kollegin, Unpersönlich (Praxis/Klinik) | `Sehr geehrter Herr Kollege,` · `Sehr geehrte Frau Kollegin,` · `Sehr geehrte Damen und Herren,` |
+
+Ohne Angabe (oder bei fehlendem Nachnamen) druckt der Brief „Sehr geehrte Damen und Herren,“;
+der Brief-Assistent weist vor dem Erzeugen darauf hin.
 
 Der Editor öffnet sich über **System → Briefvorlage bearbeiten** in einem neuen Tab und folgt
 der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
@@ -668,13 +701,14 @@ der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
   Bereich bzw. Baustein.
 - **Eigenschaften** (rechts): alle festen Texte des gewählten Bereichs bzw. Bausteins,
   Optionen (z. B. Falzmarken; Empfängertext für Briefe ohne Empfängerauswahl) und Platzhalter wie
-  `{patient_name}`, `{date_of_birth}`, `{document_number}`, `{letter_date}`; `{page}` und
-  `{pages}` nur in der Seitenangabe. „Standard" setzt einen Text zurück.
+  `{salutation}`, `{patient_name}`, `{date_of_birth}`, `{document_number}`, `{letter_date}`;
+  `{page}` und `{pages}` nur in der Seitenangabe. „Standard" setzt einen Text zurück.
 
-**Versionierung:** *Als neue Fassung speichern* legt eine neue, unveränderliche Fassung an
-(optional mit Änderungsnotiz); neue Briefe verwenden ab dann diese Fassung. Unter *Fassungen*
-lassen sich frühere Fassungen laden und als neue Fassung wiederherstellen. Gleichzeitige
-Bearbeitung wird erkannt (Speichern auf veralteter Grundlage wird abgelehnt).
+**Versionierung:** *Als neue Fassung speichern* legt eine neue, unveränderliche Fassung der
+gewählten Art an (optional mit Änderungsnotiz); neue Briefe an Empfänger dieser Art verwenden ab
+dann diese Fassung. Unter *Fassungen* lassen sich frühere Fassungen laden und als neue Fassung
+wiederherstellen. Gleichzeitige Bearbeitung wird erkannt (Speichern auf veralteter Grundlage wird
+abgelehnt).
 
 **Historische Briefe:** Jeder Brief speichert die vollständige Vorlage im Snapshot. In der
 Briefdetailansicht kann das PDF jederzeit **mit der damaligen Vorlage reproduziert** werden
@@ -822,6 +856,12 @@ erDiagram
   überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
   (`NULL` = kein Befundteil). `sequence_no` ist die laufende Nummer je Patient,
   `letter_version` die Fassung je Patient und Bericht (`UNIQUE (patient_id, sequence_no)`).
+- **letter_template_versions** ist der unveränderliche Fassungsverlauf der Briefvorlagen. Jede
+  Empfängerart (`template_type`: `patient`, `family_doctor`, `referring_physician`) hat ihren
+  eigenen Verlauf (`UNIQUE (template_type, version_no)`); jede Speicherung fügt eine neue Fassung
+  ein. Jeder Brief friert die Vorlage seiner Empfängerart samt Anrede
+  (`snapshot.recipient.salutation`) ein. Die Anrede selbst steht in
+  `patient_card_master_data` (`salutation`, `physician_salutation`, `referrer_salutation`).
 
 ## PDF-Berichte
 
@@ -987,6 +1027,13 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   Brief-Fassung, Suche und Seitenaufteilung, Anhangsabschnitte je Geräteart (Schrittmacher, ICD,
   CRT-P, CRT-D), PDF-Layout (Reihenfolge, Auslassungen, Seitenzahl, Fußzeile, Dateiname) sowie die
   Anzeige in Übersicht, Detailansicht, Patientenliste und Akte.
+- **Briefvorlagen (Unit/Integration):** `tests/Unit/LetterTemplateTest.php` (Standardvorlage je
+  Empfängerart, `normalize()`, Platzhalter, PDF folgt Reihenfolge und Texten, `{salutation}` aus
+  dem Empfänger-Snapshot), `tests/Unit/LetterSalutationTest.php` (Anredetexte, Rückfall,
+  Zuordnung zu den Stammdatenfeldern), `tests/Integration/LetterTemplateMigrationTest.php`
+  (bestehende Installationen erhalten getrennte Vorlagen und `{salutation}`) sowie
+  `testTemplateEditorSeparatesRecipientTypes` in `tests/Integration/LetterViewTest.php`
+  (getrennte Fassungen je Art, Rückfall auf die Patientenvorlage, Bausteinquelle als JSON).
 
 ## Screenshots für die Dokumentation
 
