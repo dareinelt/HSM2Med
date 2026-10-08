@@ -350,6 +350,55 @@ button, .button { display: inline-flex; align-items: center; gap: .4rem; }
 .statusbar__grow { flex: 1 1 auto; }
 .statusbar__note { text-align: right; }
 
+/* Autoren-Info: Schaltflaeche im Aussehen eines Statusleisten-Eintrags */
+.statusbar__author {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.statusbar__author .app-icon { color: var(--office-accent); }
+.statusbar__author:hover { color: var(--office-accent); text-decoration: underline; }
+.statusbar__author:focus-visible { outline: 2px solid var(--office-focus); outline-offset: 2px; border-radius: 3px; }
+
+/* Overlay mit der Autoren-Info (nur ueber das Schliessen-Kreuz zu verlassen) */
+.author-info {
+    /* Der Schliessen-Knopf belegt oben eine eigene Zeile. Unten wird derselbe
+       Freiraum ergaenzt, damit der Textblock optisch mittig im Kasten sitzt. */
+    --author-info-close: 1.7rem;
+    width: min(36rem, calc(100vw - 2rem));
+    padding: 1rem 1.3rem calc(1rem + var(--author-info-close) + .3rem);
+    border: 1px solid var(--office-line-strong);
+    border-radius: 8px;
+    background: var(--office-ribbon);
+    color: var(--office-ink);
+    font-size: .92rem;
+    box-shadow: 0 18px 40px rgba(16, 24, 40, .3);
+}
+.author-info::backdrop { background: rgba(16, 24, 40, .45); }
+.author-info__head { display: flex; justify-content: flex-end; margin: 0 0 .3rem; }
+.author-info__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--author-info-close);
+    height: var(--author-info-close);
+    padding: .3rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: none;
+    color: var(--office-muted);
+    cursor: pointer;
+}
+.author-info__close:hover { border-color: var(--office-line); background: var(--office-hover); color: var(--office-accent); }
+.author-info__close:focus-visible { outline: 2px solid var(--office-focus); outline-offset: 1px; }
+.author-info__close .app-icon { width: 1.1rem; height: 1.1rem; }
+.author-info__body p { margin: 0 0 .8rem; }
+.author-info__body p:last-child { margin-bottom: 0; }
+
 /* ------------------------------------------------------------- Anpassungen */
 @media (max-width: 1100px) {
     .titlebar__qb span { display: none; }
@@ -364,6 +413,7 @@ button, .button { display: inline-flex; align-items: center; gap: .4rem; }
     .rgroup { padding: 0 .5rem; }
     .rbtn { width: 5.6rem; }
     .statusbar__note { display: none; }
+    .statusbar__author span { display: none; }
 }
 
 @media print {

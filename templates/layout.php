@@ -141,11 +141,27 @@ $gated = static fn (string $href): bool => $activePatient === null && Ribbon::re
             ? 'Kein Patient gewählt'
             : 'Patient: ' . $e($activePatient['name']) . ' (Nr. ' . $e($activePatient['id']) . ')' ?>
     </span>
+    <button type="button" class="statusbar__item statusbar__author" data-author-info
+            title="Autoren-Info zu <?= $e(Config::APP_NAME) ?> anzeigen">
+        <?= $icon('info', 'app-icon app-icon--sm') ?>
+        <span>HSM2Med by Daniel-André Reinelt</span>
+    </button>
     <?php if ($contextLine !== ''): ?>
         <span class="statusbar__item">Bereich: <?= $e($contextLine) ?></span>
     <?php endif; ?>
     <span class="statusbar__grow"></span>
     <span class="statusbar__item statusbar__note">Automatisch erzeugte Datendarstellung – keine medizinische Bewertung, Diagnose oder Empfehlung. Keine originale Abbott-/Merlin-Dokumentation.</span>
 </footer>
+<dialog class="author-info" aria-label="Autoren-Info" data-author-info-dialog>
+    <form method="dialog" class="author-info__head">
+        <button type="submit" class="author-info__close" title="Schließen" aria-label="Schließen">
+            <?= $icon('close', 'app-icon app-icon--sm') ?>
+        </button>
+    </form>
+    <div class="author-info__body">
+        <p><strong>HSM2Med</strong> ist eine unterstützende Anwendung zur Vereinfachung und Strukturierung der Herzschrittmachernachsorge. Die Anwendung ist <strong>kein Medizinprodukt</strong>. Für die Therapieentscheidung und medizinische Beurteilung sind ausschließlich die Daten des Auslesegeräts und des Primärsystems (PVS) maßgeblich.</p>
+        <p>Teile des Programmcodes wurden unter Einsatz von <strong>künstlicher Intelligenz</strong> erstellt (Anthropic Claude Opus 5.5, DeepSeek 4.1 Flash, Qwen3.8).</p>
+    </div>
+</dialog>
 </body>
 </html>

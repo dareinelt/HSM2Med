@@ -268,6 +268,21 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
         $this->assertFalse(str_contains($response->body, 'Kein Patient gewählt'));
     }
 
+    /** Der Fuß verweist auf die Autoren-Info; der Hinweistext liegt als Overlay im Rahmen. */
+    public function testFooterShowsAuthorInfo(): void
+    {
+        $response = $this->dashboard()
+            ->index(new Request('GET', '/'));
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('data-author-info', $response->body);
+        $this->assertContains('HSM2Med by Daniel-André Reinelt', $response->body);
+        $this->assertContains('data-author-info-dialog', $response->body);
+        $this->assertContains('<strong>kein Medizinprodukt</strong>', $response->body);
+        $this->assertContains('Für die Therapieentscheidung und medizinische Beurteilung', $response->body);
+        $this->assertContains('Anthropic Claude Opus 5.5, DeepSeek 4.1 Flash, Qwen3.8', $response->body);
+    }
+
     /** Eine veraltete Auswahl wird beim Auflösen verworfen. */
     public function testStaleSelectionIsDropped(): void
     {
