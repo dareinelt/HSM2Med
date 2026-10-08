@@ -8,6 +8,7 @@ use App\Application;
 use App\Http\Controller\DashboardController;
 use App\Http\Controller\ImportController;
 use App\Http\Controller\ImportLogController;
+use App\Http\Controller\LetterController;
 use App\Http\Controller\PatientCardController;
 use App\Http\Controller\PatientCardSettingsController;
 use App\Http\Controller\PatientController;
@@ -60,6 +61,7 @@ final class Kernel
         $cards = new PatientCardController($this->app, $this->view);
         $cardSettings = new PatientCardSettingsController($this->app, $this->view);
         $patients = new PatientController($this->app, $this->view);
+        $letters = new LetterController($this->app, $this->view);
 
         $router = new Router();
         $router->get('/', $dashboard->index(...));
@@ -92,6 +94,12 @@ final class Kernel
         $router->post('/patient-cards/reports/{id}', $cards->generate(...));
         $router->get('/patient-cards/{id}', $cards->show(...));
         $router->get('/patient-cards/{id}/pdf', $cards->pdf(...));
+        $router->get('/letters', $letters->index(...));
+        $router->get('/letters/new', $letters->newLetter(...));
+        $router->post('/letters', $letters->create(...));
+        $router->get('/letters/patients/{patient}', $letters->patient(...));
+        $router->get('/letters/{id}', $letters->show(...));
+        $router->get('/letters/{id}/pdf', $letters->pdf(...));
         $router->get('/system', $system->index(...));
         return $router;
     }

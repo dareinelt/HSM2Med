@@ -21,19 +21,20 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 6. [Bedienung der Weboberfläche](#bedienung-der-weboberfläche)
 7. [Patientenakte](#patientenakte)
 8. [Patientenausweis erstellen](#patientenausweis-erstellen)
-9. [Kommandozeile (CLI)](#kommandozeile-cli)
-10. [Importformat](#importformat)
-11. [Parserverhalten und Fehlerbehandlung](#parserverhalten-und-fehlerbehandlung)
-12. [Datenmodell, Snapshots und Versionierung](#datenmodell-snapshots-und-versionierung)
-13. [PDF-Berichte](#pdf-berichte)
-14. [Parameterzuordnung erweitern](#parameterzuordnung-erweitern)
-15. [Sicherheitskonzept](#sicherheitskonzept)
-16. [Datenschutz](#datenschutz)
-17. [Tests](#tests)
-18. [Screenshots für die Dokumentation](#screenshots-für-die-dokumentation)
-19. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
-20. [Fehlerbehebung](#fehlerbehebung)
-21. [Projektstruktur](#projektstruktur)
+9. [Brief zur Schrittmacher-/ICD-Abfrage](#brief-zur-schrittmacher-icd-abfrage)
+10. [Kommandozeile (CLI)](#kommandozeile-cli)
+11. [Importformat](#importformat)
+12. [Parserverhalten und Fehlerbehandlung](#parserverhalten-und-fehlerbehandlung)
+13. [Datenmodell, Snapshots und Versionierung](#datenmodell-snapshots-und-versionierung)
+14. [PDF-Berichte](#pdf-berichte)
+15. [Parameterzuordnung erweitern](#parameterzuordnung-erweitern)
+16. [Sicherheitskonzept](#sicherheitskonzept)
+17. [Datenschutz](#datenschutz)
+18. [Tests](#tests)
+19. [Screenshots für die Dokumentation](#screenshots-für-die-dokumentation)
+20. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
+21. [Fehlerbehebung](#fehlerbehebung)
+22. [Projektstruktur](#projektstruktur)
 
 ## Funktionsumfang
 
@@ -61,6 +62,13 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   `config/patient_card_measurements.php`.
 - Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
   Flugsicherheitstexte) mit eigener Fassung je Ausweis.
+- **Brief zur Schrittmacher-/ICD-Abfrage**: automatisch erzeugter Brief aus der Patientenakte.
+  Er enthält Anamnese, Vormedikation und Epikrise als Textteile, den Befundteil
+  „Schrittmacher-/ICD-Abfrage" (nur wenn ein Bericht zugeordnet wurde) und als Anhang die
+  vollständige Tabelle der Schrittmacher-/ICD-Abfrage samt MRT-Tauglichkeit aus dem
+  Patientenausweis. Assistent in fünf Schritten, zwei ausdrückliche Bestätigungen,
+  unveränderlicher Snapshot mit SHA-256-geprüftem PDF. Der Brief darf mehrseitig sein –
+  die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis.
 - CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
 - Keine externen Abhängigkeiten zur Laufzeit: kein CDN, keine Webfonts, keine Composer-Pakete.
 
@@ -150,6 +158,7 @@ docker compose up -d   # ohne --build
 | **Import** | Datei wählen → *Datei prüfen* → Vorschau → *Import endgültig speichern* oder *Verwerfen* |
 | **Berichte** | Liste und Suche; Detailansicht mit Patient, Gerät, Sonden, Kategorien, Importprotokoll und Originaldaten |
 | **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Epikrise/Notiz und Schrittmacher-/ICD-Abfrage als versionierte Bausteine |
+| **Briefe** | Brief zur Schrittmacher-/ICD-Abfrage aus der Akte erzeugen, durchsuchen und als unveränderliches PDF abrufen |
 | **Importprotokoll** | Alle Importe inkl. fehlgeschlagener, mit Warnungen/Fehlern je Datensatz |
 | **Systeminformationen** | Versionen, Datenbank- und Migrationsstatus, Limits |
 
@@ -186,7 +195,9 @@ ausdrücklicher Bestätigung erneut importiert werden; Dateien ohne Merlin-Forma
 Patienten können **unabhängig von einem Import** angelegt werden. Damit sind Anamnese,
 Vormedikation und Epikrise schon vor dem Importprozess erfassbar; der Import ordnet den
 Bericht später über die Identität demselben Patienten zu. Die Akte selbst erzeugt keine
-medizinischen Bewertungen: gespeichert wird ausschließlich, was eingegeben wurde.
+medizinischen Bewertungen: gespeichert wird ausschließlich, was eingegeben wurde. Aus diesen
+Bausteinen erzeugt die Anwendung den [Brief zur
+Schrittmacher-/ICD-Abfrage](#brief-zur-schrittmacher-icd-abfrage).
 
 ![Patientenübersicht](docs/screenshots/24-akte-uebersicht.png)
 
@@ -435,6 +446,96 @@ Konfigurationsdatei hinterlegt. Reicht der Platz nicht, bricht die Erzeugung mit
 Meldung ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt ausschließlich über den eigenen,
 abhängigkeitsfreien PDF-Writer.
 
+## Brief zur Schrittmacher-/ICD-Abfrage
+
+Der Brief wird **automatisch aus der Patientenakte** erzeugt – aus den versionierten
+Bausteinen Anamnese, Vormedikation und Epikrise, dem Befundteil der gewählten Untersuchung
+und der vollständigen Schrittmacher-/ICD-Abfrage als Anhang. Er enthält keine medizinische
+Bewertung und keine Diagnose; übernommen wird ausschließlich, was erfasst wurde.
+
+![Briefübersicht](docs/screenshots/43-brief-uebersicht.png)
+
+### Ablauf
+
+**1. Patient wählen** (`/letters/new`) – gesucht wird in Nachname, Vorname und Anzeigename:
+
+![Patient wählen](docs/screenshots/36-brief-patient-waehlen.png)
+
+**2. Bericht zuordnen (optional)** – der Bericht liefert den Befundteil. Wird kein Bericht
+gewählt, entfällt der Befundteil; der Brief wird trotzdem erzeugt. Der Assistent zeigt vorab,
+welche Bausteine fehlen:
+
+![Bericht zuordnen](docs/screenshots/38-brief-assistent-bericht.png)
+
+**3. Bausteine prüfen** – je Textbaustein die aktuelle Fassung mit Fassungsnummer,
+erfassender Person und Zeitpunkt sowie die Hinweise, die der Brief enthalten wird:
+
+![Bausteine prüfen](docs/screenshots/39-brief-assistent-bausteine.png)
+
+**4. Zusammenfassung** – Patient, Briefnummer, Befundteil, Textteile, Anhang und
+MRT-Tauglichkeit vor dem Erzeugen:
+
+![Zusammenfassung](docs/screenshots/40-brief-assistent-zusammenfassung.png)
+
+**5. Bestätigen und erzeugen** – ohne **beide** Bestätigungen wird kein Brief gespeichert.
+Bei fehlender Bestätigung antwortet der Server mit HTTP 422 und zeigt die Meldungen am Feld:
+
+![Bestätigen](docs/screenshots/41-brief-assistent-bestaetigen.png)
+
+![Briefdetail](docs/screenshots/42-brief-detail.png)
+
+Die Detailansicht zeigt Dokumentnummer, Briefdatum, Erstellungszeitpunkt, den zugeordneten
+Bericht, den Anhang, die eingefrorene Stammdaten- und Patientenfassung, Dateiname, Größe und
+SHA-256 des PDF, die eingefrorenen Bausteinfassungen, den Brieftext, den Befundteil und die
+vollständige Abfragetabelle. Der Brief ist **unveränderlich**: Snapshot und PDF werden in einer
+Transaktion gespeichert und nie überschrieben; das PDF ist allein aus dem Snapshot
+reproduzierbar.
+
+Der Brief erscheint sowohl in der Briefübersicht als auch in der Akte des Patienten:
+
+![Briefe am Patienten](docs/screenshots/44-brief-patient.png)
+
+![Akte mit Brief](docs/screenshots/45-akte-mit-brief.png)
+
+### Aufbau des Briefes
+
+Seite 1: Kopfbereich mit Logo und Nachsorgezentrum, Titel „Brief zur Schrittmacher-/ICD-Abfrage",
+Dokumentnummer, Briefdatum und Stammdatenfassung, Patientendaten (Name, Geburtsdatum,
+Patienten-ID, Anschrift), Anrede, die Textteile **Anamnese**, **Vormedikation** und **Epikrise**
+(jeweils mit Fassungsnummer, erfassender Person und Zeitpunkt), der Befundteil
+„Schrittmacher-/ICD-Abfrage" und die Grußformel.
+
+Ab Seite 2: Anhang „Schrittmacher-/ICD-Abfrage (vollständige Tabelle)" mit Kopfzeile auf jeder
+Seite – Geräteart, Anzahl angegebener Werte und Herkunft der MRT-Tauglichkeit, danach die
+Abschnitte Gerät, Messdaten (Batterie, Sonden mit Impedanz, Wahrnehmung, Reizschwelle und
+Schockimpedanz), Programmierung (Bradykardie, RA, RV, AV, LV), bei ICD/CRT-D zusätzlich
+Tachykardie (VT1, VT2, VF mit Erkennung und Therapie) sowie Bemerkungen. Die
+MRT-Tauglichkeit stammt aus dem neuesten Patientenausweis; fehlt sie dort, wird die Angabe der
+Abfrage gedruckt.
+
+![Brief Seite 1](docs/screenshots/46-brief-pdf-seite-1.png)
+
+![Brief Seite 2](docs/screenshots/46-brief-pdf-seite-2.png)
+
+![Brief Seite 3](docs/screenshots/46-brief-pdf-seite-3.png)
+
+Jede Seite trägt die Fußzeile „Automatisch erzeugter Brief auf Basis der Patientenakte – keine
+medizinische Bewertung oder Diagnose.", den Erstellungszeitpunkt mit Dokumentnummer und
+Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
+`HSM2Med-Brief-<JJJJMMTT>-<Patienten-ID>-<laufende Nummer>`.
+
+### Routen
+
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/letters` | Übersicht mit Suche (Patient, Patienten-ID, Bericht-Nr.) |
+| GET | `/letters/new` | Patient für einen neuen Brief wählen |
+| GET | `/letters/new?patient={id}&report={id}` | Assistent (Schritte 2–5) |
+| POST | `/letters` | Brief erzeugen (CSRF, beide Bestätigungen) |
+| GET | `/letters/patients/{patient}` | Alle Briefe eines Patienten |
+| GET | `/letters/{id}` | Briefdetail mit Snapshot |
+| GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
+
 ## Kommandozeile (CLI)
 
 Alle Befehle laufen im Web-Container. Als Benutzer `www-data` ausführen, damit Archiv- und
@@ -526,6 +627,10 @@ erDiagram
     leads ||--o{ report_leads : zugeordnet
     reports ||--o{ report_parameters : enthaelt
     parameter_definitions ||--o{ report_parameters : beschreibt
+    patients ||--o{ patient_cards : erhaelt
+    patients ||--o{ patient_letters : erhaelt
+    reports ||--o{ patient_letters : befundteil
+    patient_card_settings_versions ||--o{ patient_letters : stammdaten
 ```
 
 - **reports** enthält Snapshots aller Kopfdaten (Patient, Gerät, Zeitstempel als Original
@@ -553,6 +658,14 @@ erDiagram
 - Ausweise speichern ihre Layoutfassung als `card_version` im Snapshot (aktuell 2). Die
   Messwerttabelle wird beim Erzeugen aus den Bericht-Snapshots aufgelöst und mitgespeichert;
   spätere Änderungen an `config/patient_card_measurements.php` betreffen nur neue Ausweise.
+- **patient_letters** ist ein unveränderliches Dokument: `snapshot` (JSON) friert Patientendaten,
+  die Fassung der globalen Stammdaten (`settings_version_id`), die Fassungen der Bausteine
+  (Anamnese, Vormedikation, Epikrise, Schrittmacher-/ICD-Abfrage), die Befunddaten des
+  gewählten Berichts und die aufgelösten Anhangsabschnitte ein. `pdf_content` (MEDIUMBLOB) und
+  `pdf_sha256` werden gemeinsam mit dem Snapshot in einer Transaktion gespeichert und nie
+  überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
+  (`NULL` = kein Befundteil). `sequence_no` ist die laufende Nummer je Patient,
+  `letter_version` die Fassung je Patient und Bericht (`UNIQUE (patient_id, sequence_no)`).
 
 ## PDF-Berichte
 
@@ -694,9 +807,17 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   MRT-Tauglichkeit aus dem Patientenausweis führt und ein abweichender Formularwert verworfen
   wird.
 - **Oberflächen (Integration):** Die Templates werden mit den echten Controllern gerendert
-  (`tests/Integration/PatientCardViewTest.php`, `tests/Integration/PatientViewTest.php`).
+  (`tests/Integration/PatientCardViewTest.php`, `tests/Integration/PatientViewTest.php`,
+  `tests/Integration/LetterViewTest.php`).
   Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
   unvollständige Formulare, fehlende CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
+- **Brief zur Schrittmacher-/ICD-Abfrage:** Assistent (`prepare()`) mit Warnungen für fehlende
+  Bausteine, Anhang und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
+  (HTTP 422, kein Datensatz), Snapshot und Unveränderlichkeit (Patientendaten, Bausteinfassungen
+  und Stammdaten bleiben nach späteren Änderungen unverändert), laufende Briefnummer je Patient,
+  Brief-Fassung, Suche und Seitenaufteilung, Anhangsabschnitte je Geräteart (Schrittmacher, ICD,
+  CRT-P, CRT-D), PDF-Layout (Reihenfolge, Auslassungen, Seitenzahl, Fußzeile, Dateiname) sowie die
+  Anzeige in Übersicht, Detailansicht, Patientenliste und Akte.
 
 ## Screenshots für die Dokumentation
 
@@ -710,15 +831,21 @@ docker compose --profile docs down
 ```
 
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Import der
-Testdatei, Stammdaten mit Beispiel-Logo, Patient mit Anamnese und Vormedikation,
-Patientenausweis, Schrittmacher-/ICD-Abfrage) und erzeugt daraus die Bilder `01`–`33`,
-darunter Assistent, Konfliktdialog, Patientenakte, die Abfrage mit Vorbelegung und
-Sperrung der MRT-Tauglichkeit sowie beide Seiten des Ausweis-PDF. Das Skript prüft dabei
-zugleich die harten Anforderungen: Das Ausweis-PDF hat **genau zwei** Seiten, Seite 1 nennt die
-MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die Abfrage wird gespeichert. Der Build des
+Testdatei, Stammdaten mit Beispiel-Logo, Patient mit Anamnese, Vormedikation, Epikrise und
+Schrittmacher-/ICD-Abfrage, Patientenausweis, Brief zur Schrittmacher-/ICD-Abfrage) und erzeugt
+daraus die Bilder `01`–`46`, darunter Assistent, Konfliktdialog, Patientenakte, die Abfrage mit
+Vorbelegung und Sperrung der MRT-Tauglichkeit, beide Seiten des Ausweis-PDF, der Brief-Assistent
+(Schritte 2–5), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–3 des
+Brief-PDF. Das Skript prüft dabei zugleich die harten Anforderungen: Das Ausweis-PDF hat **genau
+zwei** Seiten, Seite 1 nennt die MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die
+Abfrage wird gespeichert; das Brief-PDF hat **mindestens zwei** Seiten und enthält Titel,
+Anamnese, Vormedikation, Epikrise, den Befundteil, den Anhang, die MRT-Tauglichkeit und die
+Tachykardie-Abschnitte. Der Build des
 Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
-Templates oder `src/` ist `docker compose build web` erforderlich.
+Templates, `src/` oder `public/assets/` ist `docker compose build web-docs` erforderlich. Ein
+abgebrochener Lauf hinterlässt Daten in der flüchtigen Datenbank; vor einem neuen Versuch
+`docker compose --profile docs down` ausführen.
 
 ## Backup und Wiederherstellung
 
@@ -773,11 +900,12 @@ public/              Webroot: index.php, assets/ (CSS, JS)
 src/                 Anwendungscode (Namespace App\)
   Http/              Kernel, Router, Controller, View
   Import/            Parser, Validierung, ImportService, Archiv
+  Letter/            Brief zur Schrittmacher-/ICD-Abfrage (Anhang, PDF, Service)
   Mapping/           Parameterzuordnung
   Patient/           Patientenakte (Patient, Bausteine, Fassungen)
   Report/            Berichtsdaten, Zusammenfassung, PDF (Pdf/)
   Repository/        Datenbankabfragen
   Security/          Session, CSRF, Uploadprüfung
-templates/           PHP-Templates (HTML)
+templates/           PHP-Templates (HTML; u. a. letters/ für den Brief)
 tests/               Testrunner, Unit-/Integrationstests, Fixtures
 ```

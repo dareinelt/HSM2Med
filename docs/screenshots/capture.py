@@ -62,6 +62,11 @@ AKTE_PREMEDICATION = [
     ("Bisoprolol", "2,5", "mg", "1-0-0", "Bradykardie", "01.03.2024"),
     ("Ramipril", "5", "mg", "1-0-0", "Arterielle Hypertonie", "01.03.2024"),
 ]
+AKTE_EPICRISIS = (
+    "Stationaere Aufnahme zur Schrittmacherimplantation bei symptomatischer Bradykardie.\n"
+    "Komplikationsloser Verlauf, Entlassung am dritten postoperativen Tag.\n"
+    "Empfehlung: Kontrolle der Sonde in sechs Monaten, Ausweis bei jeder Kontrolle vorlegen."
+)
 
 
 def shot(page: Page, name: str, full_page: bool = True) -> None:
@@ -380,6 +385,85 @@ def main() -> int:
             return 1
         shot(page, "33-akte-mit-abfrage")
 
+        # --- Brief zur Schrittmacher-/ICD-Abfrage -------------------------------
+        # Bausteine fuer den Patienten des Ausweises ergaenzen, damit der Brief vollstaendig ist.
+        page.goto(f"{akte_url}/records/anamnesis")
+        page.fill("textarea[name=text]", AKTE_ANAMNESIS)
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+
+        page.goto(f"{akte_url}/records/premedication")
+        for index, (substance, dose, unit, schedule, reason, since) in enumerate(AKTE_PREMEDICATION):
+            if index > 0:
+                page.click("[data-repeat-add]")
+            page.fill(f'input[name="medication[{index}][substance]"]', substance)
+            page.fill(f'input[name="medication[{index}][dose]"]', dose)
+            page.fill(f'input[name="medication[{index}][unit]"]', unit)
+            page.fill(f'input[name="medication[{index}][schedule]"]', schedule)
+            page.fill(f'input[name="medication[{index}][reason]"]', reason)
+            page.fill(f'input[name="medication[{index}][from]"]', since)
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+
+        page.goto(f"{akte_url}/records/epicrisis")
+        page.fill("textarea[name=text]", AKTE_EPICRISIS)
+        page.fill("input[name=author_name]", AKTE_AUTHOR)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+        shot(page, "34-akte-epikrise")
+
+        page.goto(f"{BASE_URL}/letters")
+        shot(page, "35-brief-uebersicht-leer")
+
+        page.goto(f"{BASE_URL}/letters/new")
+        shot(page, "36-brief-patient-waehlen")
+
+        # Schritt 2: Bericht als Befundteil zuordnen (ohne Bericht entfaellt der Befundteil).
+        page.goto(f"{BASE_URL}/letters/new?patient={card_patient_id}")
+        shot(page, "37-brief-assistent-bericht-waehlen")
+
+        page.goto(f"{BASE_URL}/letters/new?patient={card_patient_id}&report={report_id}")
+        shot(page, "38-brief-assistent-bericht")
+
+        page.click("[data-wizard-next]")
+        shot(page, "39-brief-assistent-bausteine")
+
+        page.click("[data-wizard-next]")
+        shot(page, "40-brief-assistent-zusammenfassung")
+
+        page.click("[data-wizard-next]")
+        page.check("input[name=confirm_data]")
+        page.check("input[name=confirm_letter]")
+        shot(page, "41-brief-assistent-bestaetigen")
+
+        page.click("button[data-wizard-submit]")
+        page.wait_for_load_state()
+        letter_url = page.url
+        if not letter_url.rstrip("/").split("/")[-1].isdigit():
+            print(f"Brief wurde nicht erzeugt: {letter_url}", file=sys.stderr)
+            return 1
+        shot(page, "42-brief-detail")
+
+        page.goto(f"{BASE_URL}/letters")
+        if "1 Brief(e) gefunden" not in page.content():
+            print("Der Brief fehlt in der Briefuebersicht.", file=sys.stderr)
+            return 1
+        shot(page, "43-brief-uebersicht")
+
+        page.goto(f"{BASE_URL}/letters/patients/{card_patient_id}")
+        shot(page, "44-brief-patient")
+
+        page.goto(f"{BASE_URL}/patients/{card_patient_id}")
+        shot(page, "45-akte-mit-brief")
+
+        letter_pdf = context.request.get(f"{letter_url}/pdf?download=1")
+        if not letter_pdf.ok or not letter_pdf.body().startswith(b"%PDF-"):
+            print(f"Brief-PDF-Abruf fehlgeschlagen: HTTP {letter_pdf.status}", file=sys.stderr)
+            return 1
+        letter_pdf_bytes = letter_pdf.body()
+
         pdf = context.request.get(f"{report_url}/pdf?raw=1&download=1")
         if not pdf.ok or not pdf.body().startswith(b"%PDF-"):
             print(f"PDF-Abruf fehlgeschlagen: HTTP {pdf.status}", file=sys.stderr)
@@ -397,6 +481,31 @@ def main() -> int:
         directory = Path(tmp)
         render_pdf(directory, pdf_bytes, ["12-pdf-seite-1", "12-pdf-seite-2", "12-pdf-seite-3"])
         render_pdf(directory, card_pdf_bytes, ["22-ausweis-pdf-seite-1", "22-ausweis-pdf-seite-2"])
+        render_pdf(directory, letter_pdf_bytes, [
+            "46-brief-pdf-seite-1",
+            "46-brief-pdf-seite-2",
+            "46-brief-pdf-seite-3",
+        ])
+
+        # Der Brief ist mehrseitig: Brieftext und Anhang mit der vollstaendigen Abfragetabelle.
+        letter_pages = pdf_pages(directory, letter_pdf_bytes, "45-brief-pruefung")
+        if letter_pages < 2:
+            print(f"Brief-PDF hat {letter_pages} Seiten statt mindestens 2.", file=sys.stderr)
+            return 1
+        letter_text = pdf_text(directory, letter_pdf_bytes, "45-brief-pruefung")
+        for needle in (
+            "Brief zur Schrittmacher-/ICD-Abfrage",
+            "Anamnese",
+            "Vormedikation",
+            "Befund: Schrittmacher-/ICD-Abfrage",
+            "Epikrise",
+            "Anhang: Schrittmacher-/ICD-Abfrage (vollständige Tabelle)",
+            "MRT-Tauglichkeit",
+            "Tachykardie",
+        ):
+            if needle not in letter_text:
+                print(f"Angabe fehlt im Brief-PDF: {needle}", file=sys.stderr)
+                return 1
 
         # Harte Anforderung: Der Ausweis umfasst genau zwei Seiten, Seite 1 nennt die MRT-Tauglichkeit.
         pages = pdf_pages(directory, card_pdf_bytes, "22-ausweis-pruefung")

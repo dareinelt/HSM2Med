@@ -13,6 +13,7 @@ $nav = [
     'patients' => ['/patients', 'Patienten'],
     'patient_cards' => ['/patient-cards', 'Patientenausweise'],
     'patient_card_settings' => ['/patient-cards/settings', 'Ausweis-Stammdaten'],
+    'letters' => ['/letters', 'Briefe'],
     'imports' => ['/imports', 'Importprotokoll'],
     'system' => ['/system', 'Systeminformationen'],
 ];

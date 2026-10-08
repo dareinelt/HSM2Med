@@ -139,9 +139,9 @@ label.check input { width: auto; margin-top: .25rem; flex: 0 0 auto; }
 .wizard-controls { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: flex-end; margin-top: 1rem; }
 .wizard-form[data-wizard="on"] .wizard-controls [data-wizard-next],
 .wizard-form[data-wizard="on"] .wizard-controls [data-wizard-submit] { display: none; }
-.wizard-form[data-wizard="on"]:not([data-step="6"]) .wizard-controls [data-wizard-next] { display: inline-block; }
-.wizard-form[data-wizard="on"]:not([data-step="6"]) .wizard-controls [data-wizard-prev] { display: none; }
-.wizard-form[data-wizard="on"][data-step="6"] .wizard-controls [data-wizard-submit] { display: inline-block; }
+.wizard-form[data-wizard="on"]:not([data-wizard-last="on"]) .wizard-controls [data-wizard-next] { display: inline-block; }
+.wizard-form[data-wizard="on"]:not([data-wizard-last="on"]) .wizard-controls [data-wizard-prev] { display: none; }
+.wizard-form[data-wizard="on"][data-wizard-last="on"] .wizard-controls [data-wizard-submit] { display: inline-block; }
 @media (max-width: 720px) {
     .logo-row { grid-template-columns: 1fr; }
 }

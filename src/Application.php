@@ -12,6 +12,10 @@ use App\Import\ImportService;
 use App\Import\ImportValidator;
 use App\Import\MerlinParser;
 use App\Import\PendingUploadStore;
+use App\Letter\DeviceCheckAppendix;
+use App\Letter\LetterPdfGenerator;
+use App\Letter\LetterRepository;
+use App\Letter\LetterService;
 use App\Mapping\ParameterMapping;
 use App\Patient\DeviceCheckPrefill;
 use App\Patient\DeviceCheckTemplate;
@@ -173,6 +177,25 @@ final class Application
         return new PatientCardSettingsService(
             $this->patientCardRepository(),
             new ImageUploadValidator(),
+            $this->clock,
+        );
+    }
+
+    public function letterRepository(): LetterRepository
+    {
+        return new LetterRepository($this->pdo());
+    }
+
+    public function letterService(): LetterService
+    {
+        return new LetterService(
+            $this->pdo(),
+            $this->letterRepository(),
+            $this->patientCardRepository(),
+            $this->patientRecordService(),
+            $this->reportService(),
+            new DeviceCheckAppendix($this->deviceCheckTemplate()),
+            new LetterPdfGenerator(),
             $this->clock,
         );
     }

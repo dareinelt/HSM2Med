@@ -32,6 +32,7 @@ $masterRows = [
     <div class="actions">
         <a class="button" href="/patients/<?= $e($id) ?>/edit">Stammdaten bearbeiten</a>
         <a class="button" href="/patient-cards/patients/<?= $e($id) ?>">Ausweise und Nachsorge</a>
+        <a class="button" href="/letters/patients/<?= $e($id) ?>">Briefe</a>
         <a class="button" href="/patients">Zur Übersicht</a>
     </div>
 </div>

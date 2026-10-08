@@ -48,15 +48,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const links = Array.from(form.querySelectorAll('[data-wizard-goto]'));
-        const total = steps.length;
-        let current = parseInt(form.dataset.step || '1', 10);
-        if (!(current >= 1 && current <= total)) {
-            current = 1;
+        // Die Schritte werden ueber ihre Nummer angesteuert, nicht ueber ihre Position:
+        // im Brief-Assistenten beginnt das Formular erst mit Schritt 2 (Schritt 1 ist die
+        // Patientenauswahl auf einer eigenen Seite).
+        const numbers = steps
+            .map((section) => parseInt(section.dataset.step, 10))
+            .filter((number) => !Number.isNaN(number))
+            .sort((a, b) => a - b);
+        if (numbers.length === 0) {
+            return;
+        }
+        const first = numbers[0];
+        const last = numbers[numbers.length - 1];
+        let current = parseInt(form.dataset.step || '', 10);
+        if (!numbers.includes(current)) {
+            current = first;
         }
 
         const show = (step, focus) => {
-            current = Math.min(Math.max(step, 1), total);
+            current = numbers.includes(step) ? step : (step < first ? first : last);
             form.dataset.step = String(current);
+            form.dataset.wizardLast = current === last ? 'on' : 'off';
             steps.forEach((section) => {
                 section.classList.toggle('is-active', parseInt(section.dataset.step, 10) === current);
             });
@@ -80,6 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        // Nachbarschritt in Richtung delta, ohne Luecken in der Nummerierung zu ueberspringen.
+        const neighbour = (delta) => {
+            const index = numbers.indexOf(current);
+            const next = numbers[index + delta];
+            return next === undefined ? current : next;
+        };
+
         form.dataset.wizard = 'on';
         show(current, false);
 
@@ -92,12 +111,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (event.target.closest('[data-wizard-next]')) {
                 event.preventDefault();
-                show(current + 1, true);
+                show(neighbour(1), true);
                 return;
             }
             if (event.target.closest('[data-wizard-prev]')) {
                 event.preventDefault();
-                show(current - 1, true);
+                show(neighbour(-1), true);
             }
         });
     });
