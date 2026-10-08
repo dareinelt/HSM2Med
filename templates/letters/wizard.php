@@ -211,19 +211,28 @@ $selectedRecipients = array_values(array_filter(
     <section class="card wizard-step" data-step="4" id="schritt-4">
         <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> 4 · Empfänger wählen</h2>
         <p class="muted">Für jeden ausgewählten Empfänger wird ein eigener Brief mit dessen Anschrift im
-            Anschriftfeld erzeugt. Inhalt und Datengrundlage sind bei allen Briefen gleich.</p>
+            Anschriftfeld erzeugt. Inhalt und Datengrundlage sind bei allen Briefen gleich. Ist keine
+            Arztanschrift hinterlegt, steht der generische Arztbrief zur Wahl: Er wird an „An die
+            weiterbehandelnden Ärztinnen und Ärzte“ adressiert.</p>
         <?= $err('recipients') ?>
         <fieldset class="choice-box recipient-choices" data-recipient-choices>
             <legend>Empfänger</legend>
             <?php foreach ($recipients as $type => $recipient): ?>
-                <?php $available = ($recipient['available'] ?? false) === true; ?>
+                <?php
+                $available = ($recipient['available'] ?? false) === true;
+                $generic = $type === \App\Letter\LetterRecipient::GENERIC;
+                // Der generische Arztbrief erscheint nur, wenn keine Arztanschrift vorliegt.
+                if ($generic && !$available) {
+                    continue;
+                }
+                ?>
                 <div class="recipient-choice<?= $available ? '' : ' is-unavailable' ?>">
                     <label class="check" for="recipient-<?= $e($type) ?>">
                         <input type="checkbox" id="recipient-<?= $e($type) ?>" name="recipients[]" value="<?= $e($type) ?>"
                             data-recipient-label="<?= $e($recipient['label']) ?>"
                             <?= in_array($type, $selectedRecipients, true) ? ' checked' : '' ?><?= $available ? '' : ' disabled' ?>>
                         <span>
-                            <strong><?= $e($recipient['label']) ?></strong>
+                            <strong><?= $e(\App\Letter\LetterRecipient::choiceLabel($type)) ?></strong>
                             <?php if ($recipient['lines'] !== []): ?>
                                 <span class="recipient-address"><?= nl2br($e(implode("\n", $recipient['lines']))) ?></span>
                             <?php endif; ?>
@@ -231,10 +240,13 @@ $selectedRecipients = array_values(array_filter(
                                 <small class="field-error">Nicht wählbar – in den Stammdaten fehlt:
                                     <?= $e(implode(', ', $recipient['missing'])) ?>.
                                     <a href="/patients/<?= $e($patientId) ?>/edit">Stammdaten ergänzen</a></small>
+                            <?php elseif ($generic): ?>
+                                <small class="hint">Feste Anrede „<?= $e($recipient['salutation']) ?>“; die Stammdaten der
+                                    Ärzte bleiben unberücksichtigt.</small>
                             <?php elseif ($recipient['street'] === ''): ?>
                                 <small class="muted">Hinweis: Straße und Hausnummer fehlen in den Stammdaten.</small>
                             <?php endif; ?>
-                            <?php if ($available && ($recipient['salutation_value'] ?? '') === ''): ?>
+                            <?php if ($available && !$generic && ($recipient['salutation_value'] ?? '') === ''): ?>
                                 <small class="hint">Hinweis: In den Stammdaten ist keine Anrede gepflegt.
                                     Im Brief erscheint „<?= $e(\App\Letter\LetterSalutation::FALLBACK) ?>“.
                                     <a href="/patients/<?= $e($patientId) ?>/edit">Stammdaten ergänzen</a></small>
@@ -256,6 +268,7 @@ $selectedRecipients = array_values(array_filter(
             <tr><th>Empfänger</th><td>
                 <ul class="plain-list" data-recipient-summary>
                     <?php foreach ($recipients as $type => $recipient): ?>
+                        <?php if ($type === \App\Letter\LetterRecipient::GENERIC && ($recipient['available'] ?? false) !== true) { continue; } ?>
                         <li data-recipient-item="<?= $e($type) ?>"<?= in_array($type, $selectedRecipients, true) ? '' : ' hidden' ?>>
                             <?= $e($recipient['label']) ?><?= \App\Letter\LetterRecipient::displayName($recipient) === '' ? '' : ': ' . $e(\App\Letter\LetterRecipient::displayName($recipient)) ?></li>
                     <?php endforeach; ?>

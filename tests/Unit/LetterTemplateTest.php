@@ -138,12 +138,13 @@ final class LetterTemplateTest extends TestCase
     public function testTemplateTypesHaveOwnDefaults(): void
     {
         $this->assertSame(
-            ['patient' => 'Patient', 'family_doctor' => 'Hausarzt', 'referring_physician' => 'Überweisender Arzt'],
+            ['patient' => 'Patient', 'family_doctor' => 'Hausarzt', 'referring_physician' => 'Überweisender Arzt', 'generic' => 'Arztbrief generisch'],
             LetterTemplate::types(),
         );
         $this->assertSame('Standardvorlage', LetterTemplate::defaultName(LetterRecipient::PATIENT));
         $this->assertSame('Standardvorlage Hausarzt', LetterTemplate::defaultName(LetterRecipient::FAMILY_DOCTOR));
         $this->assertSame('Standardvorlage Überweisender Arzt', LetterTemplate::defaultName(LetterRecipient::REFERRING_PHYSICIAN));
+        $this->assertSame('Standardvorlage Arztbrief generisch', LetterTemplate::defaultName(LetterRecipient::GENERIC));
         $this->assertSame(LetterTemplate::default(), LetterTemplate::default(LetterRecipient::PATIENT));
 
         $definition = LetterTemplate::editorDefinition(LetterRecipient::REFERRING_PHYSICIAN);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Letter\LetterRecipient;
 use App\Patient\PatientException;
 use App\Patient\PatientInput;
 use App\Support\DateInput;
@@ -136,6 +137,18 @@ final class PatientInputTest extends TestCase
 
         $this->assertNull($input->patientIdentifier, 'Leere Patienten-ID wird nicht gespeichert.');
         $this->assertSame(array_fill_keys(PatientInput::masterFields(), ''), $input->masterValues());
+    }
+
+    /** Die feste Anrede des generischen Arztbriefs hat kein Stammdatenfeld. */
+    public function testSalutationFieldsCoverOnlyMaintainedTypes(): void
+    {
+        $fields = PatientInput::salutationFields();
+        $this->assertSame(
+            ['salutation' => 'patient', 'physician_salutation' => 'family_doctor', 'referrer_salutation' => 'referring_physician'],
+            $fields,
+        );
+        $this->assertFalse(in_array('', array_keys($fields), true), 'Der generische Arztbrief wird nicht in den Stammdaten gepflegt.');
+        $this->assertFalse(in_array(LetterRecipient::GENERIC, array_values($fields), true));
     }
 
     /** Hausarzt und ueberweisender Arzt: gleiche Pruefung von Telefon und Postleitzahl. */

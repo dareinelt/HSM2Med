@@ -15,7 +15,8 @@ use App\PatientCard\PatientName;
  * enthaelt im Baustein "Anrede" nur den Platzhalter {salutation}.
  *
  * Aerzte werden ohne Nachnamen angeredet ("Sehr geehrter Herr Kollege,"), weil der Nachname
- * im Anschriftfeld steht. Praxen und Kliniken erhalten die unpersoenliche Anrede.
+ * im Anschriftfeld steht. Praxen und Kliniken erhalten die unpersoenliche Anrede. Der
+ * generische Arztbrief hat keine Anrede in den Stammdaten und wird fest angesprochen.
  */
 final class LetterSalutation
 {
@@ -29,11 +30,15 @@ final class LetterSalutation
     /** Anrede ohne Angabe in den Stammdaten (auch fuer Briefe ohne Empfaenger). */
     public const string FALLBACK = 'Sehr geehrte Damen und Herren,';
 
-    /** Stammdatenfeld je Empfaengerart. */
+    /** Feste Anrede des generischen Arztbriefs (keine Angabe in den Stammdaten). */
+    public const string GENERIC = 'Sehr geehrte Kollegin, sehr geehrter Kollege,';
+
+    /** Stammdatenfeld je Empfaengerart; leer, wenn die Anrede fest vorgegeben ist. */
     private const array FIELDS = [
         LetterRecipient::PATIENT => 'salutation',
         LetterRecipient::FAMILY_DOCTOR => 'physician_salutation',
         LetterRecipient::REFERRING_PHYSICIAN => 'referrer_salutation',
+        LetterRecipient::GENERIC => '',
     ];
 
     /** Auswahl je Empfaengerart (Wert => Beschriftung im Formular). */
@@ -53,6 +58,7 @@ final class LetterSalutation
             self::KOLLEGIN => 'Kollegin',
             self::UNPERSOENLICH => 'Unpersönlich (Praxis/Klinik)',
         ],
+        LetterRecipient::GENERIC => [],
     ];
 
     /** Hinweis zum Stammdatenfeld je Empfaengerart. */
@@ -60,10 +66,12 @@ final class LetterSalutation
         LetterRecipient::PATIENT => 'Erscheint als Anrede im Brief. „Divers“ wird mit vollem Namen angeredet.',
         LetterRecipient::FAMILY_DOCTOR => '„Unpersönlich“ für Praxen und Kliniken: „Sehr geehrte Damen und Herren,“',
         LetterRecipient::REFERRING_PHYSICIAN => '„Unpersönlich“ für Praxen und Kliniken: „Sehr geehrte Damen und Herren,“',
+        LetterRecipient::GENERIC => 'Feste Anrede des generischen Arztbriefs: „Sehr geehrte Kollegin, sehr geehrter Kollege,“',
     ];
 
     /**
-     * Name des Stammdatenfeldes.
+     * Name des Stammdatenfeldes; leer, wenn die Anrede nicht in den Stammdaten gepflegt wird
+     * (generischer Arztbrief).
      */
     public static function field(string $type): string
     {
@@ -116,6 +124,10 @@ final class LetterSalutation
      */
     public static function text(string $type, string $value, string $lastName = '', string $firstName = ''): string
     {
+        if ($type === LetterRecipient::GENERIC) {
+            return self::GENERIC;
+        }
+
         $last = (string) PatientName::normalize($lastName);
         $first = (string) PatientName::normalize($firstName);
 

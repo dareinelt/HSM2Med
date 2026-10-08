@@ -56,7 +56,8 @@ final class PatientInput
     public const int MAX_NAME = 255;
 
     /**
-     * Auswahlfelder der Anrede: Feldname => Empfaengerart.
+     * Auswahlfelder der Anrede: Feldname => Empfaengerart. Empfaengerarten ohne Anrede in den
+     * Stammdaten (generischer Arztbrief) haben kein Feld und entfallen.
      *
      * @return array<string, string>
      */
@@ -64,7 +65,10 @@ final class PatientInput
     {
         $fields = [];
         foreach (LetterRecipient::TYPES as $type) {
-            $fields[LetterSalutation::field($type)] = $type;
+            $field = LetterSalutation::field($type);
+            if ($field !== '') {
+                $fields[$field] = $type;
+            }
         }
         return $fields;
     }

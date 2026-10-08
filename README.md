@@ -79,11 +79,14 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis. Briefe folgen
   **DIN 5008 (Form B)**. Empfänger per Checkbox: **Patient**, **Hausarzt** und
   **Überweisender Arzt** – je Empfänger entsteht ein eigener Brief mit dessen Anschrift und
-  dessen Anrede aus den Stammdaten.
+  dessen Anrede aus den Stammdaten. Ist weder für den Hausarzt noch für den Überweisenden Arzt
+  eine Anschrift hinterlegt, bietet der Assistent zusätzlich **Arztbrief generisch erstellen**:
+  Der Brief geht dann an „An die weiterbehandelnden Ärztinnen und Ärzte" und wird mit
+  „Sehr geehrte Kollegin, sehr geehrter Kollege," angeredet.
 - **Vorlageneditor für Briefe** (System → *Briefvorlage bearbeiten*, öffnet in neuem Tab):
   alle festen Texte bearbeiten, Bausteine per Drag and Drop anordnen, Live-Vorschau und
   PDF-Vorschau. Vorlagen werden **je Empfängerart getrennt** (Patient, Hausarzt, Überweisender
-  Arzt) und **versioniert** gepflegt; einzelne Bausteine lassen sich per Rechtsklick aus einer
+  Arzt, Arztbrief generisch) und **versioniert** gepflegt; einzelne Bausteine lassen sich per Rechtsklick aus einer
   anderen Vorlage übernehmen. Jeder Brief kann mit seiner ursprünglichen
   Vorlage reproduziert oder – auf ausdrücklichen Wunsch – mit der aktuellen Vorlage neu
   ausgefertigt werden. Technische Referenz: [docs/editor-referenz.md](docs/editor-referenz.md).
@@ -591,6 +594,14 @@ verlinkt die Stammdaten. Ist keine Anrede gepflegt, weist er darauf hin, dass de
 „Sehr geehrte Damen und Herren,“ druckt. Vorausgewählt sind die Ärzte mit vollständiger
 Anschrift, der Patient nur auf Wunsch. Mindestens ein Empfänger ist Pflicht.
 
+Hat **weder der Hausarzt noch der Überweisende Arzt** eine Anschrift in den Stammdaten,
+erscheint eine weitere Checkbox **Arztbrief generisch erstellen** (vorausgewählt). Der Brief
+geht dann an „An die weiterbehandelnden Ärztinnen und Ärzte" und wird mit
+„Sehr geehrte Kollegin, sehr geehrter Kollege," angeredet; er nutzt die eigene Vorlage
+*Arztbrief generisch* mit eigenem Fassungsverlauf. Sobald eine Arztanschrift gepflegt ist,
+verschwindet die Checkbox wieder – die generische Anschrift ist nur der Ersatz für einen
+fehlenden Empfänger.
+
 ![Empfänger wählen](docs/screenshots/50-brief-assistent-empfaenger.png)
 
 **5. Zusammenfassung** – Patient, Briefnummer(n), Empfänger, Baustein *Berichte*, Textteile,
@@ -678,7 +689,7 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 | GET | `/letters` | Übersicht mit Suche (Patient, Patienten-ID, Bericht-Nr.) |
 | GET | `/letters/new` | Patient für einen neuen Brief wählen |
 | GET | `/letters/new?patient={id}&report={id}` | Assistent (Schritte 2–6) |
-| POST | `/letters` | Briefe erzeugen, je Eintrag in `recipients[]` (`patient`, `family_doctor`, `referring_physician`) einer (CSRF, beide Bestätigungen) |
+| POST | `/letters` | Briefe erzeugen, je Eintrag in `recipients[]` (`patient`, `family_doctor`, `referring_physician`, `generic`) einer (CSRF, beide Bestätigungen) |
 | GET | `/letters/patients/{patient}` | Alle Briefe eines Patienten |
 | GET | `/letters/{id}` | Briefdetail mit Snapshot |
 | GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
@@ -687,7 +698,7 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 | GET | `/system/settings` | Praxis-Informationen und Rücksendeangaben für Briefe und Ausweise |
 | POST | `/system/settings` | Praxis-Informationen speichern (neue Fassung, CSRF) |
 | GET | `/system/settings/logo` | Hinterlegtes Logo ausliefern |
-| GET | `/system/letter-templates` | Vorlageneditor (eigener Tab), `?type=patient|family_doctor|referring_physician` |
+| GET | `/system/letter-templates` | Vorlageneditor (eigener Tab), `?type=patient|family_doctor|referring_physician|generic` |
 | POST | `/system/letter-templates` | Vorlage als neue Fassung speichern (JSON-Antwort, CSRF; Feld `type`) |
 | POST | `/system/letter-templates/preview` | PDF-Vorschau einer ungespeicherten Vorlage mit Beispieldaten |
 | GET | `/system/letter-templates/source` | Aktuelle Vorlage einer Empfängerart als JSON (Bausteine übernehmen) |
@@ -695,8 +706,9 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 
 ### Briefvorlage und Vorlageneditor
 
-Vorlagen werden **je Empfängerart getrennt** gepflegt: **Patient**, **Hausarzt** und
-**Überweisender Arzt** haben jeweils eine eigene Standardvorlage mit eigenem Fassungsverlauf.
+Vorlagen werden **je Empfängerart getrennt** gepflegt: **Patient**, **Hausarzt**,
+**Überweisender Arzt** und **Arztbrief generisch** haben jeweils eine eigene Standardvorlage
+mit eigenem Fassungsverlauf.
 Die Art wird im Funktionsband gewählt; ein Wechsel fragt bei ungespeicherten Änderungen nach.
 Einzelne Bausteine lassen sich per **Rechtsklick** auf einen Baustein über *Übernehmen aus
 Vorlage → Vorlagenname* aus der Vorlage einer anderen Art übernehmen (eindeutige Bausteine
@@ -711,6 +723,7 @@ Stammdaten wird sie je Empfänger gepflegt:
 |---|---|---|
 | Patient | Herr, Frau, Divers | `Sehr geehrter Herr Mustermann,` · `Sehr geehrte Frau Mustermann,` · `Guten Tag Mustermann, Erika,` |
 | Hausarzt / Überweisender Arzt | Kollege, Kollegin, Unpersönlich (Praxis/Klinik) | `Sehr geehrter Herr Kollege,` · `Sehr geehrte Frau Kollegin,` · `Sehr geehrte Damen und Herren,` |
+| Arztbrief generisch | keine Angabe (feste Anrede) | `Sehr geehrte Kollegin, sehr geehrter Kollege,` |
 
 Ohne Angabe (oder bei fehlendem Nachnamen) druckt der Brief „Sehr geehrte Damen und Herren,“;
 der Brief-Assistent weist vor dem Erzeugen darauf hin.
@@ -885,11 +898,12 @@ erDiagram
   (`NULL` = kein Baustein „Berichte"). `sequence_no` ist die laufende Nummer je Patient,
   `letter_version` die Fassung je Patient und Bericht (`UNIQUE (patient_id, sequence_no)`).
 - **letter_template_versions** ist der unveränderliche Fassungsverlauf der Briefvorlagen. Jede
-  Empfängerart (`template_type`: `patient`, `family_doctor`, `referring_physician`) hat ihren
+  Empfängerart (`template_type`: `patient`, `family_doctor`, `referring_physician`, `generic`) hat ihren
   eigenen Verlauf (`UNIQUE (template_type, version_no)`); jede Speicherung fügt eine neue Fassung
   ein. Jeder Brief friert die Vorlage seiner Empfängerart samt Anrede
   (`snapshot.recipient.salutation`) ein. Die Anrede selbst steht in
-  `patient_card_master_data` (`salutation`, `physician_salutation`, `referrer_salutation`).
+  `patient_card_master_data` (`salutation`, `physician_salutation`, `referrer_salutation`); der
+  generische Arztbrief (`generic`) hat keine Anrede in den Stammdaten und wird fest angeredet.
 
 ## PDF-Berichte
 

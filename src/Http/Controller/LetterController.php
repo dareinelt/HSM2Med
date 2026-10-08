@@ -234,6 +234,25 @@ final class LetterController extends Controller
     // -------------------------------------------------------------------- Helfer
 
     /**
+     * Vorauswahl der Empfaenger im Assistenten: die Aerzte mit vollstaendiger Anschrift, sonst
+     * der generische Arztbrief. Der Patient wird nie vorausgewaehlt.
+     *
+     * @param array<string, array<string, mixed>> $recipients Ergebnis von LetterRecipient::all()
+     * @return list<string>
+     */
+    private static function defaultRecipients(array $recipients): array
+    {
+        $selected = array_values(array_filter(
+            [LetterRecipient::FAMILY_DOCTOR, LetterRecipient::REFERRING_PHYSICIAN],
+            static fn (string $type): bool => ($recipients[$type]['available'] ?? false) === true,
+        ));
+        if ($selected === [] && ($recipients[LetterRecipient::GENERIC]['available'] ?? false) === true) {
+            $selected[] = LetterRecipient::GENERIC;
+        }
+        return $selected;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function loadLetter(int $letterId, bool $withContent = false): array
@@ -271,11 +290,9 @@ final class LetterController extends Controller
             'report_id' => $reportId,
             'confirm_data' => false,
             'confirm_letter' => false,
-            // Vorauswahl: die Aerzte, deren Anschrift vollstaendig ist.
-            'recipients' => array_values(array_filter(
-                [LetterRecipient::FAMILY_DOCTOR, LetterRecipient::REFERRING_PHYSICIAN],
-                static fn (string $type): bool => $recipients[$type]['available'],
-            )),
+            // Vorauswahl: die Aerzte, deren Anschrift vollstaendig ist; gibt es keinen, der
+            // generische Arztbrief (nur waehlbar, wenn keine Arztanschrift vorliegt).
+            'recipients' => self::defaultRecipients($recipients),
         ];
         $startStep = 2;
         foreach ([2 => ['report_id'], 4 => ['recipients'], 6 => ['patient_id', 'confirm_data', 'confirm_letter']] as $step => $keys) {

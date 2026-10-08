@@ -210,6 +210,7 @@
         patient: 'Sehr geehrte Frau MUSTERMANN,',
         family_doctor: 'Sehr geehrter Herr Kollege,',
         referring_physician: 'Sehr geehrter Herr Kollege,',
+        generic: 'Sehr geehrte Kollegin, sehr geehrter Kollege,',
     };
 
     function fill(text) {

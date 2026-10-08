@@ -15,7 +15,7 @@ Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender s
 | Aufruf | System → *Briefvorlage bearbeiten* (Kopf der Systemseite und Funktionsband), öffnet `target="_blank"` |
 | Technik | Eigenständige Seite, Vanilla JS ohne Bibliotheken, CSP-konform (keine Inline-Skripte/-Styles) |
 | Speicherung | Jede Speicherung = neue, unveränderliche **Fassung** (`letter_template_versions`) |
-| Vorlagen | Getrennt je Empfängerart (`patient`, `family_doctor`, `referring_physician`), je Art ein eigener Fassungsverlauf |
+| Vorlagen | Getrennt je Empfängerart (`patient`, `family_doctor`, `referring_physician`, `generic`), je Art ein eigener Fassungsverlauf |
 | Wirkung | Nur auf **neu** erstellte Briefe; bestehende Briefe tragen ihre Vorlage eingefroren im Snapshot |
 | Prüfung | Verbindlich serverseitig in `LetterTemplate::normalize()`; der Editor prüft nur zur Bedienhilfe |
 
@@ -71,6 +71,12 @@ Standardtexte) und den Fassungsverlauf; das JSON selbst enthält sie nicht.
 | `patient` | Patient | `Standardvorlage` |
 | `family_doctor` | Hausarzt | `Standardvorlage Hausarzt` |
 | `referring_physician` | Überweisender Arzt | `Standardvorlage Überweisender Arzt` |
+| `generic` | Arztbrief generisch | `Standardvorlage Arztbrief generisch` |
+
+Die Art `generic` ist der Ersatz für einen fehlenden Empfänger: Sie wird im Brief-Assistenten
+nur angeboten, wenn weder Hausarzt noch Überweisender Arzt eine Anschrift in den Stammdaten
+haben. Ihr Anschriftfeld ist fest (`An die weiterbehandelnden Ärztinnen und Ärzte`), ihre
+Anrede ebenfalls.
 
 ```json
 {
@@ -143,6 +149,7 @@ eine Vorlage für alle Empfänger derselben Art verwendbar.
 | `patient` | `salutation` | `herr`, `frau`, `divers` |
 | `family_doctor` | `physician_salutation` | `kollege`, `kollegin`, `unpersoenlich` |
 | `referring_physician` | `referrer_salutation` | `kollege`, `kollegin`, `unpersoenlich` |
+| `generic` | – (kein Feld) | feste Anrede `Sehr geehrte Kollegin, sehr geehrter Kollege,` |
 
 `LetterSalutation::text()` bildet daraus die Anredezeile:
 
@@ -154,6 +161,7 @@ eine Vorlage für alle Empfänger derselben Art verwendbar.
 | `kollege` | `Sehr geehrter Herr Kollege,` |
 | `kollegin` | `Sehr geehrte Frau Kollegin,` |
 | `unpersoenlich` | `Sehr geehrte Damen und Herren,` |
+| – (`generic`) | `Sehr geehrte Kollegin, sehr geehrter Kollege,` (fest) |
 
 Ohne Angabe, bei unbekanntem Wert, bei fehlendem Nachnamen (Patient) bzw. außerhalb der
 aufgelisteten Werte (Arzt) gilt der Rückfall `LetterSalutation::FALLBACK`
@@ -268,7 +276,7 @@ Startdaten (`LetterTemplateController::editor()`):
 ```text
 definition  LetterTemplate::editorDefinition($type)  (schema, type, types, zones, blocks,
             placeholders, pagePlaceholders, maxBlocks, limits, default)
-type        Empfängerart des Editors (patient|family_doctor|referring_physician)
+type        Empfängerart des Editors (patient|family_doctor|referring_physician|generic)
 current     aktuelle Fassung {id, type, version_no, name, comment, created_at, content_sha256, content}
 versions    [{id, version_no, name, comment, created_at, letter_count}]
 csrf        CSRF-Token
