@@ -37,6 +37,20 @@ final class Ribbon
     ];
 
     /**
+     * Ziele, die einen aktiven Patienten voraussetzen (patientenbezogene Vorgaenge).
+     *
+     * Der Patientenvorgang ist fuehrend: Solange kein Patient ausgewaehlt ist, sind diese
+     * Schaltflaechen gesperrt. Listen und Nachschlagewerke bleiben erreichbar.
+     *
+     * @var list<string>
+     */
+    private const array PATIENT_REQUIRED = [
+        '/import',
+        '/patient-cards/new',
+        '/letters/new',
+    ];
+
+    /**
      * @return array<string, array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>}>}>}>
      */
     private static function definition(): array
@@ -275,6 +289,42 @@ final class Ribbon
     public static function sections(): array
     {
         return self::SECTIONS;
+    }
+
+    /**
+     * Setzt ein Ziel einen aktiven Patienten voraus?
+     */
+    public static function requiresPatient(string $href): bool
+    {
+        return in_array($href, self::PATIENT_REQUIRED, true);
+    }
+
+    /**
+     * Alle gesperrten Ziele (Reiter, Schaltflaechen und Schnellzugriff) – Grundlage fuer Tests.
+     *
+     * @return list<string>
+     */
+    public static function patientRequiredTargets(): array
+    {
+        $targets = [];
+        foreach (self::tabs() as $tab) {
+            if (self::requiresPatient($tab['href'])) {
+                $targets[] = $tab['href'];
+            }
+            foreach ($tab['groups'] as $group) {
+                foreach ($group['items'] as $item) {
+                    if (self::requiresPatient($item['href'])) {
+                        $targets[] = $item['href'];
+                    }
+                }
+            }
+        }
+        foreach (self::quickAccess() as $item) {
+            if (self::requiresPatient($item['href'])) {
+                $targets[] = $item['href'];
+            }
+        }
+        return array_values(array_unique($targets));
     }
 
     /**

@@ -14,8 +14,13 @@ use RuntimeException;
  */
 final class View
 {
-    public function __construct(private readonly string $templateDir)
-    {
+    /**
+     * @param (\Closure(): array{id:int,name:string,birth:string,identifier:string}|null)|null $activePatient
+     */
+    public function __construct(
+        private readonly string $templateDir,
+        private readonly ?\Closure $activePatient = null,
+    ) {
     }
 
     /**
@@ -28,6 +33,7 @@ final class View
             'content' => $content,
             'title' => (string) ($vars['title'] ?? Config::APP_NAME),
             'active' => $active,
+            'activePatient' => $this->activePatient === null ? null : ($this->activePatient)(),
             'flashes' => session_status() === PHP_SESSION_ACTIVE ? SessionManager::takeFlashes() : [],
         ]);
     }

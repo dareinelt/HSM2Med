@@ -178,6 +178,9 @@ Weitere Bedienelemente der Kopfzeile:
   *Ausweis erstellen*, *Brief erstellen*) sind zusätzlich oben rechts erreichbar.
 * **Dokumenttitel** – zeigt den Namen der aktuellen Seite und, sofern sinnvoll, den
   Datensatz (z. B. Patient und Geburtsdatum).
+* **Aktiver Patient** – zeigt links in der Titelleiste den aktiven Patienten
+  (Name und Geburtsdatum) oder den Hinweis *Kein Patient gewählt*; siehe
+  [Der Patientenvorgang ist führend](#der-patientenvorgang-ist-führend).
 * **Datenschutz** – Schaltfläche zum Datenschutz-Abschnitt der Systemseite.
 
 Das Dashboard zeigt zusätzlich fünf große **Einstiegskacheln** für die häufigsten
@@ -195,6 +198,28 @@ automatisch ausgeblendet.
 | **Briefe** | Brief zur Schrittmacher-/ICD-Abfrage aus der Akte erzeugen, durchsuchen und als unveränderliches PDF abrufen |
 | **Importprotokoll** | Alle Importe inkl. fehlgeschlagener, mit Warnungen/Fehlern je Datensatz |
 | **Systeminformationen** | Versionen, Datenbank- und Migrationsstatus, Limits |
+
+### Der Patientenvorgang ist führend
+
+Alle Vorgänge, die einen Patientenbezug herstellen, setzen einen **aktiven Patienten** voraus:
+*Import*, *Ausweis erstellen* und *Brief erstellen*. Ohne Auswahl eines Patienten sind diese
+Einträge im Funktionsband und im Schnellzugriff ausgegraut und nicht anklickbar; ein direkter
+Aufruf der Adresse (`/import`, `/patient-cards/new`, `/letters/new`) leitet auf die
+Patientenübersicht um und weist auf die fehlende Auswahl hin.
+
+![Import ohne aktiven Patienten gesperrt](docs/screenshots/47-patientenvorgang-gesperrt.png)
+
+Der aktive Patient steht in der Titelleiste und in der Statusleiste. Ausgewählt wird er in der
+Patientenübersicht über *Auswählen* oder in der Akte über *Als aktiven Patienten wählen*;
+*Auswahl aufheben* entfernt die Zuordnung wieder. **Das Anlegen eines Patienten wählt ihn
+automatisch als aktiven Patienten** – nach dem Anlegen kann der Import also sofort erfolgen.
+
+![Aktiver Patient in der Patientenübersicht](docs/screenshots/48-patient-aktiv.png)
+
+Die Auswahl gilt für die laufende Sitzung. Listen, Übersichten und Auswertungen
+(Patientenübersicht, Berichte, Importprotokoll, Ausweis- und Briefübersichten,
+Systeminformationen) bleiben auch ohne aktiven Patienten erreichbar, ebenso das Anlegen eines
+Patienten unter `/patients/new`.
 
 **1. Upload und Prüfung** – die Datei wird validiert und analysiert, aber noch nicht gespeichert:
 
@@ -231,7 +256,9 @@ Vormedikation und Epikrise schon vor dem Importprozess erfassbar; der Import ord
 Bericht später über die Identität demselben Patienten zu. Die Akte selbst erzeugt keine
 medizinischen Bewertungen: gespeichert wird ausschließlich, was eingegeben wurde. Aus diesen
 Bausteinen erzeugt die Anwendung den [Brief zur
-Schrittmacher-/ICD-Abfrage](#brief-zur-schrittmacher-icd-abfrage).
+Schrittmacher-/ICD-Abfrage](#brief-zur-schrittmacher-icd-abfrage). Da der
+[Patientenvorgang führend](#der-patientenvorgang-ist-führend) ist, wird ein neu angelegter
+Patient automatisch als aktiver Patient gesetzt.
 
 ![Patientenübersicht](docs/screenshots/24-akte-uebersicht.png)
 
@@ -241,7 +268,8 @@ Schrittmacher-/ICD-Abfrage](#brief-zur-schrittmacher-icd-abfrage).
 Geburtsdatum; optional sind Patienten-ID, Anschrift, Telefon und Indikation. Das Geburtsdatum
 wird als `TT.MM.JJJJ` erfasst (zusätzlich erkannt: `JJJJ-MM-TT`, `TT/MM/JJJJ`, `TT-MM-JJJJ`) und
 als ISO-Datum gespeichert; unplausible oder in der Zukunft liegende Daten werden abgelehnt.
-Das Formular meldet Fehler je Feld mit HTTP 422 und behält die Eingaben.
+Das Formular meldet Fehler je Feld mit HTTP 422 und behält die Eingaben. Nach dem Speichern
+führt es auf die Akte; der neue Patient ist dort als aktiver Patient gekennzeichnet.
 
 ![Patient anlegen](docs/screenshots/25-akte-anlegen.png)
 
@@ -845,12 +873,18 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   `tests/Integration/LetterViewTest.php`).
   Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
   unvollständige Formulare, fehlende CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
+- **Patientenvorgang (Integration/Unit):** `tests/Integration/PatientFirstWorkflowTest.php`
+  prüft, dass der aktive Patient beim Anlegen automatisch gesetzt wird, Wechsel und Aufheben
+  funktionieren, eine veraltete Auswahl verworfen wird und die patientenbezogenen Routen ohne
+  Auswahl gesperrt bleiben, während Listen und Übersichten erreichbar sind;
+  `tests/Unit/ActivePatientTest.php` deckt die Sitzungslogik ab.
 - **Oberflächengerüst (Unit):** `tests/Unit/IconTest.php` prüft die Symbolbibliothek
   (`src/Http/Icon.php`) – jedes Symbol liefert eingebettetes SVG ohne externe Verweise, ein
   unbekannter Name fällt auf das Ersatzsymbol zurück, Klassennamen werden maskiert.
   `tests/Unit/RibbonTest.php` prüft das Funktionsband (`src/Http/Ribbon.php`) – eindeutige
   Reiter, Beschriftungen, interne Ziele, auflösbare Symbole, die Zuordnung von `$active`-Schlüsseln
-  zu Reitern sowie die unveränderten Routen der Ziele.
+  zu Reitern, die unveränderten Routen der Ziele sowie die patientenbezogenen Ziele, die einen
+  aktiven Patienten voraussetzen.
 - **Brief zur Schrittmacher-/ICD-Abfrage:** Assistent (`prepare()`) mit Warnungen für fehlende
   Bausteine, Anhang und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
   (HTTP 422, kein Datensatz), Snapshot und Unveränderlichkeit (Patientendaten, Bausteinfassungen
@@ -870,13 +904,16 @@ docker compose --profile docs run --rm screenshots
 docker compose --profile docs down -v
 ```
 
-Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Import der
-Testdatei, Stammdaten mit Beispiel-Logo, Patient mit Anamnese, Vormedikation, Epikrise und
-Schrittmacher-/ICD-Abfrage, Patientenausweis, Brief zur Schrittmacher-/ICD-Abfrage) und erzeugt
-daraus die Bilder `01`–`46`, darunter Assistent, Konfliktdialog, Patientenakte, die Abfrage mit
+Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Patient mit
+Anamnese, Vormedikation, Epikrise und Schrittmacher-/ICD-Abfrage, Import der Testdatei,
+Stammdaten mit Beispiel-Logo, Patientenausweis, Brief zur Schrittmacher-/ICD-Abfrage) und erzeugt
+daraus die Bilder `01`–`48`, darunter die Sperre des Importvorgangs ohne Patienten (`47`), den
+automatisch aktiven Patienten (`48`), Assistent, Konfliktdialog, Patientenakte, die Abfrage mit
 Vorbelegung und Sperrung der MRT-Tauglichkeit, beide Seiten des Ausweis-PDF, der Brief-Assistent
 (Schritte 2–5), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–3 des
-Brief-PDF. Das Skript prüft dabei zugleich die harten Anforderungen: Das Ausweis-PDF hat **genau
+Brief-PDF. Das Skript prüft dabei zugleich die harten Anforderungen: Der Import leitet ohne
+aktiven Patienten auf die Patientenübersicht um, das Anlegen eines Patienten setzt ihn als
+aktiven Patienten, das Ausweis-PDF hat **genau
 zwei** Seiten, Seite 1 nennt die MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die
 Abfrage wird gespeichert; das Brief-PDF hat **mindestens zwei** Seiten und enthält Titel,
 Anamnese, Vormedikation, Epikrise, den Befundteil, den Anhang, die MRT-Tauglichkeit und die

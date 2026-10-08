@@ -10,8 +10,11 @@
  * @var array<string, array<string, mixed>> $records
  * @var list<App\Patient\PatientRecordType> $types
  * @var list<array<string, mixed>> $reports
+ * @var int|null $activePatientId
  */
 $id = (int) $patient['id'];
+$activePatientId = $activePatientId ?? null;
+$isActive = $activePatientId === $id;
 $masterRows = [
     'Straße und Hausnummer' => 'street',
     'Postleitzahl' => 'postal_code',
@@ -21,7 +24,11 @@ $masterRows = [
 ?>
 <div class="page-head">
     <div>
-        <h1><?= $icon('patients', 'app-icon app-icon--lg') ?><span><?= $e($patient['patient_name']) ?></span></h1>
+        <h1><?= $icon('patients', 'app-icon app-icon--lg') ?><span><?= $e($patient['patient_name']) ?></span>
+            <?php if ($isActive): ?>
+                <span class="badge badge-ok"><?= $icon('check', 'app-icon app-icon--sm') ?> Aktiver Patient</span>
+            <?php endif; ?>
+        </h1>
         <p class="lead">
             Patient Nr. <?= $e($id) ?>
             · geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?>
@@ -31,12 +38,33 @@ $masterRows = [
         </p>
     </div>
     <div class="actions">
+        <?php if ($isActive): ?>
+            <form method="post" action="/patients/select/clear" class="inline">
+                <?= $csrf() ?>
+                <button type="submit" data-once><?= $icon('undo') ?> <span data-label>Auswahl aufheben</span></button>
+            </form>
+        <?php else: ?>
+            <form method="post" action="/patients/<?= $e($id) ?>/select" class="inline">
+                <?= $csrf() ?>
+                <button type="submit" class="primary" data-once><?= $icon('patients') ?> <span data-label>Als aktiven Patienten wählen</span></button>
+            </form>
+        <?php endif; ?>
         <a class="button" href="/patients/<?= $e($id) ?>/edit"><?= $icon('edit') ?> <span>Stammdaten bearbeiten</span></a>
         <a class="button" href="/patient-cards/patients/<?= $e($id) ?>"><?= $icon('cards') ?> <span>Ausweise und Nachsorge</span></a>
         <a class="button" href="/letters/patients/<?= $e($id) ?>"><?= $icon('letters') ?> <span>Briefe</span></a>
         <a class="button" href="/patients"><?= $icon('back') ?> <span>Zur Übersicht</span></a>
     </div>
 </div>
+
+<?php if (!$isActive): ?>
+    <div class="alert alert-info" role="status">
+        <?= $icon('info') ?>
+        <span><?= $activePatientId !== null
+            ? 'Aktiver Patient ist derzeit Nr. ' . $e($activePatientId) . '. '
+            : 'Es ist kein Patient ausgewählt. ' ?>
+            Import, Patientenausweis und Brief setzen den aktiven Patienten voraus.</span>
+    </div>
+<?php endif; ?>
 
 <div class="grid-2">
     <section class="card">

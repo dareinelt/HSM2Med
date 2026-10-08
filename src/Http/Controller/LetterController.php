@@ -66,6 +66,8 @@ final class LetterController extends Controller
                 'query' => $query,
                 'rows' => $this->app->letterService()->patientChoices($query),
                 'steps' => self::WIZARD_STEPS,
+                // Der aktive Patient ist vorausgewaehlt; die Liste bleibt zum Wechseln erhalten.
+                'activePatient' => $this->app->activePatientSummary(),
             ], 'letters'));
         }
 
@@ -89,6 +91,7 @@ final class LetterController extends Controller
                 'query' => '',
                 'rows' => $this->app->letterService()->patientChoices(''),
                 'steps' => self::WIZARD_STEPS,
+                'activePatient' => $this->app->activePatientSummary(),
                 'errors' => $e->fieldErrors(),
                 'message' => $e->getMessage(),
             ], 'letters'), 422);

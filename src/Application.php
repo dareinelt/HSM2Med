@@ -17,6 +17,7 @@ use App\Letter\LetterPdfGenerator;
 use App\Letter\LetterRepository;
 use App\Letter\LetterService;
 use App\Mapping\ParameterMapping;
+use App\Patient\ActivePatient;
 use App\Patient\DeviceCheckPrefill;
 use App\Patient\DeviceCheckTemplate;
 use App\Patient\PatientRecordRepository;
@@ -52,6 +53,7 @@ final class Application
     private ?PatientRecordRepository $patientRecordRepository = null;
     private ?PatientService $patientService = null;
     private ?PatientRecordService $patientRecordService = null;
+    private ?ActivePatient $activePatient = null;
 
     public function __construct(
         public readonly Config $config,
@@ -148,6 +150,24 @@ final class Application
     public function patientService(): PatientService
     {
         return $this->patientService ??= new PatientService($this->pdo(), $this->patientRepository(), $this->clock);
+    }
+
+    /**
+     * Der je Sitzung gewaehlte Patient (Patientenvorgang als fuehrender Kontext).
+     */
+    public function activePatient(): ActivePatient
+    {
+        return $this->activePatient ??= new ActivePatient();
+    }
+
+    /**
+     * Kurzangaben zum aktiven Patienten fuer die Oberflaeche (null, wenn keiner gewaehlt ist).
+     *
+     * @return array{id:int,name:string,birth:string,identifier:string}|null
+     */
+    public function activePatientSummary(): ?array
+    {
+        return $this->activePatient()->summary($this->patientService());
     }
 
     public function patientRecordService(): PatientRecordService
