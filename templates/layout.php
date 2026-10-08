@@ -159,8 +159,8 @@ $gated = static fn (string $href): bool => $activePatient === null && Ribbon::re
         </button>
     </form>
     <div class="author-info__body">
-        <p>HSM2Med ist eine unterstützende Applikation zur Vereinfachung der Herzschrittmachernachsorge. Es handelt sich um kein Medizinprodukt. Ausschlaggebend für Therapie und Beurteilung sind die Daten aus dem Auslesegerät und dem Primärsystem (PVS).</p>
-        <p>Teile des Programmcodes wurden mit Hilfe künstlicher Intelligenz erstellt (Anthropic Claude Opus 5.5, Deepseek 4.1 Flash, Qwen3.8).</p>
+        <p><strong>HSM2Med</strong> ist eine unterstützende Anwendung zur Vereinfachung und Strukturierung der Herzschrittmachernachsorge. Die Anwendung ist <strong>kein Medizinprodukt</strong>. Für die Therapieentscheidung und medizinische Beurteilung sind ausschließlich die Daten des Auslesegeräts und des Primärsystems (PVS) maßgeblich.</p>
+        <p>Teile des Programmcodes wurden unter Einsatz von <strong>künstlicher Intelligenz</strong> erstellt (Anthropic Claude Opus 5.5, DeepSeek 4.1 Flash, Qwen3.8).</p>
     </div>
 </dialog>
 </body>

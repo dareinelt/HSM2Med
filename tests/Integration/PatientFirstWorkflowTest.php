@@ -278,8 +278,9 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
         $this->assertContains('data-author-info', $response->body);
         $this->assertContains('HSM2Med by Daniel-André Reinelt', $response->body);
         $this->assertContains('data-author-info-dialog', $response->body);
-        $this->assertContains('Es handelt sich um kein Medizinprodukt.', $response->body);
-        $this->assertContains('Anthropic Claude Opus 5.5, Deepseek 4.1 Flash, Qwen3.8', $response->body);
+        $this->assertContains('<strong>kein Medizinprodukt</strong>', $response->body);
+        $this->assertContains('Für die Therapieentscheidung und medizinische Beurteilung', $response->body);
+        $this->assertContains('Anthropic Claude Opus 5.5, DeepSeek 4.1 Flash, Qwen3.8', $response->body);
     }
 
     /** Eine veraltete Auswahl wird beim Auflösen verworfen. */

@@ -366,8 +366,11 @@ button, .button { display: inline-flex; align-items: center; gap: .4rem; }
 
 /* Overlay mit der Autoren-Info (nur ueber das Schliessen-Kreuz zu verlassen) */
 .author-info {
+    /* Der Schliessen-Knopf belegt oben eine eigene Zeile. Unten wird derselbe
+       Freiraum ergaenzt, damit der Textblock optisch mittig im Kasten sitzt. */
+    --author-info-close: 1.7rem;
     width: min(36rem, calc(100vw - 2rem));
-    padding: 1rem 1.3rem 1.3rem;
+    padding: 1rem 1.3rem calc(1rem + var(--author-info-close) + .3rem);
     border: 1px solid var(--office-line-strong);
     border-radius: 8px;
     background: var(--office-ribbon);
@@ -381,6 +384,8 @@ button, .button { display: inline-flex; align-items: center; gap: .4rem; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: var(--author-info-close);
+    height: var(--author-info-close);
     padding: .3rem;
     border: 1px solid transparent;
     border-radius: 5px;
