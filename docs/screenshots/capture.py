@@ -27,6 +27,10 @@ SAMPLE = Path(os.environ.get("SAMPLE_FILE", "/work/tests/fixtures/merlin_sample.
 OUT = Path(os.environ.get("OUT_DIR", "/work/docs/screenshots"))
 VIEWPORT = {"width": 1366, "height": 900}
 
+# Zugangsdaten der Screenshot-Instanz (siehe Profil "docs" in docker-compose.yml).
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "docs-admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "docs-screenshot-kennwort")
+
 # Beispielstammdaten des Patientenausweises (frei erfunden, kein Patientenbezug).
 CENTER_NAME = "Herzzentrum Musterstadt - Nachsorgezentrum"
 CENTER_ADDRESS = "Nachsorgezentrum Schrittmacher\nMusterstrasse 1\n12345 Musterstadt\nTelefon 01234 56789"
@@ -90,6 +94,23 @@ def upload(page: Page, path: str) -> None:
     page.set_input_files("input[name=file]", path)
     page.click("form.upload-form button[type=submit]")
     page.wait_for_load_state()
+
+
+def login(page: Page, username: str = ADMIN_USERNAME, password: str = ADMIN_PASSWORD) -> None:
+    """Meldet sich ueber das Anmeldefenster an.
+
+    Die Anwendung ist ohne Anmeldung nicht bedienbar: Beim Aufruf erscheint die Oberflaeche
+    gesperrt hinter dem Anmeldefenster. Alle weiteren Aufrufe setzen diese Anmeldung voraus.
+    """
+
+    page.goto(f"{BASE_URL}/")
+    page.wait_for_selector(".login-card")
+    page.fill("#login-username", username)
+    page.fill("#login-password", password)
+    page.click(".login-card button[type=submit]")
+    page.wait_for_load_state()
+    if page.locator(".login-card").count() > 0:
+        raise SystemExit("Anmeldung an der Weboberflaeche fehlgeschlagen.")
 
 
 def logo_png(width: int = 320, height: int = 96) -> bytes:
@@ -178,6 +199,13 @@ def main() -> int:
         page = context.new_page()
 
         print("Screenshots:")
+        # Ohne Anmeldung wird die Oberflaeche gesperrt hinter dem Anmeldefenster geladen.
+        page.goto(f"{BASE_URL}/")
+        if page.locator(".login-card").count() == 0:
+            raise SystemExit("Das Anmeldefenster fehlt.")
+        shot(page, "54-anmeldung", full_page=False)
+
+        login(page)
         page.goto(f"{BASE_URL}/")
         shot(page, "01-dashboard-leer")
 
@@ -287,10 +315,18 @@ def main() -> int:
         logo = Path(tempfile.gettempdir()) / "logo_beispiel.png"
         logo.write_bytes(logo_png())
 
-        page.goto(f"{BASE_URL}/patient-cards/settings")
+        # Praxis-Informationen und Logo werden im Bereich System gepflegt und von
+        # Briefen wie Ausweisen gemeinsam genutzt.
+        page.goto(f"{BASE_URL}/system/settings")
         page.set_input_files("input[name=logo]", str(logo))
         page.fill("input[name=center_name]", CENTER_NAME)
         page.fill("textarea[name=center_address]", CENTER_ADDRESS)
+        page.click("form button[type=submit]")
+        page.wait_for_load_state()
+        shot(page, "59-praxis-informationen")
+
+        # Die Ausweistexte haben eine eigene Seite mit eigener Fassung.
+        page.goto(f"{BASE_URL}/patient-cards/settings")
         page.fill("textarea[name=notice_text]", NOTICE_TEXT)
         page.fill("textarea[name=flight_notice_de]", FLIGHT_NOTICE_DE)
         page.fill("textarea[name=flight_notice_en]", FLIGHT_NOTICE_EN)
@@ -533,6 +569,30 @@ def main() -> int:
         editor.wait_for_selector("[data-te-versions-dialog][open]")
         shot(editor, "53-vorlageneditor-fassungen", full_page=False)
         editor.close()
+
+        # --- Benutzerverwaltung: Konten, Gruppen und Berechtigungsmatrix --------
+        page.goto(f"{BASE_URL}/system/users")
+        if "Benutzerverwaltung" not in page.content():
+            print("Die Benutzerverwaltung ist nicht erreichbar.", file=sys.stderr)
+            return 1
+        shot(page, "55-benutzerverwaltung")
+
+        page.goto(f"{BASE_URL}/system/users/new")
+        page.fill("input[name=username]", "dr.muster")
+        page.fill("input[name=display_name]", "Dr. med. Erika Muster")
+        page.locator("input[name='groups[]']").last.check()
+        page.fill("input[name=password]", "beispiel-kennwort-2026")
+        page.fill("input[name=repeat_password]", "beispiel-kennwort-2026")
+        shot(page, "56-benutzer-anlegen")
+
+        page.goto(f"{BASE_URL}/system/users/groups")
+        shot(page, "57-benutzer-gruppen")
+
+        # Berechtigungsmatrix einer Gruppe: Rechte werden hier gepflegt, nicht im Code.
+        page.locator("a[href^='/system/users/groups/']").first.click()
+        page.wait_for_load_state()
+        page.wait_for_selector("table[data-matrix]")
+        shot(page, "58-gruppen-rechte")
 
         letter_pdf = context.request.get(f"{letter_url}/pdf?download=1")
         if not letter_pdf.ok or not letter_pdf.body().startswith(b"%PDF-"):

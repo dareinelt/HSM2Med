@@ -43,6 +43,18 @@ final readonly class Request
         return is_string($value) ? $value : $default;
     }
 
+    /**
+     * Angeforderter Pfad samt Abfrage – Ziel fuer die Weiterleitung nach der Anmeldung.
+     */
+    public function target(): string
+    {
+        if ($this->query === []) {
+            return $this->path;
+        }
+        $query = http_build_query($this->query, '', '&', PHP_QUERY_RFC3986);
+        return $query === '' ? $this->path : $this->path . '?' . $query;
+    }
+
     public function post(string $key, string $default = ''): string
     {
         $value = $this->post[$key] ?? $default;

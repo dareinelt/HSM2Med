@@ -90,7 +90,15 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   anderen Vorlage übernehmen. Jeder Brief kann mit seiner ursprünglichen
   Vorlage reproduziert oder – auf ausdrücklichen Wunsch – mit der aktuellen Vorlage neu
   ausgefertigt werden. Technische Referenz: [docs/editor-referenz.md](docs/editor-referenz.md).
-- CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
+- CLI für Import, PDF-Export, Migrationen, Schema-Erzeugung und das Anlegen des Administrators.
+- **Anmeldung und Benutzerverwaltung**: Ohne Anmeldung ist die Anwendung nicht bedienbar. Beim
+  Aufruf wird die Oberfläche geladen und erscheint hinter dem Anmeldefenster leicht abgedunkelt
+  und deutlich unscharf; das Fenster ist das einzige bedienbare Element. Benutzerkonten werden
+  **Gruppen** zugeordnet; welche Gruppe welche Bereiche des Funktionsbands sehen und öffnen darf,
+  wird als **Rechtematrix** in der Oberfläche gepflegt (nicht im Code). Vorgegeben sind die
+  Gruppen **Admin** (Vollzugriff einschließlich Benutzerverwaltung), **MFA** (Tagesgeschäft:
+  Import, Akten, Ausweise, Briefe) und **Arzt** (alle medizinischen Bereiche, Vorlagen,
+  Systeminformationen und Protokoll).
 - Keine externen Abhängigkeiten zur Laufzeit: kein CDN, keine Webfonts, keine Composer-Pakete.
 
 Technik: PHP 8.5 (nativ, `strict_types`, PDO), MySQL 9.7, Apache, Docker Compose.
@@ -108,7 +116,9 @@ docker compose up -d --build
 
 Die Oberfläche ist anschließend unter <http://127.0.0.1:8080> erreichbar
 (standardmäßig **nur lokal**, siehe `WEB_BIND_ADDRESS`). Beim Start des Web-Containers
-werden ausstehende Datenbankmigrationen automatisch ausgeführt.
+werden ausstehende Datenbankmigrationen automatisch ausgeführt und das Administratorkonto aus
+`ADMIN_USERNAME`/`ADMIN_PASSWORD` angelegt. Die erste Anmeldung erfolgt mit diesen Werten;
+das Kennwort ist danach unter *Kennwort ändern* zu ersetzen (die Oberfläche weist darauf hin).
 
 Statusprüfung: `curl http://127.0.0.1:8080/health` → `{"status":"ok","database":"ok"}`.
 
@@ -130,9 +140,16 @@ Alternativ kann das Schema ohne Migrator eingespielt werden:
 | `UPLOAD_MAX_SIZE` | `5M` | Maximale Uploadgröße (Bytes oder `K`/`M`/`G`); PHP-Limits werden beim Start daraus abgeleitet |
 | `PDF_RAW_APPENDIX_DEFAULT` | `0` | Rohdatenanhang im PDF standardmäßig anfügen |
 | `SESSION_SECURE_COOKIE` | `0` | `1` setzen, wenn ein HTTPS-Reverse-Proxy vorgeschaltet ist |
+| `ADMIN_USERNAME` | `admin` | Anmeldename des Administratorkontos, das beim Start angelegt wird |
+| `ADMIN_PASSWORD` | `bitte-aendern-admin-passwort` | Startkennwort dieses Kontos – **unbedingt ändern** |
+| `AUTH_IDLE_MINUTES` | `30` | Automatische Abmeldung nach dieser Zeit ohne Bedienung (1–1440) |
 | `WEB_BIND_ADDRESS`, `WEB_PORT` | `127.0.0.1`, `8080` | Adresse/Port auf dem Host |
 
 `.env` enthält Zugangsdaten und darf nicht eingecheckt werden (steht in `.gitignore`).
+`ADMIN_PASSWORD` wird nur beim **ersten** Anlegen des Kontos verwendet; spätere Änderungen an
+`.env` wirken nicht auf ein bestehendes Konto (das Kennwort wird in der Anwendung geändert).
+Ist kein Administratorkonto mehr erreichbar, setzt `docker compose exec web php bin/seed-admin.php --force`
+das Kennwort auf den Wert aus `.env` zurück.
 
 ## Start, Stopp, Aktualisierung
 
@@ -175,12 +192,54 @@ docker compose up -d   # ohne --build
 
 Die Oberfläche ist wie ein Office-Programm aufgebaut: oben ein **Funktionsband (Ribbon)**
 mit Reitern, darunter der Arbeitsbereich der jeweiligen Seite und am unteren Rand eine
-Statusleiste mit dem aktiven Patienten, dem Hinweis zur Verwendung der Daten und der
-**Autoren-Info** (`HSM2Med by Daniel-André Reinelt`). Funktionsband und Statusleiste
+Statusleiste mit dem aktiven Patienten, dem angemeldeten Benutzerkonto, dem Hinweis zur
+Verwendung der Daten und der **Autoren-Info** (`HSM2Med by Daniel-André Reinelt`).
+Funktionsband und Statusleiste
 bleiben am oberen bzw. unteren Bildschirmrand stehen und sind damit auch bei langen
 Seiten ohne Scrollen sichtbar. Ein Klick auf die Autoren-Info öffnet
 einen Hinweistext zu Anspruch und Entstehung der Anwendung; das Overlay lässt sich
 ausschließlich über das Schließen-Kreuz oben rechts verlassen.
+
+### Anmeldung
+
+Die Anwendung ist ohne Anmeldung **nicht bedienbar**. Beim Aufruf einer beliebigen Seite wird
+die Oberfläche geladen, aber gesperrt und hinter dem **Anmeldefenster** dargestellt: der
+Hintergrund ist leicht abgedunkelt und deutlich unscharf, das Fenster ist das einzige
+bedienbare Element. Nach der Anmeldung wird die ursprünglich aufgerufene Seite geöffnet.
+
+![Anmeldefenster über der abgedunkelten und unscharfen Oberfläche](docs/screenshots/54-anmeldung.png)
+
+* Ohne Bedienung meldet die Anwendung nach `AUTH_IDLE_MINUTES` automatisch ab.
+* Nach fünf Fehlanmeldungen wird ein Konto für 15 Minuten gesperrt.
+* Über die Statusleiste sind **Kennwort ändern** (`/account/password`, für jedes Konto) und
+  **Abmelden** erreichbar.
+* Ein Konto, das noch das Kennwort aus `.env` verwendet, wird in der Benutzerverwaltung
+  ausdrücklich gekennzeichnet.
+
+### Benutzerverwaltung (System → *Benutzerverwaltung*)
+
+Sichtbar und erreichbar nur für Gruppen mit dem Recht **Benutzerverwaltung** (vorgegeben: *Admin*).
+
+* **Benutzerkonten** (`/system/users`): Anmeldename, Anzeigename, Gruppen, Aktivstatus; Kennwörter
+  werden ausschließlich als Hash gespeichert und lassen sich nur **neu setzen**
+  (`/system/users/{id}/password`), nie auslesen.
+* **Gruppen und Rechte** (`/system/users/groups`): Gruppen anlegen, umbenennen und löschen;
+  die **Rechtematrix** je Gruppe bestimmt, welche Bereiche des Funktionsbands sichtbar und
+  aufrufbar sind. Die Matrix ist die einzige Quelle für Rechte – es gibt keine Rechte im Code.
+  Die drei vorgegebenen Gruppen *Admin*, *MFA* und *Arzt* sind Systemgruppen: sie lassen sich
+  in den Rechten ändern, aber nicht löschen.
+* Rechte werden bei jedem Aufruf serverseitig geprüft. Verweise in Bereiche ohne Recht
+  erscheinen gar nicht erst; ein direkter Aufruf der Adresse wird abgewiesen.
+* Die letzte Gruppe mit dem Recht *Benutzerverwaltung* kann nicht so geändert oder gelöscht
+  werden, dass niemand mehr die Benutzerverwaltung öffnen könnte.
+
+![Benutzerverwaltung mit Konten und Gruppen](docs/screenshots/55-benutzerverwaltung.png)
+
+![Benutzer anlegen mit Gruppen und Kennwortregeln](docs/screenshots/56-benutzer-anlegen.png)
+
+![Gruppen mit Mitgliederzahl](docs/screenshots/57-benutzer-gruppen.png)
+
+![Rechtematrix einer Gruppe](docs/screenshots/58-gruppen-rechte.png)
 
 **Funktionsband (Ribbon)** – jeder Reiter bündelt die Funktionen eines Themas in Gruppen
 mit großen Symbolen und Beschriftung:
@@ -196,7 +255,9 @@ mit großen Symbolen und Beschriftung:
 | **System** | *Praxis* (Praxis-Informationen, Briefvorlage); *Betrieb* (Systeminformationen, Importprotokoll); *Daten und Datenschutz* (Datenschutz, Berichte) |
 
 Der jeweils aktuelle Reiter ist hervorgehoben; welcher Reiter zu einer Seite gehört, steuert
-`src/Http/Ribbon.php` über den `$active`-Schlüssel der Seite.
+`src/Http/Ribbon.php` über den `$active`-Schlüssel der Seite. Angezeigt werden nur Reiter und
+Schaltflächen, für die das angemeldete Konto das Recht hat; Grundlage ist dieselbe Zuordnung,
+die der Server durchsetzt (`App\User\Permission::forPath()`).
 
 Weitere Bedienelemente der Kopfzeile:
 
@@ -223,6 +284,7 @@ automatisch ausgeblendet.
 | **Patienten** | Patientenakte: Patienten vor dem Import anlegen, Stammdaten pflegen, Anamnese/Vormedikation/Befund/Epikrise/Notiz und Schrittmacher-/ICD-Abfrage als versionierte Bausteine |
 | **Briefe** | Brief zur Schrittmacher-/ICD-Abfrage aus der Akte erzeugen, durchsuchen und als unveränderliches PDF abrufen |
 | **Importprotokoll** | Alle Importe inkl. fehlgeschlagener, mit Warnungen/Fehlern je Datensatz |
+| **Benutzerverwaltung** | Konten, Gruppen und die Rechtematrix je Gruppe (nur mit entsprechendem Recht) |
 | **Systeminformationen** | Versionen, Datenbank- und Migrationsstatus, Limits |
 
 ### Der Patientenvorgang ist führend
@@ -648,6 +710,8 @@ Kontaktzeile mit Telefon, Fax, E-Mail und Internetseite) und Rücksendeangabe st
 **Praxis-Informationen** (`/system/settings`, Reiter *System* unter *Praxis*) und sind im
 Snapshot des Briefes eingefroren.
 
+![Praxis-Informationen im Bereich System](docs/screenshots/59-praxis-informationen.png)
+
 Briefe der Fassung 1 (vor Einführung der Vorlagen) behalten ihren damaligen Aufbau:
 
 Seite 1: Kopfbereich mit Logo und Nachsorgezentrum, Titel „Brief zur Schrittmacher-/ICD-Abfrage",
@@ -785,9 +849,18 @@ docker compose cp web:/tmp/bericht-1.pdf ./bericht-1.pdf
 
 # Migrationen manuell ausführen
 docker compose exec -u www-data web php bin/migrate.php
+
+# Administrator anlegen bzw. Kennwort setzen (idempotent)
+docker compose exec -u www-data web php bin/seed-admin.php
+docker compose exec -u www-data web php bin/seed-admin.php --force   # Kennwort neu setzen
+docker compose exec -u www-data web php bin/seed-admin.php --wait=30 # auf die Datenbank warten
 ```
 
 Exit-Codes `import.php`: `0` Erfolg, `1` Import fehlgeschlagen, `2` Aufruffehler, `3` Dublette.
+
+`seed-admin.php` legt die Gruppe *Admin* (alle Rechte), die Standardgruppen *MFA* und *Arzt*
+sowie den Benutzer aus `ADMIN_USERNAME`/`ADMIN_PASSWORD` an. Ohne `--force` bleibt ein bereits
+vorhandenes Kennwort unverändert; der Benutzer wird dann nur in die Gruppe *Admin* aufgenommen.
 
 ## Importformat
 
@@ -986,8 +1059,17 @@ bleiben unverändert, weil jede Fassung ihren Inhalt als Snapshot speichert.
 
 - **Netz:** standardmäßig nur an `127.0.0.1` gebunden; Datenbank nur im internen Netz.
   Für Zugriff im Praxisnetz einen Reverse-Proxy mit TLS vorschalten und
-  `SESSION_SECURE_COOKIE=1` setzen. Die Anwendung enthält **keine Benutzerverwaltung** –
-  der Zugriff ist über Netzwerk bzw. Proxy (z. B. Basic-Auth, Client-Zertifikate) zu beschränken.
+  `SESSION_SECURE_COOKIE=1` setzen.
+- **Anmeldung und Rechte:** Jede Seite außer `/health` setzt eine Anmeldung voraus; ohne
+  Anmeldung erscheint die Oberfläche gesperrt hinter dem Anmeldefenster. Kennwörter werden
+  ausschließlich als **Hash** (bcrypt) gespeichert und sind nicht auslesbar. Nach fünf
+  Fehlanmeldungen wird ein Konto 15 Minuten gesperrt; unbekannte Anmeldenamen liefern dieselbe
+  Meldung wie ein falsches Kennwort. Rechte werden über Gruppen und die in der Oberfläche
+  gepflegte Rechtematrix vergeben und **bei jedem Aufruf serverseitig** geprüft
+  (`App\User\Permission::forPath()`); die Oberfläche blendet nur zusätzlich aus, was ohnehin
+  verboten ist. Nach `AUTH_IDLE_MINUTES` ohne Bedienung wird die Sitzung beendet. Es ist zu
+  empfehlen, den Netzwerkzugriff zusätzlich über Proxy bzw. Firewall zu beschränken und das
+  Kennwort aus `.env` sofort zu ändern.
 - **Uploads:** Größenlimit, nur `.txt`/`.log`, Inhaltsprüfung (Magic Bytes, MIME-Typ,
   0x1C-Pflicht, NUL-Anteil), bereinigte Dateinamen; Uploads werden außerhalb des Webroots
   unter zufälligem Token zwischengespeichert (Gültigkeit 1 h), das Archiv ist schreibgeschützt.
@@ -996,6 +1078,10 @@ bleiben unverändert, weil jede Fassung ihren Inhalt als Snapshot speichert.
   Inline-Skripte, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, kein Caching.
 - **Daten:** ausschließlich vorbereitete Statements, strikter SQL-Modus, Ausgabe-Escaping
   aller Werte, nur lokale Weiterleitungen.
+- **Sitzung:** Die Kennung der angemeldeten Person liegt serverseitig in der Sitzung; ein
+  Wechsel des Kontos in der Datenbank wirkt sofort. Die automatische Abmeldung
+  (`AUTH_IDLE_MINUTES`) misst die Zeit seit der letzten Bedienung. Das Anmeldefenster nimmt
+  als Rücksprungziel ausschließlich anwendungsinterne Pfade an (kein offener Umleitungspfad).
 - **Fehler:** in `production` keine technischen Details im Browser, nur eine Referenz-ID;
   Details stehen im Anwendungsprotokoll (`/var/www/storage/logs/app.log`) und sind unter
   `/system/logs` (Fehlerprotokoll) nach Referenz durchsuchbar.
@@ -1081,6 +1167,29 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   (bestehende Installationen erhalten getrennte Vorlagen und `{salutation}`) sowie
   `testTemplateEditorSeparatesRecipientTypes` in `tests/Integration/LetterViewTest.php`
   (getrennte Fassungen je Art, Rückfall auf die Patientenvorlage, Bausteinquelle als JSON).
+- **Berechtigungen (Unit):** `tests/Unit/PermissionTest.php` prüft, dass der Rechtekatalog genau
+  die Bereiche des Funktionsbandes abbildet, jeder Eintrag eine Beschreibung hat, `forPath()`
+  jeden Pfad auf das richtige Recht abbildet, spezifische Pfade ihre Präfixe schlagen und
+  unbekannte Einträge beim Normalisieren entfallen.
+- **Benutzerverwaltung (Integration):** `tests/Integration/UserServiceTest.php` deckt die
+  Migration (Gruppen *Admin*, *MFA*, *Arzt*), das idempotente Anlegen und Zurücksetzen des
+  Administrators samt Prüfung seiner Umgebungswerte, die Kennwortablage **nur** als Hash,
+  Anlegen/Ändern/Löschen von Benutzern, Dubletten- und Gruppenprüfung, die Selbstsperre, die
+  Kontosperre nach fünf Fehlversuchen samt Ablauf, das Setzen von Kennwörtern, die
+  Rechte-Matrix je Gruppe, die Regel „der letzte Benutzerverwalter kann sich nicht aussperren",
+  Systemgruppen und Gruppenzählung ab. `tests/Integration/AuthTest.php` prüft Sitzung ohne
+  Anmeldung, Anmeldung und Abmeldung, den Ablauf nach Leerlauf (und die Verlängerung durch
+  Aktivität), einen Zeitstempel in der Zukunft, deaktivierte und gelöschte Konten, frisch
+  gelesene Rechte je Anfrage, das eigene Kennwort sowie die Normalisierung des Benutzernamens
+  bei der Anmeldung. `tests/Unit/UserInputTest.php` deckt Normalisierung und Prüfregeln der
+  Eingaben ab (Benutzername, Kennwortlänge, Anzeigename, Gruppenzuordnung, Rechtevereinigung
+  mehrerer Gruppen).
+- **Anmeldung und Benutzeroberfläche (Integration):** `tests/Integration/LoginViewTest.php`
+  prüft das Anmeldefenster über der abgedunkelten und unscharfen Oberfläche, die Wahrung des
+  angeforderten Ziels (und die Abwehr externer Ziele), die Fehlermeldung ohne Hinweis auf die
+  Existenz eines Kontos, Benutzerliste und -formular (Gruppen, Kennwortregeln, Fehleranzeige),
+  die Rechte-Matrix, das eigene Konto (auch ohne jedes Recht), die Statusleiste mit Anmeldung
+  und Abmeldung sowie das Ausblenden von Funktionsband und Links ohne Recht.
 
 ## Screenshots für die Dokumentation
 
@@ -1096,12 +1205,18 @@ docker compose --profile docs down -v
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Patient mit
 Anamnese, Vormedikation, Befund, Epikrise und Schrittmacher-/ICD-Abfrage, Import der Testdatei,
 Stammdaten mit Beispiel-Logo, Patientenausweis, Brief zur Schrittmacher-/ICD-Abfrage) und erzeugt
-daraus die Bilder `01`–`53`, darunter Hausarzt und überweisender Arzt in den Stammdaten
+daraus die Bilder `01`–`59`, darunter das Anmeldefenster (`54`), die Benutzerverwaltung
+(`55`–`58`), die Praxis-Informationen (`59`), Hausarzt und überweisender Arzt in den Stammdaten
 (`49`), die Empfängerauswahl des Brief-Assistenten (`50`), den Vorlageneditor (`51`–`53`), die Sperre des Importvorgangs ohne Patienten (`47`), den
 automatisch aktiven Patienten (`48`), Assistent, Konfliktdialog, Patientenakte, die Abfrage mit
 Vorbelegung und Sperrung der MRT-Tauglichkeit, beide Seiten des Ausweis-PDF, der Brief-Assistent
 (Schritte 2–6, drei Empfänger), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–4 des
-Brief-PDF. Das Skript prüft dabei zugleich die harten Anforderungen: Der Import leitet ohne
+Brief-PDF. Das Skript meldet sich zu Beginn über das Anmeldefenster an (Zugangsdaten der
+Dokumentationsinstanz: `ADMIN_USERNAME=docs-admin`, `ADMIN_PASSWORD=docs-screenshot-kennwort`,
+siehe `docker-compose.yml`) und bricht ab, wenn die Oberfläche ohne Anmeldung erreichbar wäre.
+Das Skript prüft dabei zugleich die harten Anforderungen: Die Oberfläche ist ohne Anmeldung
+gesperrt und zeigt das Anmeldefenster, die Benutzerverwaltung ist nach der Anmeldung erreichbar,
+der Import leitet ohne
 aktiven Patienten auf die Patientenübersicht um, das Anlegen eines Patienten setzt ihn als
 aktiven Patienten, das Ausweis-PDF hat **genau
 zwei** Seiten, Seite 1 nennt die MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die
@@ -1111,7 +1226,8 @@ Anhang unter der Grußformel auf einer neuen Seite), den Anhang, die MRT-Tauglic
 Tachykardie-Abschnitte sowie die Anschrift des Hausarztes im Anschriftfeld. Der Build des
 Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
-Templates, `src/` oder `public/assets/` ist `docker compose build web-docs` erforderlich. Ein
+Templates, `src/` oder `public/assets/` ist ein Neubau erforderlich
+(`docker compose --profile docs run --rm --build screenshots`). Ein
 abgebrochener Lauf hinterlässt Daten in der flüchtigen Datenbank; vor einem neuen Versuch
 `docker compose --profile docs down -v` ausführen.
 
@@ -1163,7 +1279,7 @@ sämtliche Daten.
 ## Projektstruktur
 
 ```
-bin/                 CLI: import, export-pdf, migrate, build-schema, php-limits
+bin/                 CLI: import, export-pdf, migrate, build-schema, seed-admin, php-limits
 config/              parameter_mapping.php (Kategorien, Feldzuordnung),
                      patient_card_measurements.php, device_check_template.php
 database/            migrations/ (maßgeblich) und schema.sql (generiert)
@@ -1178,8 +1294,9 @@ src/                 Anwendungscode (Namespace App\)
   Mapping/           Parameterzuordnung
   Patient/           Patientenakte (Patient, Bausteine, Fassungen)
   Report/            Berichtsdaten, Zusammenfassung, PDF (Pdf/)
-  Repository/        Datenbankabfragen
-  Security/          Session, CSRF, Uploadprüfung
-templates/           PHP-Templates (HTML; u. a. letters/ für den Brief)
+  Repository/        Datenbankabfragen (Importe, Berichte, Benutzer, Gruppen)
+  Security/          Auth (Anmeldung, Ruhezeit), Session, CSRF, Uploadprüfung
+  User/              Benutzer, Gruppen, Rechte (Permission), Benutzerdienst
+templates/           PHP-Templates (HTML; u. a. letters/, login/, users/, account/)
 tests/               Testrunner, Unit-/Integrationstests, Fixtures
 ```

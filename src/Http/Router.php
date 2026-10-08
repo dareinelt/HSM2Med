@@ -9,28 +9,35 @@ namespace App\Http;
  *
  * Erlaubte Platzhaltertypen: {id}/{patient} (Ziffern), {token} (Hex-Token),
  * {slug} (kleingeschriebener Bezeichner, z. B. Bausteintyp der Patientenakte).
+ *
+ * Jede Route nennt das Recht, das sie voraussetzt (null = ohne Recht erreichbar). Das Recht
+ * wird im Kernel geprueft, nicht hier – der Router kennt nur die Zuordnung. Die Zuordnung
+ * muss zu Permission::forPath() passen; ein Test haelt beides deckungsgleich, damit die
+ * Anzeige (ausgeblendete Ziele) und die Sperre nie auseinanderlaufen.
  */
 final class Router
 {
-    /** @var list<array{method: string, regex: string, handler: callable, patient: bool}> */
+    /** @var list<array{method: string, pattern: string, regex: string, handler: callable, permission: ?string, patient: bool}> */
     private array $routes = [];
 
     /**
-     * @param bool $requiresPatient Der Patientenvorgang ist fuehrend: ohne aktiven Patienten
-     *                             ist die Route nicht erreichbar.
+     * @param ?string $permission     Recht, das die Route voraussetzt (null = kein Recht noetig)
+     * @param bool    $requiresPatient Der Patientenvorgang ist fuehrend: ohne aktiven Patienten
+     *                                ist die Route nicht erreichbar.
      */
-    public function get(string $pattern, callable $handler, bool $requiresPatient = false): void
+    public function get(string $pattern, callable $handler, ?string $permission = null, bool $requiresPatient = false): void
     {
-        $this->add('GET', $pattern, $handler, $requiresPatient);
+        $this->add('GET', $pattern, $handler, $permission, $requiresPatient);
     }
 
     /**
-     * @param bool $requiresPatient Der Patientenvorgang ist fuehrend: ohne aktiven Patienten
-     *                             ist die Route nicht erreichbar.
+     * @param ?string $permission     Recht, das die Route voraussetzt (null = kein Recht noetig)
+     * @param bool    $requiresPatient Der Patientenvorgang ist fuehrend: ohne aktiven Patienten
+     *                                ist die Route nicht erreichbar.
      */
-    public function post(string $pattern, callable $handler, bool $requiresPatient = false): void
+    public function post(string $pattern, callable $handler, ?string $permission = null, bool $requiresPatient = false): void
     {
-        $this->add('POST', $pattern, $handler, $requiresPatient);
+        $this->add('POST', $pattern, $handler, $permission, $requiresPatient);
     }
 
     /**
@@ -38,13 +45,35 @@ final class Router
      */
     public function requiresPatient(Request $request): bool
     {
-        $method = $request->method === 'HEAD' ? 'GET' : $request->method;
-        foreach ($this->routes as $route) {
-            if ($route['method'] === $method && preg_match($route['regex'], $request->path) === 1) {
-                return $route['patient'];
-            }
-        }
-        return false;
+        $route = $this->match($request);
+        return $route['patient'] ?? false;
+    }
+
+    /**
+     * Recht, das die angeforderte Route voraussetzt (null = kein Recht noetig).
+     */
+    public function permission(Request $request): ?string
+    {
+        $route = $this->match($request);
+        return $route['permission'] ?? null;
+    }
+
+    /**
+     * Alle registrierten Routen (Grundlage fuer Tests und Dokumentation).
+     *
+     * @return list<array{method:string,pattern:string,permission:?string,patient:bool}>
+     */
+    public function definitions(): array
+    {
+        return array_map(
+            static fn (array $route): array => [
+                'method' => $route['method'],
+                'pattern' => $route['pattern'],
+                'permission' => $route['permission'],
+                'patient' => $route['patient'],
+            ],
+            $this->routes,
+        );
     }
 
     public function dispatch(Request $request): Response
@@ -68,7 +97,21 @@ final class Router
         throw HttpException::notFound();
     }
 
-    private function add(string $method, string $pattern, callable $handler, bool $requiresPatient): void
+    /**
+     * @return array{method: string, pattern: string, regex: string, handler: callable, permission: ?string, patient: bool}|null
+     */
+    private function match(Request $request): ?array
+    {
+        $method = $request->method === 'HEAD' ? 'GET' : $request->method;
+        foreach ($this->routes as $route) {
+            if ($route['method'] === $method && preg_match($route['regex'], $request->path) === 1) {
+                return $route;
+            }
+        }
+        return null;
+    }
+
+    private function add(string $method, string $pattern, callable $handler, ?string $permission, bool $requiresPatient): void
     {
         $regex = preg_replace_callback('/\{(\w+)\}/', static fn (array $m): string => match ($m[1]) {
             'token' => '(?P<token>[a-f0-9]{32})',
@@ -77,8 +120,10 @@ final class Router
         }, $pattern);
         $this->routes[] = [
             'method' => $method,
+            'pattern' => $pattern,
             'regex' => '#^' . $regex . '$#D',
             'handler' => $handler,
+            'permission' => $permission,
             'patient' => $requiresPatient,
         ];
     }

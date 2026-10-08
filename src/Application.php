@@ -33,13 +33,18 @@ use App\PatientCard\PatientCardService;
 use App\PatientCard\PatientCardSettingsService;
 use App\Report\ReportService;
 use App\Report\ReportSummaryBuilder;
+use App\Repository\GroupRepository;
 use App\Repository\ImportRepository;
 use App\Repository\ReportRepository;
+use App\Repository\UserRepository;
+use App\Security\Auth;
 use App\Security\ImageUploadValidator;
 use App\Support\Clock;
 use App\Support\LogReader;
 use App\Support\Logger;
 use App\Support\SystemClock;
+use App\User\User;
+use App\User\UserService;
 use PDO;
 
 /**
@@ -57,6 +62,10 @@ final class Application
     private ?PatientService $patientService = null;
     private ?PatientRecordService $patientRecordService = null;
     private ?ActivePatient $activePatient = null;
+    private ?UserRepository $userRepository = null;
+    private ?GroupRepository $groupRepository = null;
+    private ?UserService $userService = null;
+    private ?Auth $auth = null;
 
     public function __construct(
         public readonly Config $config,
@@ -240,6 +249,46 @@ final class Application
     public function pendingUploads(): PendingUploadStore
     {
         return new PendingUploadStore($this->config->dataDir . '/pending', $this->clock);
+    }
+
+    public function userRepository(): UserRepository
+    {
+        return $this->userRepository ??= new UserRepository($this->pdo());
+    }
+
+    public function groupRepository(): GroupRepository
+    {
+        return $this->groupRepository ??= new GroupRepository($this->pdo());
+    }
+
+    public function userService(): UserService
+    {
+        return $this->userService ??= new UserService(
+            $this->pdo(),
+            $this->userRepository(),
+            $this->groupRepository(),
+            $this->clock,
+        );
+    }
+
+    /**
+     * Anmeldestatus der Sitzung (Benutzer, Gruppen, Rechte).
+     */
+    public function auth(): Auth
+    {
+        return $this->auth ??= new Auth(
+            $this->userRepository(),
+            $this->clock,
+            $this->config->authIdleSeconds(),
+        );
+    }
+
+    /**
+     * Angemeldete Person fuer die Oberflaeche (null, wenn keine Anmeldung vorliegt).
+     */
+    public function currentUser(): ?User
+    {
+        return $this->auth()->user();
     }
 
     public function migrator(): Migrator

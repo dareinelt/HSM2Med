@@ -52,7 +52,9 @@ final class LetterTemplateMigrationTest extends DatabaseTestCase
             $id = (int) $this->pdo->lastInsertId();
 
             $applied = (new Migrator($this->pdo, $root . '/database/migrations'))->migrate();
-            $this->assertSame(['009_letter_template_types', '010_practice_settings', '011_patient_record_befund', '012_generic_letter_template'], $applied);
+            // Nur die fuer diesen Test relevanten Migrationen pruefen; spaetere ergaenzen die Liste.
+            $expected = ['009_letter_template_types', '010_practice_settings', '011_patient_record_befund', '012_generic_letter_template'];
+            $this->assertSame($expected, array_slice($applied, 0, count($expected)));
 
             $row = $this->pdo->query('SELECT template_type, content FROM letter_template_versions WHERE id = ' . $id)->fetch(PDO::FETCH_ASSOC);
             $this->assertSame('patient', $row['template_type']);

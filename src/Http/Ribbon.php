@@ -35,6 +35,8 @@ final class Ribbon
         'imports' => 'Importprotokoll',
         'system' => 'Systeminformationen',
         'system_settings' => 'Praxis-Informationen',
+        'letter_templates' => 'Briefvorlagen',
+        'users' => 'Benutzerverwaltung',
         'logs' => 'Fehlerprotokoll',
     ];
 
@@ -210,7 +212,7 @@ final class Ribbon
                         'label' => 'Vorlagen',
                         'items' => [
                             ['label' => 'Praxis-Informationen', 'icon' => 'settings', 'href' => '/system/settings', 'title' => 'Praxis, Kontaktangaben, Logo und Rücksendeangaben für die Briefe pflegen', 'match' => []],
-                            ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => [], 'target' => '_blank'],
+                            ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => ['letter_templates'], 'target' => '_blank'],
                         ],
                     ],
                     [
@@ -227,12 +229,19 @@ final class Ribbon
                 'label' => 'System',
                 'icon' => 'system',
                 'href' => '/system',
-                'sections' => ['system', 'system_settings', 'logs'],
+                'sections' => ['system', 'system_settings', 'logs', 'letter_templates', 'users'],
                 'groups' => [
                     [
                         'label' => 'Praxis',
                         'items' => [
                             ['label' => 'Praxis-Informationen', 'icon' => 'settings', 'href' => '/system/settings', 'title' => 'Praxis, Kontaktangaben, Logo und Rücksendeangaben für Briefe und Ausweise pflegen', 'match' => ['system_settings']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Zugang',
+                        'items' => [
+                            ['label' => 'Benutzerverwaltung', 'icon' => 'users', 'href' => '/system/users', 'title' => 'Benutzerkonten, Gruppen und deren Rechte verwalten', 'match' => ['users']],
+                            ['label' => 'Eigenes Kennwort', 'icon' => 'key', 'href' => '/account/password', 'title' => 'Das eigene Kennwort ändern', 'match' => []],
                         ],
                     ],
                     [
@@ -246,7 +255,7 @@ final class Ribbon
                     [
                         'label' => 'Vorlagen',
                         'items' => [
-                            ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => [], 'target' => '_blank'],
+                            ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => ['letter_templates'], 'target' => '_blank'],
                         ],
                     ],
                     [

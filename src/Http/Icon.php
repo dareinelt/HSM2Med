@@ -64,6 +64,12 @@ final class Icon
         'help' => '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.4-1 .9-1 1.6M12 16.8h.01"/>',
         'pulse' => '<path d="M2.5 12h4l2-5.5 3 11 2.5-5.5H21.5"/>',
         'list' => '<path d="M4 6h16M4 12h16M4 18h10"/>',
+        // Benutzer und Zugang
+        'user' => '<circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/>',
+        'users' => '<circle cx="9.5" cy="8" r="3.2"/><path d="M3.2 19.5a6.3 6.3 0 0 1 12.6 0"/><path d="M16.2 5.4a3.2 3.2 0 0 1 0 5.6"/><path d="M17.4 14.2a6.3 6.3 0 0 1 3.4 5.3"/>',
+        'lock' => '<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/><path d="M12 14.5v2.5"/>',
+        'key' => '<circle cx="8" cy="15" r="3.5"/><path d="m10.6 12.4 7.4-7.4"/><path d="m15.4 7.6 2 2"/><path d="m17.4 5.6 2 2"/>',
+        'logout' => '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 8 6 12l4 4"/><path d="M6 12h9"/>',
 
         self::FALLBACK => '<circle cx="12" cy="12" r="3.5"/>',
     ];

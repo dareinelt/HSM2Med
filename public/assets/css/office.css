@@ -404,6 +404,109 @@ button, .button { display: inline-flex; align-items: center; gap: .4rem; }
 .author-info__body p { margin: 0 0 .8rem; }
 .author-info__body p:last-child { margin-bottom: 0; }
 
+/* ------------------------------------------------- Anmeldefenster (Overlay) */
+/*
+ * Beim Aufruf der Anwendung wird die Oberflaeche geladen und das Anmeldefenster
+ * darueber gelegt. Der Hintergrund wird leicht abgedunkelt und deutlich unscharf
+ * dargestellt; die Oberflaeche dahinter ist gesperrt (inert) und nicht bedienbar.
+ */
+body.office.is-locked { overflow: hidden; }
+body.office.is-locked .app-chrome,
+body.office.is-locked .workspace,
+body.office.is-locked .statusbar { user-select: none; }
+
+.login-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgba(16, 24, 40, .42);
+    -webkit-backdrop-filter: blur(10px) saturate(.85);
+    backdrop-filter: blur(10px) saturate(.85);
+    overflow-y: auto;
+}
+
+/* Ersatzloesung, falls der Browser backdrop-filter nicht kennt: dann wird die
+   Oberflaeche selbst unscharf gestellt. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    body.office.is-locked .app-chrome,
+    body.office.is-locked .workspace,
+    body.office.is-locked .statusbar { filter: blur(8px); }
+}
+
+.login-card {
+    width: min(26rem, 100%);
+    margin: auto;
+    padding: 1.4rem 1.6rem 1.2rem;
+    border: 1px solid var(--office-line-strong);
+    border-radius: 10px;
+    background: var(--office-ribbon);
+    color: var(--office-ink);
+    box-shadow: 0 24px 60px rgba(16, 24, 40, .45);
+}
+.login-card__head { display: flex; align-items: center; gap: .7rem; }
+.login-card__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 8px;
+    background: var(--office-accent);
+    color: #fff;
+}
+.login-card__title { margin: 0; font-size: 1.35rem; }
+.login-card__subtitle { margin: .1rem 0 0; color: var(--office-muted); font-size: .84rem; }
+.login-card__hint { margin: .9rem 0 0; color: var(--office-muted); font-size: .85rem; }
+.login-card .alert { margin: .9rem 0 0; }
+.login-card__actions { margin-top: 1.1rem; }
+.login-card__actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    width: 100%;
+    padding: .55rem .9rem;
+}
+.login-card__note {
+    margin: 1rem 0 0;
+    padding-top: .8rem;
+    border-top: 1px solid var(--office-line);
+    color: var(--office-muted);
+    font-size: .78rem;
+}
+@media (max-width: 480px) {
+    .login-overlay { padding: .8rem; }
+    .login-card { padding: 1.1rem 1rem .9rem; }
+}
+
+/* Platzhalterzeilen im gesperrten Hintergrund: keine Daten vor der Anmeldung. */
+.skeleton-line { display: inline-block; width: 4.5rem; height: .6rem; border-radius: 999px; background: var(--office-line); }
+.skeleton-line--wide { width: 9rem; }
+
+/* ----------------------------------------------------- Benutzerverwaltung */
+.statusbar__link {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
+}
+.statusbar__link:hover { color: var(--office-accent); text-decoration: underline; }
+.statusbar__link:focus-visible { outline: 2px solid var(--office-focus); outline-offset: 2px; border-radius: 3px; }
+.statusbar__form { display: inline-flex; margin: 0; }
+.statusbar__user { color: var(--office-ink); }
+.matrix-actions { margin: 0 0 .6rem; }
+.matrix th:first-child, .matrix td:first-child { width: 14rem; }
+.matrix th:nth-child(2), .matrix td:nth-child(2) { width: 8rem; }
+.matrix td .checkbox { margin: 0; }
+
 /* ------------------------------------------------------------- Anpassungen */
 @media (max-width: 1100px) {
     .titlebar__qb span { display: none; }

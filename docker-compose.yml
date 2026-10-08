@@ -45,6 +45,10 @@ services:
       UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-5M}
       PDF_RAW_APPENDIX_DEFAULT: ${PDF_RAW_APPENDIX_DEFAULT:-0}
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-0}
+      # Administratorkonto der Erstinstallation (Kennwort bitte in .env aendern)
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-bitte-aendern-admin-passwort}
+      AUTH_IDLE_MINUTES: ${AUTH_IDLE_MINUTES:-30}
       APP_DATA_DIR: /var/www/storage
       IMPORT_DATA_DIR: /data/imports
       TZ: ${APP_TIMEZONE:-Europe/Berlin}
@@ -144,6 +148,10 @@ services:
       APP_ENV: production
       APP_TIMEZONE: Europe/Berlin
       UPLOAD_MAX_SIZE: 5M
+      # Feste Zugangsdaten nur fuer die Screenshot-Instanz (fluechtige Datenbank).
+      ADMIN_USERNAME: docs-admin
+      ADMIN_PASSWORD: docs-screenshot-kennwort
+      AUTH_IDLE_MINUTES: 30
       APP_DATA_DIR: /var/www/storage
       IMPORT_DATA_DIR: /data/imports
       TZ: Europe/Berlin
@@ -163,6 +171,8 @@ services:
     environment:
       BASE_URL: http://web-docs
       OUT_DIR: /work/docs/screenshots
+      ADMIN_USERNAME: docs-admin
+      ADMIN_PASSWORD: docs-screenshot-kennwort
     volumes:
       - ./tests/fixtures:/work/tests/fixtures:ro
       - ./docs/screenshots:/work/docs/screenshots

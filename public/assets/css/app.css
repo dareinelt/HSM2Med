@@ -95,7 +95,7 @@ button, .button {
 button:hover, .button:hover { border-color: var(--primary); }
 button.primary, .button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
 button[disabled] { opacity: .6; cursor: progress; }
-input[type=text], input[type=search], input[type=date], input:not([type]), input[type=file] {
+input[type=text], input[type=search], input[type=date], input[type=password], input:not([type]), input[type=file] {
     font: inherit; padding: .4rem .5rem; border: 1px solid var(--border); border-radius: 4px; width: 100%; background: #fff;
 }
 input[type=tel], textarea, select {

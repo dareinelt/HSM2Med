@@ -16,6 +16,7 @@
  * @var array<string, list<string>> $sections
  * @var array<string, string> $errors
  * @var string|null $message
+ * @var Closure(string): bool $permitted
  */
 $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
 ?>
@@ -27,8 +28,10 @@ $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
     </div>
     <div class="actions">
         <a class="button" href="/system"><?= $icon('system') ?> <span>Systeminformationen</span></a>
-        <a class="button" href="/system/letter-templates" target="_blank" rel="noopener"
-           title="Feste Texte und Aufbau der Briefe bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Briefvorlage bearbeiten</span></a>
+        <?php if ($permitted('/system/letter-templates')): ?>
+            <a class="button" href="/system/letter-templates" target="_blank" rel="noopener"
+               title="Feste Texte und Aufbau der Briefe bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Briefvorlage bearbeiten</span></a>
+        <?php endif; ?>
     </div>
 </div>
 

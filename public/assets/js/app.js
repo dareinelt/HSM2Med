@@ -251,4 +251,30 @@ document.addEventListener('DOMContentLoaded', () => {
         select.addEventListener('change', sync);
         sync();
     });
+
+    // Bestaetigung vor unwiderruflichen Aktionen (z. B. Gruppe loeschen).
+    // Ohne JavaScript wird die Aktion ausgefuehrt; der Server prueft in jedem Fall selbst.
+    document.querySelectorAll('form').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            const button = form.querySelector('button[data-confirm]');
+            if (!button || event.submitter !== button) {
+                return;
+            }
+            if (!window.confirm(button.dataset.confirm || 'Aktion ausfuehren?')) {
+                event.preventDefault();
+            }
+        });
+    });
+
+    // Rechtematrix: alle Rechte einer Gruppe auf einmal setzen oder aufheben.
+    document.querySelectorAll('table[data-matrix]').forEach((matrix) => {
+        const boxes = Array.from(matrix.querySelectorAll('input[name="permissions[]"]'));
+        const setAll = (checked) => boxes.forEach((box) => { box.checked = checked; });
+        document.querySelectorAll('[data-matrix-all]').forEach((button) => {
+            button.addEventListener('click', () => setAll(true));
+        });
+        document.querySelectorAll('[data-matrix-none]').forEach((button) => {
+            button.addEventListener('click', () => setAll(false));
+        });
+    });
 });
