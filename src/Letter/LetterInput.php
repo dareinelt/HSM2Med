@@ -9,15 +9,21 @@ namespace App\Letter;
  *
  * Der Brief entsteht ausschliesslich aus vorhandenen Daten: Patient (Pflicht), optional ein
  * Bericht (Befundteil) sowie die aktuellen Fassungen der Bausteine. Es gibt deshalb keine
- * Freitextfelder; geprueft werden Auswahl und die beiden Bestaetigungen vor dem Erzeugen.
+ * Freitextfelder; geprueft werden Auswahl, Empfaenger und die beiden Bestaetigungen vor dem
+ * Erzeugen. Je ausgewaehltem Empfaenger (Patient, Hausarzt, ueberweisender Arzt) entsteht ein
+ * eigener Brief.
  */
 final class LetterInput
 {
+    /**
+     * @param list<string> $recipients Empfaenger in fester Reihenfolge (LetterRecipient::TYPES)
+     */
     private function __construct(
         public readonly int $patientId,
         public readonly ?int $reportId,
         public readonly bool $confirmData,
         public readonly bool $confirmLetter,
+        public readonly array $recipients = [],
     ) {
     }
 
@@ -43,6 +49,13 @@ final class LetterInput
         }
         $reportId = $int('report_id');
 
+        $chosen = $post['recipients'] ?? [];
+        $chosen = is_array($chosen) ? array_filter($chosen, 'is_string') : [];
+        $recipients = array_values(array_filter(
+            LetterRecipient::TYPES,
+            static fn (string $type): bool => in_array($type, $chosen, true),
+        ));
+
         if ($errors !== []) {
             throw LetterException::validation($errors);
         }
@@ -52,17 +65,19 @@ final class LetterInput
             $reportId !== null && $reportId > 0 ? $reportId : null,
             ($post['confirm_data'] ?? '') === '1',
             ($post['confirm_letter'] ?? '') === '1',
+            $recipients,
         );
     }
 
     /**
      * Auswahlzustand fuer die erneute Anzeige nach einem Fehler.
      *
-     * @return array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool}
+     * @return array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool, recipients: list<string>}
      */
     public function selection(): array
     {
         return [
+            'recipients' => $this->recipients,
             'patient_id' => $this->patientId,
             'report_id' => $this->reportId,
             'confirm_data' => $this->confirmData,

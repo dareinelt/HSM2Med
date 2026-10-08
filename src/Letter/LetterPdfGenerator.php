@@ -268,8 +268,22 @@ final class LetterPdfGenerator
         }
     }
 
+    /**
+     * Anschrift: der im Assistenten gewaehlte Empfaenger (im Snapshot eingefroren). Briefe ohne
+     * Empfaenger (vor Migration 008 oder Vorschau) verwenden die Einstellung der Vorlage.
+     */
     private function recipientText(): string
     {
+        $recipient = $this->letter['recipient'] ?? null;
+        if (is_array($recipient)) {
+            $lines = array_values(array_filter(
+                array_map(static fn (mixed $line): string => trim((string) $line), (array) ($recipient['lines'] ?? [])),
+                static fn (string $line): bool => $line !== '',
+            ));
+            if ($lines !== []) {
+                return implode("\n", $lines);
+            }
+        }
         if (($this->template['zones']['recipient']['options']['source'] ?? 'text') === 'patient') {
             $patient = (array) ($this->letter['patient'] ?? []);
             $address = (array) ($patient['address'] ?? []);

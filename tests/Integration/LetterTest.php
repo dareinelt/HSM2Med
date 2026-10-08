@@ -175,13 +175,30 @@ final class LetterTest extends DatabaseTestCase
         ]), $wizard['report'], $wizard['masterData'])['card_id'];
     }
 
-    private function createLetter(?int $reportId = null): array
+    /** Hausarzt mit vollstaendiger Anschrift (Standardempfaenger der Tests). */
+    private function saveFamilyDoctor(): void
     {
+        (new PatientRepository($this->pdo))->saveMasterData($this->patientId, [
+            'physician_name' => 'Dr. med. Anna Weber',
+            'physician_practice' => 'Hausarztpraxis am Markt',
+            'physician_street' => 'Marktplatz 3',
+            'physician_postal_code' => '54321',
+            'physician_city' => 'Hausarztstadt',
+        ], '2026-01-01 00:00:00');
+    }
+
+    /**
+     * @param list<string> $recipients
+     */
+    private function createLetter(?int $reportId = null, array $recipients = ['family_doctor']): array
+    {
+        $this->saveFamilyDoctor();
         return $this->letters->create(LetterInput::fromPost([
             'patient_id' => (string) $this->patientId,
             'report_id' => $reportId === null ? '' : (string) $reportId,
             'confirm_data' => '1',
             'confirm_letter' => '1',
+            'recipients' => $recipients,
         ]));
     }
 
@@ -209,7 +226,7 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame('2026-10-07', $letter['letter_date']);
         $this->assertSame('2026-10-07 08:00:00', $letter['created_at']);
         $this->assertContains('LASTNAME_FIRSTNAME', (string) $letter['pdf_filename']);
-        $this->assertContains('Nr1.pdf', (string) $letter['pdf_filename']);
+        $this->assertContains('Nr1_an-Hausarzt.pdf', (string) $letter['pdf_filename']);
 
         // Pruefsumme und Groesse gehoeren zum gespeicherten PDF.
         $pdf = $this->letters->pdfContent($result['letter_id']);
@@ -329,6 +346,63 @@ final class LetterTest extends DatabaseTestCase
         }
 
         $this->assertThrows(LetterException::class, fn (): LetterInput => LetterInput::fromPost(['patient_id' => '0']));
+    }
+
+    /**
+     * Mehrere Empfaenger: je Empfaenger ein Brief mit eigener Nummer, eigener Anschrift und
+     * gleicher Datengrundlage; eine Neuausfertigung behaelt den Empfaenger.
+     */
+    public function testCreatesOneLetterPerRecipient(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $this->patients->saveMasterData($this->patientId, [
+            'referrer_name' => 'Dr. med. Jonas Klein',
+            'referrer_postal_code' => '50667',
+            'referrer_city' => 'Köln',
+        ], '2026-01-01 00:00:00');
+
+        $result = $this->createLetter(null, ['referring_physician', 'patient', 'family_doctor']);
+        $this->assertCount(3, $result['letters']);
+        $this->assertSame(['patient', 'family_doctor', 'referring_physician'], array_column($result['letters'], 'recipient_type'));
+        $this->assertSame([1, 2, 3], array_column($result['letters'], 'sequence_no'));
+
+        $expected = [
+            ['patient', 'Musterstraße 12'],
+            ['family_doctor', 'Marktplatz 3'],
+            ['referring_physician', '50667 Köln'],
+        ];
+        $versions = [];
+        foreach ($result['letter_ids'] as $index => $letterId) {
+            $letter = $this->letters->letter($letterId);
+            [$type, $needle] = $expected[$index];
+            $this->assertSame($type, $letter['recipient_type']);
+            $this->assertSame($type, $letter['snapshot']['recipient']['type']);
+            $this->assertContains($needle, PdfText::text((string) $this->letters->pdfContent($letterId)));
+            $versions[] = (int) $letter['letter_version'];
+        }
+        $this->assertSame([1, 1, 1], $versions, 'Alle Briefe eines Vorgangs teilen sich die Fassung.');
+
+        $reissue = $this->letters->regenerate($result['letter_ids'][2], LetterService::TEMPLATE_ORIGINAL, false);
+        $copy = $this->letters->letter($reissue['letter_id']);
+        $this->assertSame('referring_physician', $copy['recipient_type']);
+        $this->assertSame('Dr. med. Jonas Klein', $copy['recipient_name']);
+        $this->assertContains('50667 Köln', PdfText::text((string) $this->letters->pdfContent($reissue['letter_id'])));
+    }
+
+    /** Ohne Empfaenger oder mit unvollstaendiger Anschrift entsteht kein Brief. */
+    public function testRecipientsAreValidated(): void
+    {
+        $this->fillRecords();
+        $none = $this->assertThrows(LetterException::class, fn (): array => $this->createLetter(null, []));
+        $this->assertTrue(isset($none->fieldErrors()['recipients']));
+
+        $missing = $this->assertThrows(LetterException::class, fn (): array => $this->createLetter(null, ['family_doctor', 'referring_physician']));
+        $message = $missing->fieldErrors()['recipients'] ?? '';
+        $this->assertContains('Überweisender Arzt', $message);
+        $this->assertContains('Name oder Praxis, Postleitzahl, Ort', $message);
+        $this->assertSame(0, $this->rowCount('patient_letters'));
     }
 
     /** Ein Bericht eines anderen Patienten wird nicht uebernommen. */

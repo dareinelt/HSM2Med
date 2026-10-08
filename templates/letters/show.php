@@ -24,6 +24,7 @@ $mrt = (array) ($snapshot['mrt'] ?? []);
 $sections = (array) ($appendix['sections'] ?? []);
 $frozenTemplate = is_array($snapshot['template'] ?? null) ? $snapshot['template'] : null;
 $reissue = is_array($snapshot['reissue'] ?? null) ? $snapshot['reissue'] : null;
+$recipient = is_array($snapshot['recipient'] ?? null) ? $snapshot['recipient'] : null;
 $templateLabel = $frozenTemplate === null
     ? 'fester Aufbau der Brief-Fassung 1 (vor Einführung der Briefvorlagen)'
     : 'Briefvorlage Fassung ' . (string) ($frozenTemplate['version_no'] ?? '') . ' – ' . (string) ($frozenTemplate['name'] ?? '');
@@ -42,6 +43,9 @@ $textParts = [
             · geboren am <?= $e($view::dateTime($letter['date_of_birth'], true)) ?>
             · Briefnummer <?= $e($letter['sequence_no']) ?> für diesen Patienten
             · Fassung <?= $e($letter['letter_version']) ?>
+            <?php if ($recipient !== null): ?>
+                · an <?= $e($recipient['label'] ?? '') ?>
+            <?php endif; ?>
         </p>
     </div>
     <div class="actions">
@@ -57,6 +61,12 @@ $textParts = [
         <h2><?= $icon('letters', 'app-icon app-icon--sm') ?> Dokument</h2>
         <table class="kv">
             <tr><th>Dokumentnummer</th><td><?= $e($document['document_number'] ?? '') ?></td></tr>
+            <tr><th>Empfänger</th><td><?php if ($recipient === null): ?>
+                <span class="muted">Anschriftfeld laut Vorlage (Brief ohne Empfängerauswahl)</span>
+            <?php else: ?>
+                <strong><?= $e($recipient['label'] ?? '') ?></strong><br>
+                <?= nl2br($e(implode("\n", array_map('strval', (array) ($recipient['lines'] ?? []))))) ?>
+            <?php endif; ?></td></tr>
             <tr><th>Briefdatum</th><td><?= $e($view::dateTime($document['letter_date'] ?? '', true)) ?></td></tr>
             <tr><th>Erstellt</th><td><?= $e($view::dateTime($letter['created_at'])) ?></td></tr>
             <tr><th>Bericht (Befundteil)</th><td>

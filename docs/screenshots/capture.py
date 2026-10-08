@@ -433,6 +433,22 @@ def main() -> int:
         page.wait_for_load_state()
         shot(page, "34-akte-epikrise")
 
+        # Empfaenger der Briefe: Hausarzt (aus dem Ausweis) mit Strasse ergaenzen, ueberweisenden Arzt pflegen.
+        page.goto(f"{akte_url}/edit")
+        page.fill("input[name=physician_street]", "Marktplatz 3")
+        page.fill("input[name=referrer_name]", "Dr. med. Jonas Klein")
+        page.fill("input[name=referrer_practice]", "Kardiologische Praxis am Dom")
+        page.fill("input[name=referrer_street]", "Domplatz 1")
+        page.fill("input[name=referrer_postal_code]", "12347")
+        page.fill("input[name=referrer_city]", "Musterstadt")
+        page.fill("input[name=referrer_phone]", "01234 567893")
+        shot(page, "49-akte-aerzte")
+        page.locator("button[type=submit]", has_text="Stammdaten speichern").click()
+        page.wait_for_load_state()
+        if "Überweisender Arzt" not in page.content() or "Dr. med. Jonas Klein" not in page.content():
+            print("Der ueberweisende Arzt fehlt in den Stammdaten.", file=sys.stderr)
+            return 1
+
         page.goto(f"{BASE_URL}/letters")
         shot(page, "35-brief-uebersicht-leer")
 
@@ -449,6 +465,11 @@ def main() -> int:
         page.click("[data-wizard-next]")
         shot(page, "39-brief-assistent-bausteine")
 
+        # Schritt 4: Empfaenger – je Haken entsteht ein eigener Brief.
+        page.click("[data-wizard-next]")
+        page.check("input[name='recipients[]'][value=patient]")
+        shot(page, "50-brief-assistent-empfaenger")
+
         page.click("[data-wizard-next]")
         shot(page, "40-brief-assistent-zusammenfassung")
 
@@ -459,23 +480,48 @@ def main() -> int:
 
         page.click("button[data-wizard-submit]")
         page.wait_for_load_state()
-        letter_url = page.url
-        if not letter_url.rstrip("/").split("/")[-1].isdigit():
-            print(f"Brief wurde nicht erzeugt: {letter_url}", file=sys.stderr)
+        # Drei Empfaenger, drei Briefe: Weiterleitung auf die Briefe des Patienten.
+        if not page.url.rstrip("/").endswith(f"/letters/patients/{card_patient_id}"):
+            print(f"Briefe wurden nicht erzeugt: {page.url}", file=sys.stderr)
             return 1
+        if "3 Briefe wurden erstellt" not in page.content():
+            print("Hinweis auf drei erzeugte Briefe fehlt.", file=sys.stderr)
+            return 1
+        shot(page, "44-brief-patient")
+
+        doctor_row = page.locator("tr", has_text="Hausarzt: Dr. med. Anna Beispiel")
+        letter_href = doctor_row.locator("a[href^='/letters/']").first.get_attribute("href")
+        if not letter_href or not letter_href.rstrip("/").split("/")[-1].isdigit():
+            print("Brief an den Hausarzt nicht gefunden.", file=sys.stderr)
+            return 1
+        letter_url = f"{BASE_URL}{letter_href}"
+        page.goto(letter_url)
         shot(page, "42-brief-detail")
 
         page.goto(f"{BASE_URL}/letters")
-        if "1 Brief(e) gefunden" not in page.content():
-            print("Der Brief fehlt in der Briefuebersicht.", file=sys.stderr)
+        if "3 Brief(e) gefunden" not in page.content():
+            print("Die Briefe fehlen in der Briefuebersicht.", file=sys.stderr)
             return 1
         shot(page, "43-brief-uebersicht")
 
-        page.goto(f"{BASE_URL}/letters/patients/{card_patient_id}")
-        shot(page, "44-brief-patient")
-
         page.goto(f"{BASE_URL}/patients/{card_patient_id}")
         shot(page, "45-akte-mit-brief")
+
+        # Vorlageneditor (System -> Briefvorlage bearbeiten, eigener Tab).
+        page.goto(f"{BASE_URL}/system")
+        with context.expect_page() as editor_info:
+            page.locator("a[href='/system/letter-templates']", has_text="Briefvorlage bearbeiten").click()
+        editor = editor_info.value
+        editor.set_viewport_size({"width": 1600, "height": 1000})
+        editor.wait_for_load_state()
+        editor.wait_for_selector(".te-block")
+        shot(editor, "51-vorlageneditor", full_page=False)
+        editor.locator(".te-zone--recipient").first.click()
+        shot(editor, "52-vorlageneditor-empfaenger", full_page=False)
+        editor.click("[data-te-action=versions]")
+        editor.wait_for_selector("[data-te-versions-dialog][open]")
+        shot(editor, "53-vorlageneditor-fassungen", full_page=False)
+        editor.close()
 
         letter_pdf = context.request.get(f"{letter_url}/pdf?download=1")
         if not letter_pdf.ok or not letter_pdf.body().startswith(b"%PDF-"):
@@ -521,6 +567,8 @@ def main() -> int:
             "Anhang: Schrittmacher-/ICD-Abfrage (vollständige Tabelle)",
             "MRT-Tauglichkeit",
             "Tachykardie",
+            "Gemeinschaftspraxis am Markt",
+            "Marktplatz 3",
         ):
             if needle not in letter_text:
                 print(f"Angabe fehlt im Brief-PDF: {needle}", file=sys.stderr)

@@ -125,6 +125,13 @@ label.checkbox input { width: auto; }
 .choice-box legend { font-weight: 600; padding: 0 .4rem; }
 label.check { display: flex; gap: .5rem; align-items: flex-start; font-weight: 400; margin-bottom: .35rem; }
 label.check input { width: auto; margin-top: .25rem; flex: 0 0 auto; }
+.plain-list { list-style: none; margin: 0; padding: 0; }
+.recipient-choice { padding: .45rem 0; border-bottom: 1px solid var(--border); }
+.recipient-choice:last-child { border-bottom: 0; }
+.recipient-choice label.check { margin-bottom: 0; }
+.recipient-choice.is-unavailable strong { color: var(--muted); }
+.recipient-address { display: block; font-weight: 400; margin-top: .15rem; }
+.recipient-choice small { display: block; margin-top: .2rem; }
 .logo-row { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 1rem; align-items: start; }
 .logo-preview img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; background: #fff; padding: .3rem; }
 

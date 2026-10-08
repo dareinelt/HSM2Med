@@ -187,16 +187,30 @@ final class LetterViewTest extends DatabaseTestCase
         ]), $wizard['report'], $wizard['masterData'])['card_id'];
     }
 
+    /** Hausarzt mit vollstaendiger Anschrift (Standardempfaenger der Tests). */
+    private function saveFamilyDoctor(): void
+    {
+        (new PatientRepository($this->pdo))->saveMasterData($this->patientId, [
+            'physician_name' => 'Dr. med. Anna Weber',
+            'physician_practice' => 'Hausarztpraxis am Markt',
+            'physician_street' => 'Marktplatz 3',
+            'physician_postal_code' => '54321',
+            'physician_city' => 'Hausarztstadt',
+        ], '2026-01-01 00:00:00');
+    }
+
     /**
-     * @param array<string, string> $post
+     * @param array<string, string|list<string>> $post
      */
     private function createLetter(array $post): Response
     {
+        $this->saveFamilyDoctor();
         return $this->letters()->create(new Request('POST', '/letters', [], $post + [
             'patient_id' => (string) $this->patientId,
             'report_id' => '',
             'confirm_data' => '1',
             'confirm_letter' => '1',
+            'recipients' => ['family_doctor'],
         ]));
     }
 
@@ -242,8 +256,8 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('LASTNAME, FIRSTNAME', $found->body);
     }
 
-    /** Schritte 2 bis 5: Assistent mit Formular, Bestaetigungen und serverseitiger Navigation. */
-    public function testWizardRendersAllFiveSteps(): void
+    /** Schritte 2 bis 6: Assistent mit Formular, Empfaengern, Bestaetigungen und Navigation. */
+    public function testWizardRendersAllSteps(): void
     {
         $reportId = $this->importAndSelectPatient();
         $this->fillRecords();
@@ -258,7 +272,7 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('data-step="2"', $response->body);
         $this->assertContains('name="patient_id" value="' . $this->patientId . '"', $response->body);
         $this->assertContains('name="report_id" value="' . $reportId . '"', $response->body);
-        // Schritt 1 (Patientenauswahl) ist eine eigene Seite; im Formular gibt es die Schritte 2 bis 5.
+        // Schritt 1 (Patientenauswahl) ist eine eigene Seite; im Formular gibt es die Schritte 2 bis 6.
         foreach (array_slice(LetterController::WIZARD_STEPS, 1, null, true) as $number => $label) {
             $this->assertContains('data-wizard-goto="' . $number . '"', $response->body);
             $this->assertContains($label, $response->body);
@@ -269,8 +283,58 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('name="confirm_letter"', $response->body);
         $this->assertContains('Anhang: vollständige Abfrage', $response->body);
         $this->assertContains('MRT-bedingt tauglich', $response->body);
-        $this->assertContains('Nr. 1 für diesen Patienten', $response->body);
+        $this->assertContains('ab Nr. 1 für diesen Patienten', $response->body);
         $this->assertNotContains('Noch nicht erfasst', $response->body);
+        // Empfaenger: Patient mit Anschrift aus dem Ausweis waehlbar, Aerzte ohne Anschrift gesperrt.
+        $this->assertContains('4 · Empfänger wählen', $response->body);
+        foreach (['patient', 'family_doctor', 'referring_physician'] as $type) {
+            $this->assertContains('id="recipient-' . $type . '" name="recipients[]" value="' . $type . '"', $response->body);
+        }
+        $this->assertContains('Überweisender Arzt', $response->body);
+        $this->assertContains('Nicht wählbar – in den Stammdaten fehlt:', $response->body);
+        $this->assertContains('Stammdaten ergänzen', $response->body);
+    }
+
+    /** Je ausgewaehltem Empfaenger entsteht ein Brief; die Uebersicht zeigt den Empfaenger. */
+    public function testCreateForSeveralRecipients(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        (new PatientRepository($this->pdo))->saveMasterData($this->patientId, [
+            'referrer_name' => 'Dr. med. Jonas Klein',
+            'referrer_practice' => 'Kardiologie am Dom',
+            'referrer_street' => 'Domplatz 1',
+            'referrer_postal_code' => '50667',
+            'referrer_city' => 'Köln',
+        ], '2026-01-01 00:00:00');
+
+        $this->saveFamilyDoctor();
+        $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $checked = static fn (string $type): bool => preg_match('/value="' . $type . '"\\s+data-recipient-label="[^"]*"\\s+checked/u', $wizard->body) === 1;
+        $this->assertTrue($checked('family_doctor') && $checked('referring_physician'), 'Aerzte mit Anschrift sind vorausgewaehlt.');
+        $this->assertFalse($checked('patient'), 'Der Patient wird nur auf Wunsch angeschrieben.');
+        $this->assertContains('Kardiologie am Dom', $wizard->body);
+
+        $none = $this->createLetter(['recipients' => []]);
+        $this->assertSame(422, $none->status);
+        $this->assertContains('Bitte mindestens einen Empfänger auswählen', $none->body);
+        $this->assertContains('data-step="4"', $none->body, 'Der Assistent oeffnet den Schritt mit dem Fehler.');
+        $this->assertSame(0, $this->rowCount('patient_letters'));
+
+        $created = $this->createLetter(['recipients' => ['patient', 'family_doctor', 'referring_physician']]);
+        $this->assertSame(303, $created->status);
+        $this->assertSame('/letters/patients/' . $this->patientId, $created->headers['Location'] ?? '');
+        $this->assertSame(3, $this->rowCount('patient_letters'));
+        $this->assertContains('3 Briefe wurden erstellt', implode(' ', array_column($_SESSION['_flash'] ?? [], 'message')));
+
+        $list = $this->letters()->patient(new Request('GET', '/letters/patients/' . $this->patientId), ['patient' => (string) $this->patientId]);
+        foreach (['Patient: FIRSTNAME LASTNAME', 'Hausarzt: Dr. med. Anna Weber, Hausarztpraxis am Markt', 'Überweisender Arzt: Dr. med. Jonas Klein, Kardiologie am Dom'] as $needle) {
+            $this->assertContains($needle, $list->body);
+        }
+        $show = $this->letters()->show(new Request('GET', '/letters/3'), ['id' => '3']);
+        $this->assertContains('Domplatz 1', $show->body);
+        $this->assertContains('an Überweisender Arzt', $show->body);
     }
 
     /** Ohne Bausteine, Abfrage und Ausweis benennt der Assistent jeden fehlenden Teil. */

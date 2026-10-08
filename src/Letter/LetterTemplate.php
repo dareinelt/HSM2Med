@@ -82,10 +82,10 @@ final class LetterTemplate
             ],
             'recipient' => [
                 'label' => 'Anschriftfeld (Empfänger)',
-                'description' => 'Anschriftfeld 85 × 45 mm nach DIN 5008 Form B, passend für Fensterumschläge DL/C5/C4.',
+                'description' => 'Anschriftfeld 85 × 45 mm nach DIN 5008 Form B, passend für Fensterumschläge DL/C5/C4. Die Anschrift stammt aus dem im Brief-Assistenten gewählten Empfänger (Patient, Hausarzt, Überweisender Arzt); je Empfänger entsteht ein eigener Brief.',
                 'options' => [
                     'source' => [
-                        'label' => 'Empfänger',
+                        'label' => 'Empfänger ohne Auswahl im Brief-Assistenten (ältere Briefe, Vorschau)',
                         'type' => 'select',
                         'default' => 'text',
                         'choices' => ['text' => 'fester Text (unten)', 'patient' => 'Patient mit Anschrift aus den Stammdaten'],

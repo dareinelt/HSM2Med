@@ -207,6 +207,7 @@ config/              parameter_mapping.php (Kategorien, Feld-/Sondenzuordnung, V
 database/            migrations/ (maßgeblich) + schema.sql (generiert)
 docker/              Apache-/PHP-Konfiguration, entrypoint.sh
 docs/screenshots/    Screenshots + Erzeugungsskript (Playwright/Chromium)
+docs/editor-referenz.md  Technische Referenz des Vorlageneditors
 public/              Webroot: index.php, assets/css/app.css, assets/js/app.js,
                      assets/{js,css}/template-editor.* (Vorlageneditor)
 src/                 Anwendungscode (Namespace App\)
@@ -220,7 +221,8 @@ src/                 Anwendungscode (Namespace App\)
                      PendingUploadStore, ImportAnalysis/Outcome, ImportIssue(n)
   Letter/            LetterService, LetterRepository, LetterPdfGenerator (DIN 5008),
                      LegacyLetterPdfGenerator (Fassung 1), LetterTemplate,
-                     LetterTemplateRepository, LetterTemplateService, LetterSample
+                     LetterTemplateRepository, LetterTemplateService, LetterSample,
+                     LetterRecipient
   Mapping/           ParameterMapping, CategoryAssignment
   PatientCard/       PatientCardService, PatientCardInput, PatientCardRepository,
                      PatientCardSettingsService, PatientCardPdfGenerator,
@@ -291,16 +293,18 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 
 | Klasse | Verantwortung |
 | --- | --- |
-| `LetterService` | Assistent, Erzeugen (eine Transaktion, Snapshot mit eingebetteter Vorlage), `reproducePdf()` (damalige Vorlage, nichts speichern), `regenerate()` (Neuausfertigung `original`/`current`, `current` nur mit Bestätigung), `previewPdf()` (Editor-Vorschau mit Beispieldaten) |
+| `LetterService` | Assistent, Erzeugen (ein Brief je gewähltem Empfänger in einer Transaktion, Snapshot mit eingebetteter Vorlage), `reproducePdf()` (damalige Vorlage, nichts speichern), `regenerate()` (Neuausfertigung `original`/`current`, `current` nur mit Bestätigung), `previewPdf()` (Editor-Vorschau mit Beispieldaten) |
 | `LetterTemplate` | Vorlagenschema: Zonen, Bausteintypen, Platzhalter, `default()`, `normalize()` (Prüfung mit Feldpfaden wie `blocks.3.texts.text`), `fill()`, `editorDefinition()` für den JS-Editor |
 | `LetterTemplateService` / `LetterTemplateRepository` | Versionierung: `current()`, `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
 | `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter |
 | `LetterSample` | Beispieldaten für Editor-Vorschau |
+| `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben |
 
 Der Editor (`templates/letter_templates/editor.php`, eigenständige Seite ohne Layout, CSP-konform
 ohne Inline-Skript) liest seine Daten aus dem JSON-Block `#template-editor-data`; die Logik liegt
 vollständig in `public/assets/js/template-editor.js` (Drag and Drop, Live-Vorschau,
-Speichern per `fetch`).
+Speichern per `fetch`). Genaue Referenz zu Aufbau, Datenmodell, Invarianten und
+Erweiterung: **`docs/editor-referenz.md`** – vor Änderungen am Editor oder Vorlagenschema lesen.
 
 ### `src/Security/`
 
@@ -649,5 +653,6 @@ eingesetzt.
 | `docker-compose.yml` | Dienste, Profile (`test`, `docs`), Netze, Volumes |
 | `Dockerfile`, `docker/` | Image-Aufbau, Apache-/PHP-Konfiguration, Entrypoint |
 | `docs/screenshots/capture.py` | Automatisierte Erzeugung der Dokumentationsbilder |
+| `docs/editor-referenz.md` | Technische Referenz des Vorlageneditors (Dateien, Routen, Datenmodell, Versionierung, JS-Aufbau, Erweiterung) |
 | `tests/fixtures/merlin_sample.log` | Anonymisierte Beispieldatei für Tests und Screenshots |
 | `.reference/MERLIN__ANN_5809481.log` | Reale Referenzdatei – nur lesen, nie in Tests/Doku verwenden |

@@ -58,6 +58,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Brief-Assistent: Zusammenfassung und Schaltflaeche folgen der Empfaengerauswahl
+    document.querySelectorAll('[data-recipient-choices]').forEach((fieldset) => {
+        const form = fieldset.closest('form');
+        if (!form) {
+            return;
+        }
+        const update = () => {
+            const checked = Array.from(fieldset.querySelectorAll('input[name="recipients[]"]'))
+                .filter((input) => input.checked && !input.disabled)
+                .map((input) => input.value);
+            form.querySelectorAll('[data-recipient-item]').forEach((item) => {
+                item.hidden = !checked.includes(item.dataset.recipientItem);
+            });
+            form.querySelectorAll('[data-recipient-none]').forEach((item) => {
+                item.hidden = checked.length > 0;
+            });
+            form.querySelectorAll('[data-recipient-submit]').forEach((label) => {
+                label.textContent = checked.length > 1 ? checked.length + ' Briefe erzeugen' : 'Brief erzeugen';
+            });
+        };
+        fieldset.addEventListener('change', update);
+        update();
+    });
+
     // Assistent zur Ausweiserstellung: Schritte umschalten (ohne JavaScript bleiben alle sichtbar)
     document.querySelectorAll('form[data-wizard]').forEach((form) => {
         const steps = Array.from(form.querySelectorAll('.wizard-step'));

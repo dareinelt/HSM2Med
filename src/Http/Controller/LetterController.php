@@ -9,6 +9,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Letter\LetterException;
 use App\Letter\LetterInput;
+use App\Letter\LetterRecipient;
 use App\Security\SessionManager;
 use RuntimeException;
 
@@ -29,8 +30,9 @@ final class LetterController extends Controller
         1 => 'Patient wählen',
         2 => 'Bericht zuordnen',
         3 => 'Bausteine prüfen',
-        4 => 'Zusammenfassung',
-        5 => 'Bestätigen und erzeugen',
+        4 => 'Empfänger wählen',
+        5 => 'Zusammenfassung',
+        6 => 'Bestätigen und erzeugen',
     ];
 
     public function index(Request $request): Response
@@ -109,12 +111,24 @@ final class LetterController extends Controller
             );
         }
 
-        SessionManager::flash('success', sprintf(
-            'Brief Nr. %d wurde erstellt und unveränderlich gespeichert (Anhang mit der vollständigen Abfrage).',
-            $result['letter_id'],
-        ));
+        if (count($result['letters']) === 1) {
+            SessionManager::flash('success', sprintf(
+                'Brief Nr. %d an %s wurde erstellt und unveränderlich gespeichert (Anhang mit der vollständigen Abfrage).',
+                $result['letter_id'],
+                $result['letters'][0]['recipient_label'],
+            ));
+            return Response::redirect('/letters/' . $result['letter_id']);
+        }
 
-        return Response::redirect('/letters/' . $result['letter_id']);
+        SessionManager::flash('success', sprintf(
+            '%d Briefe wurden erstellt und unveränderlich gespeichert: %s.',
+            count($result['letters']),
+            implode(', ', array_map(
+                static fn (array $letter): string => sprintf('Nr. %d an %s', $letter['letter_id'], $letter['recipient_label']),
+                $result['letters'],
+            )),
+        ));
+        return Response::redirect('/letters/patients/' . $result['patient_id']);
     }
 
     /**
@@ -229,10 +243,11 @@ final class LetterController extends Controller
     }
 
     /**
-     * Schritte 2 bis 5: Berichtauswahl, Pruefung der Bausteine, Zusammenfassung, Bestaetigung.
+     * Schritte 2 bis 6: Berichtauswahl, Pruefung der Bausteine, Empfaenger, Zusammenfassung,
+     * Bestaetigung. Nach einem Fehler oeffnet der Assistent den ersten Schritt mit Fehler.
      *
      * @param array<string, string> $errors
-     * @param array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool}|null $selection
+     * @param array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool, recipients: list<string>}|null $selection
      */
     private function renderWizard(
         int $patientId,
@@ -250,6 +265,26 @@ final class LetterController extends Controller
             throw HttpException::notFound('Der Patient wurde nicht gefunden.');
         }
 
+        $recipients = $prepared['recipients'];
+        $selection ??= [
+            'patient_id' => $patientId,
+            'report_id' => $reportId,
+            'confirm_data' => false,
+            'confirm_letter' => false,
+            // Vorauswahl: die Aerzte, deren Anschrift vollstaendig ist.
+            'recipients' => array_values(array_filter(
+                [LetterRecipient::FAMILY_DOCTOR, LetterRecipient::REFERRING_PHYSICIAN],
+                static fn (string $type): bool => $recipients[$type]['available'],
+            )),
+        ];
+        $startStep = 2;
+        foreach ([2 => ['report_id'], 4 => ['recipients'], 6 => ['patient_id', 'confirm_data', 'confirm_letter']] as $step => $keys) {
+            if (array_intersect($keys, array_keys($errors)) !== []) {
+                $startStep = $step;
+                break;
+            }
+        }
+
         return Response::html($this->view->render('letters/wizard', [
             'title' => 'Brief erstellen',
             'patient' => $prepared['patient'],
@@ -262,12 +297,9 @@ final class LetterController extends Controller
             'nextSequence' => $prepared['next_sequence'],
             'errors' => $errors,
             'message' => $message,
-            'selection' => $selection ?? [
-                'patient_id' => $patientId,
-                'report_id' => $reportId,
-                'confirm_data' => false,
-                'confirm_letter' => false,
-            ],
+            'selection' => $selection,
+            'recipients' => $recipients,
+            'startStep' => $startStep,
             'steps' => self::WIZARD_STEPS,
         ], 'letters'), $errors === [] && $message === null ? 200 : 422);
     }

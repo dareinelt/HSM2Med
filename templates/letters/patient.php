@@ -37,6 +37,7 @@ $patientId = (int) $patient['id'];
                     <th>Briefnummer</th>
                     <th>Erstellt</th>
                     <th>Briefdatum</th>
+                    <th>Empfänger</th>
                     <th>Bericht</th>
                     <th>Fassung</th>
                     <th>Anhang</th>
@@ -50,6 +51,7 @@ $patientId = (int) $patient['id'];
                         <td><?= $e($row['sequence_no']) ?></td>
                         <td><?= $e($view::dateTime($row['created_at'])) ?></td>
                         <td><?= $e($view::dateTime($row['letter_date'], true)) ?></td>
+                        <td><?= $e(\App\Letter\LetterRecipient::listLabel($row['recipient_type'] ?? null, $row['recipient_name'] ?? null)) ?></td>
                         <td>
                             <?php if ($row['report_id'] === null): ?>
                                 <span class="muted">ohne Bericht</span>

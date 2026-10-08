@@ -21,6 +21,21 @@ $masterRows = [
     'Ort' => 'city',
     'Telefon' => 'phone',
 ];
+$physicians = [
+    'Hausarzt' => 'physician_',
+    'Überweisender Arzt' => 'referrer_',
+];
+$physicianText = static function (string $prefix) use ($master): string {
+    $value = static fn (string $key): string => trim((string) ($master[$prefix . $key] ?? ''));
+    $lines = array_filter([
+        $value('name'),
+        $value('practice'),
+        $value('street'),
+        trim($value('postal_code') . ' ' . $value('city')),
+        $value('phone') === '' ? '' : 'Tel. ' . $value('phone'),
+    ], static fn (string $line): bool => $line !== '');
+    return implode("\n", $lines);
+};
 ?>
 <div class="page-head">
     <div>
@@ -73,6 +88,12 @@ $masterRows = [
             <tr><th>Patienten-ID</th><td><?= $e($patient['patient_identifier'] ?? '') ?></td></tr>
             <?php foreach ($masterRows as $label => $field): ?>
                 <tr><th><?= $e($label) ?></th><td><?= $e($master[$field] ?? '') ?></td></tr>
+            <?php endforeach; ?>
+            <?php foreach ($physicians as $label => $prefix): ?>
+                <?php $physician = $physicianText($prefix); ?>
+                <tr><th><?= $e($label) ?></th><td><?= $physician === ''
+                    ? '<span class="muted">nicht angegeben</span>'
+                    : nl2br($e($physician)) ?></td></tr>
             <?php endforeach; ?>
             <tr><th>Angelegt</th><td><?= $e($view::dateTime($patient['created_at'])) ?></td></tr>
             <tr><th>Geändert</th><td><?= $e($view::dateTime($patient['updated_at'])) ?></td></tr>
