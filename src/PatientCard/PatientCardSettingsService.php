@@ -9,16 +9,53 @@ use App\Security\UploadException;
 use App\Support\Clock;
 
 /**
- * Globale Patientenausweis-Stammdaten: Logo, Nachsorgezentrum und die drei Hinweistexte.
+ * Globale Stammdaten: Praxis-Informationen, Ruecksendeangaben, Logo und die drei Hinweistexte
+ * des Patientenausweises.
  *
  * Jede Aenderung erzeugt eine neue, unveraenderliche Fassung
- * (patient_card_settings_versions). Bereits erstellte Ausweise verweisen auf ihre Fassung und
- * bleiben deshalb unveraendert. Die Texte sind bewusst nicht im PDF-Generator hinterlegt.
+ * (patient_card_settings_versions). Bereits erstellte Ausweise und Briefe verweisen auf ihre
+ * Fassung und bleiben deshalb unveraendert. Die Texte sind bewusst nicht im PDF-Generator
+ * hinterlegt.
+ *
+ * Die Stammdaten sind eine gemeinsame Datenquelle: die Praxis-Informationen erscheinen im
+ * Briefkopf der Briefe und auf den Ausweisen, die Ruecksendeangaben nur in den Briefen. Sie
+ * werden im Bereich "System" gepflegt.
  */
 final class PatientCardSettingsService
 {
     public const int MAX_CENTER_NAME = 255;
     public const int MAX_CENTER_ADDRESS = 400;
+    public const int MAX_PHONE = 64;
+    public const int MAX_EMAIL = 255;
+    public const int MAX_WEBSITE = 255;
+    public const int MAX_RETURN_NAME = 255;
+    public const int MAX_RETURN_STREET = 255;
+    public const int MAX_RETURN_POSTAL_CODE = 32;
+    public const int MAX_RETURN_CITY = 255;
+
+    /** Felder der Praxis-Informationen und der Ruecksendeangabe (ohne Logo und Hinweistexte). */
+    public const array PRACTICE_FIELDS = [
+        'center_name',
+        'center_address',
+        'practice_phone',
+        'practice_fax',
+        'practice_email',
+        'practice_website',
+        'return_name',
+        'return_street',
+        'return_postal_code',
+        'return_city',
+    ];
+
+    /**
+     * Hinweistexte des Patientenausweises. Sie werden auf der Ausweisseite gepflegt und beim
+     * Speichern der Praxis-Informationen unveraendert uebernommen.
+     */
+    public const array CARD_NOTICE_FIELDS = [
+        'notice_text',
+        'flight_notice_de',
+        'flight_notice_en',
+    ];
 
     public function __construct(
         private readonly PatientCardRepository $repository,
@@ -78,9 +115,21 @@ final class PatientCardSettingsService
 
         $centerName = $text('center_name', self::MAX_CENTER_NAME);
         $centerAddress = $text('center_address', self::MAX_CENTER_ADDRESS);
+        $practicePhone = $text('practice_phone', self::MAX_PHONE);
+        $practiceFax = $text('practice_fax', self::MAX_PHONE);
+        $practiceEmail = $text('practice_email', self::MAX_EMAIL);
+        $practiceWebsite = $text('practice_website', self::MAX_WEBSITE);
+        $returnName = $text('return_name', self::MAX_RETURN_NAME);
+        $returnStreet = $text('return_street', self::MAX_RETURN_STREET);
+        $returnPostalCode = $text('return_postal_code', self::MAX_RETURN_POSTAL_CODE);
+        $returnCity = $text('return_city', self::MAX_RETURN_CITY);
         $notice = $text('notice_text', PatientCardPdfGenerator::MAX_NOTICE_CHARS);
         $flightDe = $text('flight_notice_de', PatientCardPdfGenerator::MAX_FLIGHT_NOTICE_CHARS);
         $flightEn = $text('flight_notice_en', PatientCardPdfGenerator::MAX_FLIGHT_NOTICE_CHARS);
+
+        if ($practiceEmail !== null && filter_var($practiceEmail, FILTER_VALIDATE_EMAIL) === false) {
+            $errors['practice_email'] = 'Bitte eine gültige E-Mail-Adresse angeben (z. B. praxis@example.de).';
+        }
 
         $settings = $this->repository->settings() ?? [];
         $logoId = $settings['logo_id'] ?? null;
@@ -112,6 +161,14 @@ final class PatientCardSettingsService
         $versionId = $this->repository->saveSettings([
             'center_name' => $centerName,
             'center_address' => $centerAddress,
+            'practice_phone' => $practicePhone,
+            'practice_fax' => $practiceFax,
+            'practice_email' => $practiceEmail,
+            'practice_website' => $practiceWebsite,
+            'return_name' => $returnName,
+            'return_street' => $returnStreet,
+            'return_postal_code' => $returnPostalCode,
+            'return_city' => $returnCity,
             'notice_text' => $notice,
             'flight_notice_de' => $flightDe,
             'flight_notice_en' => $flightEn,

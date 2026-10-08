@@ -15,6 +15,7 @@ use App\Http\Controller\PatientCardSettingsController;
 use App\Http\Controller\PatientController;
 use App\Http\Controller\ReportController;
 use App\Http\Controller\SystemController;
+use App\Http\Controller\SystemSettingsController;
 use App\Security\Csrf;
 use App\Security\SessionManager;
 use Throwable;
@@ -79,6 +80,7 @@ final class Kernel
         $reports = new ReportController($this->app, $this->view);
         $imports = new ImportLogController($this->app, $this->view);
         $system = new SystemController($this->app, $this->view);
+        $systemSettings = new SystemSettingsController($this->app, $this->view);
         $cards = new PatientCardController($this->app, $this->view);
         $cardSettings = new PatientCardSettingsController($this->app, $this->view);
         $patients = new PatientController($this->app, $this->view);
@@ -121,6 +123,9 @@ final class Kernel
         $router->get('/patient-cards/{id}', $cards->show(...));
         $router->get('/patient-cards/{id}/pdf', $cards->pdf(...));
         $router->get('/system/logs', $system->logs(...));
+        $router->get('/system/settings', $systemSettings->index(...));
+        $router->get('/system/settings/logo', $systemSettings->logo(...));
+        $router->post('/system/settings', $systemSettings->save(...));
         $router->get('/system/letter-templates', $letterTemplates->editor(...));
         $router->post('/system/letter-templates', $letterTemplates->save(...));
         $router->post('/system/letter-templates/preview', $letterTemplates->preview(...));

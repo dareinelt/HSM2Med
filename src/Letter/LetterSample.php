@@ -8,8 +8,9 @@ use DateTimeImmutable;
 
 /**
  * Erfundene Beispieldaten fuer die Vorschau einer Briefvorlage im Vorlageneditor. Enthaelt
- * keine Patientendaten; nur Name und Anschrift des Nachsorgezentrums stammen aus den aktuellen
- * Stammdaten, damit Briefkopf und Ruecksendeangabe realistisch erscheinen.
+ * keine Patientendaten; nur Name, Anschrift, Kontaktangaben und Ruecksendeangaben stammen aus
+ * den aktuellen Praxis-Informationen, damit Briefkopf und Ruecksendeangabe realistisch
+ * erscheinen.
  */
 final class LetterSample
 {
@@ -43,6 +44,14 @@ final class LetterSample
                 'settings_version' => 1,
                 'center_name' => $center === '' ? 'Nachsorgezentrum (Name in den Stammdaten hinterlegen)' : $center,
                 'center_address' => trim((string) ($settings['center_address'] ?? '')),
+                'practice_phone' => trim((string) ($settings['practice_phone'] ?? '')),
+                'practice_fax' => trim((string) ($settings['practice_fax'] ?? '')),
+                'practice_email' => trim((string) ($settings['practice_email'] ?? '')),
+                'practice_website' => trim((string) ($settings['practice_website'] ?? '')),
+                'return_name' => trim((string) ($settings['return_name'] ?? '')),
+                'return_street' => trim((string) ($settings['return_street'] ?? '')),
+                'return_postal_code' => trim((string) ($settings['return_postal_code'] ?? '')),
+                'return_city' => trim((string) ($settings['return_city'] ?? '')),
                 'logo_sha256' => '',
                 'logo_filename' => '',
             ],

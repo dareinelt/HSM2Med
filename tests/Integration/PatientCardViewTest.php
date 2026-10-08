@@ -106,6 +106,14 @@ final class PatientCardViewTest extends DatabaseTestCase
         return $this->repository()->saveSettings([
             'center_name' => 'Nachsorgezentrum Beispielstadt',
             'center_address' => "Musterweg 5\n12345 Beispielstadt\nTelefon 01234/56789",
+            'practice_phone' => '01234/56789',
+            'practice_fax' => '01234/56780',
+            'practice_email' => 'praxis@example.de',
+            'practice_website' => 'www.example.de',
+            'return_name' => 'Nachsorgezentrum Beispielstadt',
+            'return_street' => 'Musterweg 5',
+            'return_postal_code' => '12345',
+            'return_city' => 'Beispielstadt',
             'notice_text' => 'Dieser Ausweis enthält Angaben zum implantierten Schrittmachersystem.',
             'flight_notice_de' => 'Das Gerät kann Metalldetektoren auslösen.',
             'flight_notice_en' => 'The device may trigger metal detectors.',
@@ -315,7 +323,7 @@ final class PatientCardViewTest extends DatabaseTestCase
         $this->assertContains('Nachsorgeuntersuchungen', $response->body);
     }
 
-    /** Stammdatenformular ohne Logo. */
+    /** Hinweistexte des Ausweises; Praxis-Informationen werden nur angezeigt. */
     public function testSettingsFormRenders(): void
     {
         $this->configureSettings();
@@ -324,9 +332,16 @@ final class PatientCardViewTest extends DatabaseTestCase
 
         $this->assertSame(200, $response->status);
         $this->assertContains('name="_csrf"', $response->body);
-        $this->assertContains('value="Nachsorgezentrum Beispielstadt"', $response->body);
+        $this->assertContains('action="/patient-cards/settings"', $response->body);
+        $this->assertContains('Nachsorgezentrum Beispielstadt', $response->body);
         $this->assertContains('Kein Logo hinterlegt.', $response->body);
         $this->assertContains('Bisher gespeicherte Fassungen: 1', $response->body);
+
+        // Die Praxis-Informationen sind hier nur lesbar und werden im Bereich System gepflegt.
+        $this->assertContains('/system/settings', $response->body);
+        $this->assertNotContains('name="center_name"', $response->body);
+        $this->assertNotContains('name="return_street"', $response->body);
+        $this->assertContains('name="notice_text"', $response->body);
     }
 
     /** Stammdatenformular mit Logo: Vorschau, Metadaten und Auslieferung des Bildes. */
@@ -349,8 +364,8 @@ final class PatientCardViewTest extends DatabaseTestCase
 
         $this->assertSame(200, $response->status);
         $this->assertContains('src="/patient-cards/settings/logo"', $response->body);
-        $this->assertContains('logo.png', $response->body);
-        $this->assertContains('40×20 px', $response->body);
+        $this->assertContains('width="40" height="20"', $response->body);
+        $this->assertNotContains('Kein Logo hinterlegt.', $response->body);
 
         $image = $controller->logo(new Request('GET', '/patient-cards/settings/logo'));
         $this->assertSame(200, $image->status);

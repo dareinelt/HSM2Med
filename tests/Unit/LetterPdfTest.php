@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Letter\LetterPdfGenerator;
+use App\Letter\LetterTemplate;
 use App\Report\Pdf\PdfDocument;
 use DateTimeImmutable;
 use RuntimeException;
@@ -28,6 +29,27 @@ final class LetterPdfTest extends TestCase
     private function generate(array $overrides = []): string
     {
         return (new LetterPdfGenerator())->generate(LetterFactory::snapshot($overrides), null, $this->generatedAt());
+    }
+
+    /**
+     * Brief der aktuellen Fassung (2) mit der Standardvorlage; nur so wirken Briefkopf,
+     * Kontaktzeile und Ruecksendeangabe der Vorlage.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    private function generateWithTemplate(array $overrides = []): string
+    {
+        $snapshot = LetterFactory::snapshot(['letter_version' => 2, 'letter_template_version' => '1'] + $overrides);
+        $content = LetterTemplate::default();
+        $snapshot['template'] = [
+            'version_id' => 1,
+            'version_no' => 1,
+            'name' => $content['name'],
+            'content_sha256' => '',
+            'content' => $content,
+        ];
+
+        return (new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt());
     }
 
     /** Test 1: Der Brief ist ein gueltiges, deterministisches PDF in DIN A4 mit mehreren Seiten. */
@@ -256,5 +278,71 @@ final class LetterPdfTest extends TestCase
         $this->assertSame('Brief_Schrittmacher-ICD-Abfrage_LASTNAME_FIRSTNAME_2026-10-07.pdf', $filename);
         $this->assertSame($filename, LetterPdfGenerator::filename($snapshot));
         $this->assertSame('Brief_Schrittmacher-ICD-Abfrage_Patient.pdf', LetterPdfGenerator::filename(['patient' => [], 'document' => []]));
+    }
+
+    /** Test 13: Kontaktangaben und Ruecksendeangabe stammen aus den Praxis-Informationen. */
+    public function testLetterheadContactAndReturnAddressComeFromPracticeSettings(): void
+    {
+        $pageOne = PdfText::pages($this->generateWithTemplate([
+            'master' => [
+                'return_name' => 'Praxis Dr. Beispiel',
+                'return_street' => 'Ringstraße 7',
+                'return_postal_code' => '54321',
+                'return_city' => 'Musterstadt',
+            ],
+        ]))[0];
+
+        $this->assertContains('Telefon 01234/56789 · Fax 01234/56780', $pageOne);
+        $this->assertContains('Praxis Dr. Beispiel · Ringstraße 7 · 54321 Musterstadt', $pageOne);
+        $this->assertNotContains('Nachsorgezentrum Beispielstadt · Musterweg 5', $pageOne);
+    }
+
+    /** Test 14: Ohne eigene Ruecksendeangaben verwenden die Briefe die Anschrift der Praxis. */
+    public function testReturnAddressFallsBackToPracticeAddress(): void
+    {
+        $pageOne = PdfText::pages($this->generateWithTemplate([
+            'master' => [
+                'center_name' => 'Praxis am Markt',
+                'center_address' => "Marktplatz 3\n54321 Musterstadt",
+                'return_name' => '',
+                'return_street' => '',
+                'return_postal_code' => '',
+                'return_city' => '',
+                'practice_phone' => '',
+                'practice_fax' => '',
+                'practice_email' => '',
+                'practice_website' => '',
+            ],
+        ]))[0];
+
+        $this->assertContains('Praxis am Markt · Marktplatz 3 · 54321 Musterstadt', $pageOne);
+    }
+
+    /** Test 15: Ohne Kontaktangaben entfaellt die Kontaktzeile im Briefkopf. */
+    public function testLetterheadOmitsMissingContactLine(): void
+    {
+        $pageOne = PdfText::pages($this->generateWithTemplate([
+            'master' => [
+                'practice_phone' => '',
+                'practice_fax' => '',
+                'practice_email' => '',
+                'practice_website' => '',
+            ],
+        ]))[0];
+
+        $this->assertNotContains('Telefon 01234/56789 ·', $pageOne);
+        $this->assertContains('Nachsorgezentrum Beispielstadt', $pageOne);
+    }
+
+    /** Test 16: Platzhalterwerte werden aus den Praxis-Informationen abgeleitet. */
+    public function testPlaceholderValuesExposePracticeAndReturnAddress(): void
+    {
+        $values = LetterPdfGenerator::placeholderValues(LetterFactory::snapshot());
+
+        $this->assertSame('Telefon 01234/56789 · Fax 01234/56780 · praxis@example.de · www.example.de', $values['practice_contact_line']);
+        $this->assertSame('01234/56789', $values['practice_phone']);
+        $this->assertSame('praxis@example.de', $values['practice_email']);
+        $this->assertSame('Nachsorgezentrum Beispielstadt · Musterweg 5 · 12345 Beispielstadt', $values['return_address_line']);
+        $this->assertSame('12345', $values['return_postal_code']);
     }
 }

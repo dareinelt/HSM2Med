@@ -16,7 +16,8 @@
         <p class="lead">Technischer Zustand der Anwendung, Datenbank und Speicherorte.</p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/system/letter-templates" target="_blank" rel="noopener"
+        <a class="button primary" href="/system/settings"><?= $icon('settings') ?><span>Praxis-Informationen</span></a>
+        <a class="button" href="/system/letter-templates" target="_blank" rel="noopener"
            title="Feste Texte und Aufbau der Briefe bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Briefvorlage bearbeiten</span></a>
         <a class="button" href="#datenschutz"><?= $icon('shield') ?><span>Datenschutz und Betrieb</span></a>
     </div>

@@ -34,6 +34,7 @@ final class Ribbon
         'letters' => 'Briefe',
         'imports' => 'Importprotokoll',
         'system' => 'Systeminformationen',
+        'system_settings' => 'Praxis-Informationen',
         'logs' => 'Fehlerprotokoll',
     ];
 
@@ -179,7 +180,7 @@ final class Ribbon
                         'items' => [
                             ['label' => 'Ausweisübersicht', 'icon' => 'cards', 'href' => '/patient-cards', 'title' => 'Ausweise mit MRT-Kompatibilität und Nachsorgeplan', 'match' => ['patient_cards']],
                             ['label' => 'Ausweis erstellen', 'icon' => 'card-plus', 'href' => '/patient-cards/new', 'title' => 'Patientenausweis aus einem Bericht erzeugen', 'match' => []],
-                            ['label' => 'Ausweis-Stammdaten', 'icon' => 'settings', 'href' => '/patient-cards/settings', 'title' => 'Klinik, Ansprechpartner und Standardwerte pflegen', 'match' => ['patient_card_settings']],
+                            ['label' => 'Ausweis-Stammdaten', 'icon' => 'settings', 'href' => '/patient-cards/settings', 'title' => 'Hinweistexte des Ausweises pflegen', 'match' => ['patient_card_settings']],
                         ],
                     ],
                     [
@@ -206,6 +207,13 @@ final class Ribbon
                         ],
                     ],
                     [
+                        'label' => 'Vorlagen',
+                        'items' => [
+                            ['label' => 'Praxis-Informationen', 'icon' => 'settings', 'href' => '/system/settings', 'title' => 'Praxis, Kontaktangaben, Logo und Rücksendeangaben für die Briefe pflegen', 'match' => []],
+                            ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => [], 'target' => '_blank'],
+                        ],
+                    ],
+                    [
                         'label' => 'Quellen',
                         'items' => [
                             ['label' => 'Patientenakten', 'icon' => 'patients', 'href' => '/patients', 'title' => 'Patienten mit ihren Nachsorgeuntersuchungen', 'match' => []],
@@ -219,8 +227,14 @@ final class Ribbon
                 'label' => 'System',
                 'icon' => 'system',
                 'href' => '/system',
-                'sections' => ['system', 'logs'],
+                'sections' => ['system', 'system_settings', 'logs'],
                 'groups' => [
+                    [
+                        'label' => 'Praxis',
+                        'items' => [
+                            ['label' => 'Praxis-Informationen', 'icon' => 'settings', 'href' => '/system/settings', 'title' => 'Praxis, Kontaktangaben, Logo und Rücksendeangaben für Briefe und Ausweise pflegen', 'match' => ['system_settings']],
+                        ],
+                    ],
                     [
                         'label' => 'Betrieb',
                         'items' => [

@@ -37,6 +37,7 @@ Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender s
 | `src/Letter/LetterService.php` | Friert die Vorlage beim Erstellen ein; Neuausfertigung (Original-/aktuelle Vorlage) |
 | `database/migrations/007_letter_templates.sql` | Tabelle `letter_template_versions`; `patient_letters.template_version_id`, `source_letter_id` |
 | `database/migrations/009_letter_template_types.sql` | `letter_template_versions.template_type` mit eigenem Fassungszähler; Anrede-Spalten in `patient_card_master_data`; `{salutation}` nachtragen |
+| `database/migrations/010_practice_settings.sql` | Praxis-Informationen und Rücksendeangaben in `patient_card_settings` (+ Fassungen); `return_address`-Zone der Vorlagen auf `{return_address_line}` umstellen, Kontaktzeile im Briefkopf einschalten |
 | `tests/Unit/LetterTemplateTest.php` | Standardvorlage je Empfängerart, `normalize()`, Platzhalter, PDF folgt Reihenfolge und Texten |
 | `tests/Unit/LetterSalutationTest.php` | Anredetexte, Rückfall, Feldzuordnung der Stammdaten |
 | `tests/Integration/LetterTemplateMigrationTest.php` | Bestehende Installationen erhalten getrennte Vorlagen und `{salutation}` |
@@ -90,8 +91,8 @@ Standardtexte) und den Fassungsverlauf; das JSON selbst enthält sie nicht.
 
 | Schlüssel | Bezeichnung | Optionen | Texte |
 | --- | --- | --- | --- |
-| `letterhead` | Briefkopf | `show_logo` | `extra` (mehrzeilig) |
-| `return_address` | Rücksendeangabe | `show` | `text` |
+| `letterhead` | Briefkopf | `show_logo`, `show_contact` | `extra` (mehrzeilig) |
+| `return_address` | Rücksendeangabe | `show` | `text` (Standard: `{return_address_line}`) |
 | `recipient` | Anschriftfeld (Empfänger) | `source` (`text` \| `patient`) | `remark`, `text` (mehrzeilig) |
 | `info_block` | Informationsblock | `show_reference`, `show_patient`, `show_birth`, `show_identifier`, `show_sequence`, `show_settings`, `show_reissue`, `show_date` (Häkchen je Zeile) | `label_reference`, `label_patient`, `label_birth`, `label_identifier`, `label_sequence`, `label_settings`, `label_reissue`, `label_date` (leer = Zeile ausgeblendet) |
 | `footer` | Fußzeile und Seitenränder | `fold_marks` | `disclaimer` (mehrzeilig), `page_label` (erlaubt `{page}`, `{pages}`), `continuation` |
@@ -157,9 +158,16 @@ bereits gespeicherten Vorlage kann jederzeit durch festen Text ersetzt werden; d
 ### 4.4 Platzhalter
 
 Erlaubt in allen Texten: `{salutation}` (siehe 4.3), `{center_name}`, `{center_address_line}`,
-`{patient_name}`, `{first_name}`, `{last_name}`, `{date_of_birth}`, `{patient_identifier}`,
-`{document_number}`, `{letter_date}`, `{sequence_no}`. Nur in `footer.page_label`: `{page}`,
-`{pages}` (Definition-Flag `page: true`).
+`{practice_contact_line}`, `{return_address_line}`, `{return_name}`, `{return_street}`,
+`{return_postal_code}`, `{return_city}`, `{patient_name}`, `{first_name}`, `{last_name}`,
+`{date_of_birth}`, `{patient_identifier}`, `{document_number}`, `{letter_date}`, `{sequence_no}`.
+Nur in `footer.page_label`: `{page}`, `{pages}` (Definition-Flag `page: true`).
+
+`{center_name}`, `{center_address_line}`, `{practice_contact_line}` sowie die `{return_*}`
+kommen aus den **Praxis-Informationen** (System → *Praxis-Informationen*, `/system/settings`).
+`{practice_contact_line}` setzt sich aus den gepflegten Angaben Telefon, Fax, E-Mail und
+Internetseite zusammen (nur gefüllte Teile, getrennt mit `·`); `{return_address_line}` ist die
+Rücksendeangabe (Name, Straße, „PLZ Ort"), ersatzweise Praxisname und Praxisanschrift.
 
 Gefüllt werden sie ausschließlich aus dem Snapshot des Briefes
 (`LetterPdfGenerator::placeholderValues()`); `LetterTemplate::fill()` lässt unbekannte
@@ -255,7 +263,7 @@ current     aktuelle Fassung {id, type, version_no, name, comment, created_at, c
 versions    [{id, version_no, name, comment, created_at, letter_count}]
 csrf        CSRF-Token
 urls        {save, preview, version, editor, source}
-settings    {center_name, center_address, has_logo}  (Ausweis-Stammdaten für die Vorschau)
+settings    {center_name, center_address, has_logo}  (Praxis-Informationen für die Vorschau)
 ```
 
 Der Datenblock wird mit `JSON_HEX_TAG|AMP|APOS|QUOT` kodiert, so dass `</script>` nicht

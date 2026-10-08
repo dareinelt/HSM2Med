@@ -60,6 +60,12 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   nennt unter anderem die MRT-Tauglichkeit (Auswahlwert mit optionaler Zusatzangabe). Seite 2
   zeigt die Messwerte der aktuellen und der letzten sechs Untersuchungen anhand der Vorlage
   `config/patient_card_measurements.php`.
+- **Praxis-Informationen im Bereich System** (`/system/settings`): Praxisname, Anschrift, Telefon,
+  Fax, E-Mail, Internetseite, Logo sowie die Rücksendeangaben (Name, Straße, PLZ, Ort) an einer
+  Stelle pflegen. Diese Angaben sind die gemeinsame Datenquelle für Briefe und Patientenausweise:
+  Name, Anschrift und Logo erscheinen im Briefkopf, die Kontaktangaben als Kontaktzeile und die
+  Rücksendeangaben als Absenderzeile im Brief. Jede Speicherung erzeugt eine neue,
+  unveränderliche Fassung; bereits erzeugte Briefe und Ausweise bleiben unverändert.
 - Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
   Flugsicherheitstexte) mit eigener Fassung je Ausweis.
 - **Brief zur Schrittmacher-/ICD-Abfrage**: automatisch erzeugter Brief aus der Patientenakte.
@@ -181,8 +187,8 @@ mit großen Symbolen und Beschriftung:
 | **Berichte** | *Berichte* (Berichtsübersicht, Importprotokoll); *Aus dem Bericht erstellen* (Patientenausweis, Arztbrief) |
 | **Patientenakte** | *Akten* (Patientenübersicht, Patient anlegen); *Weiterverarbeiten* (Ausweise und Nachsorge, Briefe); *Nachschlagen* (Importprotokoll) |
 | **Patientenausweise** | *Ausweise* (Ausweisübersicht, Ausweis erstellen, Ausweis-Stammdaten); *Quellen* (Patientenakten, Berichte) |
-| **Briefe** | *Briefe* (Briefübersicht, Brief erstellen); *Quellen* (Patientenakten, Berichte) |
-| **System** | *Betrieb* (Systeminformationen, Importprotokoll); *Daten und Datenschutz* (Datenschutz, Berichte) |
+| **Briefe** | *Briefe* (Briefübersicht, Brief erstellen); *Vorlagen* (Praxis-Informationen, Briefvorlage); *Quellen* (Patientenakten, Berichte) |
+| **System** | *Praxis* (Praxis-Informationen, Briefvorlage); *Betrieb* (Systeminformationen, Importprotokoll); *Daten und Datenschutz* (Datenschutz, Berichte) |
 
 Der jeweils aktuelle Reiter ist hervorgehoben; welcher Reiter zu einer Seite gehört, steuert
 `src/Http/Ribbon.php` über den `$active`-Schlüssel der Seite.
@@ -426,12 +432,14 @@ im Assistenten erfasst werden.
 
 ### Ablauf
 
-**1. Stammdaten pflegen** (`/patient-cards/settings`) – Logo (PNG/JPEG, max. 1 MiB und
-2000 px Kantenlänge), Nachsorgezentrum mit Anschrift sowie die drei Texte (Hinweise,
-Achtung Flugsicherheit auf Deutsch, Attention Airline Security auf Englisch). Jede Speicherung
+**1. Stammdaten pflegen** (`/patient-cards/settings`, Reiter *Patientenausweise* unter *Ausweise*)
+– die drei Texte des Ausweises: Hinweise, Achtung Flugsicherheit auf Deutsch, Attention Airline
+Security auf Englisch. Praxisname, Anschrift, Kontaktangaben, Logo und Rücksendeangaben werden
+hier nur angezeigt und im Bereich **System → Praxis-Informationen** (`/system/settings`) gepflegt;
+beim Speichern der Ausweistexte bleiben die dortigen Angaben unverändert erhalten. Jede Speicherung
 erzeugt eine neue, unveränderliche Fassung; das Logo wird über seinen SHA-256 erkannt und nicht
-mehrfach gespeichert. Die Texte sind nicht im PDF-Generator hinterlegt, sondern werden je
-Ausweis mitgespeichert.
+mehrfach gespeichert. Die Texte sind nicht im PDF-Generator hinterlegt, sondern werden je Ausweis
+mitgespeichert.
 
 ![Stammdaten des Patientenausweises](docs/screenshots/13-ausweis-stammdaten.png)
 
@@ -512,8 +520,8 @@ wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklic
 | GET | `/patient-cards/{id}` | Ausweisdetail mit Verlauf |
 | GET | `/patient-cards/{id}/pdf` | Ausweis-PDF (inline, `?download=1` als Download) |
 | GET | `/patient-cards/patients/{patient}` | Alle Ausweise und Nachsorgeuntersuchungen |
-| GET | `/patient-cards/settings` | Stammdaten (Logo, Nachsorgezentrum, Texte) |
-| POST | `/patient-cards/settings` | Stammdaten speichern (neue Fassung) |
+| GET | `/patient-cards/settings` | Hinweistexte des Ausweises (Praxis-Informationen nur lesbar) |
+| POST | `/patient-cards/settings` | Hinweistexte speichern (neue Fassung) |
 | GET | `/patient-cards/settings/logo` | Hinterlegtes Logo ausliefern |
 
 ### PDF-Seiten
@@ -619,7 +627,10 @@ Vorlage ein- und ausblendbar), Betreff fett ohne das Wort „Betreff", Anrede, B
 Grußformel; Falzmarken bei 105 mm und 210 mm sowie Lochmarke bei 148,5 mm; linker Rand
 25 mm, rechter Rand 20 mm; Folgeseiten mit Kurzkopf und Seitenangabe. Inhalt, Reihenfolge und
 alle festen Texte bestimmt die [Briefvorlage](#briefvorlage-und-vorlageneditor), deren
-Fassung im Snapshot des Briefes eingefroren wird.
+Fassung im Snapshot des Briefes eingefroren wird. Briefkopf (Praxisname, Anschrift, optionale
+Kontaktzeile mit Telefon, Fax, E-Mail und Internetseite) und Rücksendeangabe stammen aus den
+**Praxis-Informationen** (`/system/settings`, Reiter *System* unter *Praxis*) und sind im
+Snapshot des Briefes eingefroren.
 
 Briefe der Fassung 1 (vor Einführung der Vorlagen) behalten ihren damaligen Aufbau:
 
@@ -661,6 +672,9 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 | GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
 | GET | `/letters/{id}/reproduce` | PDF erneut aus dem Snapshot mit der damaligen Vorlage erzeugen (nichts wird gespeichert) |
 | POST | `/letters/{id}/regenerate` | Neuausfertigung als neuer Brief: `template=original` oder `template=current` (nur mit `confirm_current_template=1`) |
+| GET | `/system/settings` | Praxis-Informationen und Rücksendeangaben für Briefe und Ausweise |
+| POST | `/system/settings` | Praxis-Informationen speichern (neue Fassung, CSRF) |
+| GET | `/system/settings/logo` | Hinterlegtes Logo ausliefern |
 | GET | `/system/letter-templates` | Vorlageneditor (eigener Tab), `?type=patient|family_doctor|referring_physician` |
 | POST | `/system/letter-templates` | Vorlage als neue Fassung speichern (JSON-Antwort, CSRF; Feld `type`) |
 | POST | `/system/letter-templates/preview` | PDF-Vorschau einer ungespeicherten Vorlage mit Beispieldaten |
@@ -1007,9 +1021,13 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   wird.
 - **Oberflächen (Integration):** Die Templates werden mit den echten Controllern gerendert
   (`tests/Integration/PatientCardViewTest.php`, `tests/Integration/PatientViewTest.php`,
-  `tests/Integration/LetterViewTest.php`).
+  `tests/Integration/LetterViewTest.php`, `tests/Integration/SystemSettingsViewTest.php`).
   Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
   unvollständige Formulare, fehlende CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
+- **Praxis-Informationen (System):** `tests/Integration/SystemSettingsViewTest.php` prüft das
+  Formular (Abschnitte, Felder, Logo-Vorschau und -Auslieferung, Fassungszahl), das Speichern als
+  neue Fassung samt Erfolgsmeldung, die Ablehnung einer ungültigen E-Mail-Adresse (HTTP 422, keine
+  neue Fassung, Hinweistexte bleiben erhalten) sowie die Verlinkung von den Systeminformationen.
 - **Patientenvorgang (Integration/Unit):** `tests/Integration/PatientFirstWorkflowTest.php`
   prüft, dass der aktive Patient beim Anlegen automatisch gesetzt wird, Wechsel und Aufheben
   funktionieren, eine veraltete Auswahl verworfen wird und die patientenbezogenen Routen ohne
@@ -1025,7 +1043,8 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
 - **Brief zur Schrittmacher-/ICD-Abfrage:** Assistent (`prepare()`) mit Warnungen für fehlende
   Bausteine, Anhang und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
   (HTTP 422, kein Datensatz), Snapshot und Unveränderlichkeit (Patientendaten, Bausteinfassungen
-  und Stammdaten bleiben nach späteren Änderungen unverändert), laufende Briefnummer je Patient,
+  und Stammdaten bleiben nach späteren Änderungen unverändert), Übernahme der Praxis-Informationen
+  und Rücksendeangaben in Snapshot und PDF, laufende Briefnummer je Patient,
   Brief-Fassung, Suche und Seitenaufteilung, Anhangsabschnitte je Geräteart (Schrittmacher, ICD,
   CRT-P, CRT-D), PDF-Layout (Reihenfolge, Auslassungen, Seitenzahl, Fußzeile, Dateiname) sowie die
   Anzeige in Übersicht, Detailansicht, Patientenliste und Akte.

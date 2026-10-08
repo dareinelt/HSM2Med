@@ -13,8 +13,10 @@ use App\PatientCard\PatientCardSettingsService;
 use App\Security\SessionManager;
 
 /**
- * Globale Stammdaten des Patientenausweises: Logo, Nachsorgezentrum und die drei Hinweistexte.
+ * Hinweistexte des Patientenausweises.
  *
+ * Praxis-Informationen, Ruecksendeangaben und Logo sind eine gemeinsame Datenquelle und werden
+ * im Bereich "System" gepflegt (siehe SystemSettingsController); diese Seite zeigt sie nur an.
  * Aenderungen wirken nur auf kuenftig erzeugte Ausweise: jeder Ausweis haelt die beim Erstellen
  * gueltige Stammdaten-Fassung (patient_card_settings_versions) fest.
  */
@@ -24,8 +26,6 @@ final class PatientCardSettingsController extends Controller
      * Eingabefelder: Name => [Beschriftung, Maximallaenge, mehrzeilig].
      */
     private const array TEXT_INPUTS = [
-        'center_name' => ['Nachsorgezentrum', PatientCardSettingsService::MAX_CENTER_NAME, false],
-        'center_address' => ['Anschrift des Nachsorgezentrums', PatientCardSettingsService::MAX_CENTER_ADDRESS, true],
         'notice_text' => ['Hinweise auf dem Ausweis', PatientCardPdfGenerator::MAX_NOTICE_CHARS, true],
         'flight_notice_de' => ['Achtung Flugsicherheit (deutsch)', PatientCardPdfGenerator::MAX_FLIGHT_NOTICE_CHARS, true],
         'flight_notice_en' => ['Attention Airline Security (englisch)', PatientCardPdfGenerator::MAX_FLIGHT_NOTICE_CHARS, true],
@@ -55,7 +55,7 @@ final class PatientCardSettingsController extends Controller
         $data = $service->load();
 
         try {
-            $result = $service->save($request->post, $request->file('logo'), $request->post('remove_logo') === '1');
+            $result = $service->save($this->withPractice($request->post, $data['settings']), null, false);
         } catch (PatientCardException $e) {
             return Response::html($this->view->render('patient_card_settings/index', [
                 'title' => 'Patientenausweis: Stammdaten',
@@ -71,7 +71,7 @@ final class PatientCardSettingsController extends Controller
         }
 
         SessionManager::flash('success', sprintf(
-            'Die Stammdaten wurden als neue Fassung Nr. %d gespeichert. Bereits erstellte Ausweise bleiben unverändert.',
+            'Die Hinweistexte wurden als neue Fassung Nr. %d gespeichert. Bereits erstellte Ausweise bleiben unverändert.',
             $result['version_id'],
         ));
 
@@ -96,6 +96,24 @@ final class PatientCardSettingsController extends Controller
         }
 
         return Response::image((string) $logo['content'], $mime);
+    }
+
+    /**
+     * Ergaenzt die nicht mehr auf dieser Seite gepflegten Praxis-Informationen aus den
+     * gespeicherten Stammdaten, damit sie beim Speichern der Hinweistexte erhalten bleiben.
+     *
+     * @param array<string, mixed> $post
+     * @param array<string, mixed> $settings
+     * @return array<string, mixed>
+     */
+    private function withPractice(array $post, array $settings): array
+    {
+        foreach (PatientCardSettingsService::PRACTICE_FIELDS as $field) {
+            if (!array_key_exists($field, $post)) {
+                $post[$field] = $settings[$field] ?? '';
+            }
+        }
+        return $post;
     }
 
     /**
