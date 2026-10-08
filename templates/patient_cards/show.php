@@ -4,6 +4,7 @@
  * gespeicherten Snapshot; Stammdatenaenderungen wirken sich nicht auf diese Ansicht aus.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $card
  * @var array<string, mixed> $snapshot
@@ -40,7 +41,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 ?>
 <div class="page-head">
     <div>
-        <h1>Patientenausweis Nr. <?= $e($card['id']) ?></h1>
+        <h1><?= $icon('cards', 'app-icon app-icon--lg') ?><span>Patientenausweis Nr. <?= $e($card['id']) ?></span></h1>
         <p class="lead">
             <?= $e($card['patient_name']) ?>,
             geboren <?= $e($view::dateTime($card['date_of_birth'], true)) ?> ·
@@ -49,14 +50,14 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
         </p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/patient-cards/<?= $e($card['id']) ?>/pdf" target="_blank" rel="noopener">PDF anzeigen</a>
-        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>/pdf?download=1">PDF herunterladen</a>
-        <a class="button" href="/patient-cards/patients/<?= $e($card['patient_id']) ?>">Patient</a>
+        <a class="button primary" href="/patient-cards/<?= $e($card['id']) ?>/pdf" target="_blank" rel="noopener"><?= $icon('printer') ?> <span>PDF anzeigen</span></a>
+        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>/pdf?download=1"><?= $icon('download') ?> <span>PDF herunterladen</span></a>
+        <a class="button" href="/patient-cards/patients/<?= $e($card['patient_id']) ?>"><?= $icon('patients') ?> <span>Patient</span></a>
     </div>
 </div>
 
 <section class="card">
-    <h2>Dokument</h2>
+    <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Dokument</h2>
     <table class="kv">
         <?= $row('Dateiname', $e($card['pdf_filename'])) ?>
         <?= $row('Erstellt am', $e($view::dateTime($card['created_at']))) ?>
@@ -71,7 +72,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 </section>
 
 <section class="card">
-    <h2>Patient</h2>
+    <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Patient</h2>
     <table class="kv">
         <?= $row('Name', $e((string) ($patient_['patient_name'] ?? ''))) ?>
         <?= $row('Geburtsdatum', $e($dobDisplay)) ?>
@@ -83,7 +84,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 </section>
 
 <section class="card">
-    <h2>Notfallkontakt und Hausarzt</h2>
+    <h2><?= $icon('user-plus', 'app-icon app-icon--sm') ?> Notfallkontakt und Hausarzt</h2>
     <table class="kv">
         <?= $row('Notfallkontakt', $e((string) ($emergency['name'] ?? ''))) ?>
         <?= $row('Telefon Notfallkontakt', $e((string) ($emergency['phone'] ?? ''))) ?>
@@ -94,7 +95,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 </section>
 
 <section class="card">
-    <h2>Aggregat und Sonden</h2>
+    <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Aggregat und Sonden</h2>
     <table class="kv">
         <?= $row('Hersteller', $e((string) ($device['manufacturer'] ?? ''))) ?>
         <?= $row('Modell', $e(trim((string) ($device['model_name'] ?? '') . ' ' . (string) ($device['model_number'] ?? '')))) ?>
@@ -128,7 +129,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 </section>
 
 <section class="card">
-    <h2>Nachsorge</h2>
+    <h2><?= $icon('calendar', 'app-icon app-icon--sm') ?> Nachsorge</h2>
     <table class="kv">
         <?= $row('Nachsorgezentrum', $e((string) ($settings['center_name'] ?? ''))) ?>
         <?= $row('Adresse Zentrum', nl2br($e((string) ($settings['center_address'] ?? '')))) ?>
@@ -140,7 +141,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 
 <?php if ($history !== []): ?>
 <section class="card">
-    <h2>Frühere Untersuchungen</h2>
+    <h2><?= $icon('clock', 'app-icon app-icon--sm') ?> Frühere Untersuchungen</h2>
     <p class="hint">Seite 2 des Ausweises zeigt die Messwerte der aktuellen Untersuchung und der bis zu sechs
         letzten früheren Untersuchungen. Diese Liste ist die vollständige Historie zum Zeitpunkt der
         Ausweiserstellung.</p>
@@ -164,7 +165,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 <?php endif; ?>
 
 <section class="card">
-    <h2>Hinweistexte des Ausweises</h2>
+    <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Hinweistexte des Ausweises</h2>
     <table class="kv">
         <?= $row('Hinweise', nl2br($e((string) ($settings['notice_text'] ?? '')))) ?>
         <?= $row('Achtung Flugsicherheit (DE)', nl2br($e((string) ($settings['flight_notice_de'] ?? '')))) ?>
@@ -177,7 +178,7 @@ $mrtDisplay = $mrtValue === '' && $mrtNote === ''
 
 <?php if ($previous !== []): ?>
 <section class="card">
-    <h2>Frühere Ausweise dieses Patienten</h2>
+    <h2><?= $icon('cards', 'app-icon app-icon--sm') ?> Frühere Ausweise dieses Patienten</h2>
     <div class="table-scroll">
         <table class="table">
             <thead><tr><th>Nr.</th><th>Erstellt</th><th>Fassung</th><th>Nachsorge</th><th>Datei</th><th></th></tr></thead>

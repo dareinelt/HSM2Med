@@ -6,6 +6,7 @@
  * aus diesem Snapshot erzeugt.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $letter
  * @var array<string, mixed> $snapshot
@@ -28,7 +29,7 @@ $textParts = [
 ?>
 <div class="page-head">
     <div>
-        <h1>Brief Nr. <?= $e($id) ?></h1>
+        <h1><?= $icon('letters', 'app-icon app-icon--lg') ?><span>Brief Nr. <?= $e($id) ?></span></h1>
         <p class="lead">
             <?= $e($letter['patient_name']) ?>
             · geboren am <?= $e($view::dateTime($letter['date_of_birth'], true)) ?>
@@ -37,16 +38,16 @@ $textParts = [
         </p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/letters/<?= $e($id) ?>/pdf" target="_blank" rel="noopener">PDF anzeigen</a>
-        <a class="button" href="/letters/<?= $e($id) ?>/pdf?download=1">PDF herunterladen</a>
-        <a class="button" href="/letters/patients/<?= $e($patientId) ?>">Briefe des Patienten</a>
-        <a class="button" href="/letters">Zur Übersicht</a>
+        <a class="button primary" href="/letters/<?= $e($id) ?>/pdf" target="_blank" rel="noopener"><?= $icon('printer') ?> <span>PDF anzeigen</span></a>
+        <a class="button" href="/letters/<?= $e($id) ?>/pdf?download=1"><?= $icon('download') ?> <span>PDF herunterladen</span></a>
+        <a class="button" href="/letters/patients/<?= $e($patientId) ?>"><?= $icon('letters') ?> <span>Briefe des Patienten</span></a>
+        <a class="button" href="/letters"><?= $icon('back') ?> <span>Zur Übersicht</span></a>
     </div>
 </div>
 
 <div class="grid-2">
     <section class="card">
-        <h2>Dokument</h2>
+        <h2><?= $icon('letters', 'app-icon app-icon--sm') ?> Dokument</h2>
         <table class="kv">
             <tr><th>Dokumentnummer</th><td><?= $e($document['document_number'] ?? '') ?></td></tr>
             <tr><th>Briefdatum</th><td><?= $e($view::dateTime($document['letter_date'] ?? '', true)) ?></td></tr>
@@ -89,7 +90,7 @@ $textParts = [
     </section>
 
     <section class="card">
-        <h2>PDF</h2>
+        <h2><?= $icon('printer', 'app-icon app-icon--sm') ?> PDF</h2>
         <table class="kv">
             <tr><th>Dateiname</th><td class="break"><?= $e($letter['pdf_filename']) ?></td></tr>
             <tr><th>Größe</th><td><?= $e(number_format(((int) $letter['pdf_size']) / 1024, 0, ',', '.')) ?> kB</td></tr>
@@ -122,7 +123,7 @@ $textParts = [
 </div>
 
 <section class="card">
-    <h2>Brieftext</h2>
+    <h2><?= $icon('letters', 'app-icon app-icon--sm') ?> Brieftext</h2>
     <?php foreach ($textParts as $label => $part): ?>
         <h3><?= $e($label) ?></h3>
         <?php if (($part['present'] ?? false) !== true): ?>
@@ -175,7 +176,7 @@ $textParts = [
 </section>
 
 <section class="card">
-    <h2>Anhang: vollständige Schrittmacher-/ICD-Abfrage</h2>
+    <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Anhang: vollständige Schrittmacher-/ICD-Abfrage</h2>
     <?php if ($sections === []): ?>
         <p class="muted">Kein Anhang – zum Zeitpunkt der Erstellung lag keine Abfrage vor.</p>
     <?php else: ?>

@@ -152,6 +152,40 @@ docker compose up -d   # ohne --build
 
 ## Bedienung der Weboberfläche
 
+Die Oberfläche ist wie ein Office-Programm aufgebaut: oben ein **Funktionsband (Ribbon)**
+mit Reitern, darunter der Arbeitsbereich der jeweiligen Seite und am unteren Rand eine
+Statusleiste mit dem Hinweis zur Verwendung der Daten.
+
+**Funktionsband (Ribbon)** – jeder Reiter bündelt die Funktionen eines Themas in Gruppen
+mit großen Symbolen und Beschriftung:
+
+| Reiter | Gruppen und Funktionen |
+|---|---|
+| **Start** | *Überblick* (Dashboard, Berichte, Patientenakten, Patientenausweise, Briefe); *Neu anlegen* (Patient anlegen, Ausweis erstellen, Brief erstellen); *Nachschlagen* (Importprotokoll, Systeminformationen) |
+| **Import** | *Merlin-Export einlesen* (Datei importieren, Importprotokoll); *Weiter zur Auswertung* (Berichte ansehen, Patientenausweise) |
+| **Berichte** | *Berichte* (Berichtsübersicht, Importprotokoll); *Aus dem Bericht erstellen* (Patientenausweis, Arztbrief) |
+| **Patientenakte** | *Akten* (Patientenübersicht, Patient anlegen); *Weiterverarbeiten* (Ausweise und Nachsorge, Briefe); *Nachschlagen* (Importprotokoll) |
+| **Patientenausweise** | *Ausweise* (Ausweisübersicht, Ausweis erstellen, Ausweis-Stammdaten); *Quellen* (Patientenakten, Berichte) |
+| **Briefe** | *Briefe* (Briefübersicht, Brief erstellen); *Quellen* (Patientenakten, Berichte) |
+| **System** | *Betrieb* (Systeminformationen, Importprotokoll); *Daten und Datenschutz* (Datenschutz, Berichte) |
+
+Der jeweils aktuelle Reiter ist hervorgehoben; welcher Reiter zu einer Seite gehört, steuert
+`src/Http/Ribbon.php` über den `$active`-Schlüssel der Seite.
+
+Weitere Bedienelemente der Kopfzeile:
+
+* **Schnellzugriff** – die vier häufigsten Aktionen (*Import*, *Patient anlegen*,
+  *Ausweis erstellen*, *Brief erstellen*) sind zusätzlich oben rechts erreichbar.
+* **Dokumenttitel** – zeigt den Namen der aktuellen Seite und, sofern sinnvoll, den
+  Datensatz (z. B. Patient und Geburtsdatum).
+* **Datenschutz** – Schaltfläche zum Datenschutz-Abschnitt der Systemseite.
+
+Das Dashboard zeigt zusätzlich fünf große **Einstiegskacheln** für die häufigsten
+Arbeitsabläufe. Alle Symbole sind eingebettete SVG-Grafiken (`src/Http/Icon.php`); es werden
+keine externen Ressourcen geladen. Das Funktionsband ist reine Navigation und funktioniert
+auch ohne JavaScript. Beim Drucken werden Funktionsband, Statusleiste und Einstiegskacheln
+automatisch ausgeblendet.
+
 | Bereich | Beschreibung |
 |---|---|
 | **Dashboard** | Kennzahlen und zuletzt importierte Berichte |
@@ -811,6 +845,12 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   `tests/Integration/LetterViewTest.php`).
   Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
   unvollständige Formulare, fehlende CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
+- **Oberflächengerüst (Unit):** `tests/Unit/IconTest.php` prüft die Symbolbibliothek
+  (`src/Http/Icon.php`) – jedes Symbol liefert eingebettetes SVG ohne externe Verweise, ein
+  unbekannter Name fällt auf das Ersatzsymbol zurück, Klassennamen werden maskiert.
+  `tests/Unit/RibbonTest.php` prüft das Funktionsband (`src/Http/Ribbon.php`) – eindeutige
+  Reiter, Beschriftungen, interne Ziele, auflösbare Symbole, die Zuordnung von `$active`-Schlüsseln
+  zu Reitern sowie die unveränderten Routen der Ziele.
 - **Brief zur Schrittmacher-/ICD-Abfrage:** Assistent (`prepare()`) mit Warnungen für fehlende
   Bausteine, Anhang und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
   (HTTP 422, kein Datensatz), Snapshot und Unveränderlichkeit (Patientendaten, Bausteinfassungen
@@ -827,7 +867,7 @@ eine eigene, flüchtige Instanz (`db-docs`, `web-docs`); Produktivdaten werden n
 
 ```sh
 docker compose --profile docs run --rm screenshots
-docker compose --profile docs down
+docker compose --profile docs down -v
 ```
 
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Import der
@@ -845,7 +885,12 @@ Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwend
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
 Templates, `src/` oder `public/assets/` ist `docker compose build web-docs` erforderlich. Ein
 abgebrochener Lauf hinterlässt Daten in der flüchtigen Datenbank; vor einem neuen Versuch
-`docker compose --profile docs down` ausführen.
+`docker compose --profile docs down -v` ausführen.
+
+Die Aufnahmen zeigen die Oberfläche im Office-Stil inklusive Funktionsband. Die Bilder werden
+mit `full_page=True` erfasst und sind deshalb unterschiedlich hoch; das Erzeugungsskript
+spricht die Bedienelemente ausschließlich über stabile CSS-Klassen und Formularnamen an, nicht
+über Pixelpositionen.
 
 ## Backup und Wiederherstellung
 
@@ -897,8 +942,9 @@ database/            migrations/ (maßgeblich) und schema.sql (generiert)
 docker/              Apache-/PHP-Konfiguration, Entrypoint
 docs/screenshots/    Screenshots und Erzeugungsskript (Playwright)
 public/              Webroot: index.php, assets/ (CSS, JS)
+  assets/css/        app.css (Inhalte), office.css (Office-Gerüst)
 src/                 Anwendungscode (Namespace App\)
-  Http/              Kernel, Router, Controller, View
+  Http/              Kernel, Router, Controller, View, Icon (Symbole), Ribbon (Funktionsband)
   Import/            Parser, Validierung, ImportService, Archiv
   Letter/            Brief zur Schrittmacher-/ICD-Abfrage (Anhang, PDF, Service)
   Mapping/           Parameterzuordnung

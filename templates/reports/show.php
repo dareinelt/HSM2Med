@@ -1,6 +1,7 @@
 <?php
 /**
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var App\Report\ReportData $data
  * @var list<array<string, mixed>> $related
@@ -19,14 +20,14 @@ $cell = static function (mixed $value) use ($e): string {
 ?>
 <div class="page-head">
     <div>
-        <h1>Bericht Nr. <?= $e($id) ?></h1>
+        <h1><?= $icon('reports', 'app-icon app-icon--lg') ?><span>Bericht Nr. <?= $e($id) ?></span></h1>
         <p class="lead">Herzschrittmacher – Auslesebericht · automatisch erzeugter Datenbericht · keine medizinische Bewertung</p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/reports/<?= $e($id) ?>/pdf?raw=0" target="_blank" rel="noopener">PDF anzeigen</a>
-        <a class="button" href="/reports/<?= $e($id) ?>/pdf?raw=0&amp;download=1">PDF herunterladen</a>
-        <a class="button" href="/reports/<?= $e($id) ?>/pdf?raw=1&amp;download=1">PDF mit Rohdatenanhang</a>
-        <a class="button" href="/patient-cards/reports/<?= $e($id) ?>">Patientenausweis erstellen</a>
+        <a class="button primary" href="/reports/<?= $e($id) ?>/pdf?raw=0" target="_blank" rel="noopener"><?= $icon('printer') ?> <span>PDF anzeigen</span></a>
+        <a class="button" href="/reports/<?= $e($id) ?>/pdf?raw=0&amp;download=1"><?= $icon('download') ?> <span>PDF herunterladen</span></a>
+        <a class="button" href="/reports/<?= $e($id) ?>/pdf?raw=1&amp;download=1"><?= $icon('download') ?> <span>PDF mit Rohdatenanhang</span></a>
+        <a class="button" href="/patient-cards/reports/<?= $e($id) ?>"><?= $icon('card-plus') ?> <span>Patientenausweis erstellen</span></a>
     </div>
 </div>
 <p class="muted">Die PDF-Erzeugung verwendet ausschließlich den in der Datenbank gespeicherten Bericht-Snapshot.
@@ -34,7 +35,7 @@ $cell = static function (mixed $value) use ($e): string {
 
 <div class="grid-2">
     <section class="card">
-        <h2>Bericht</h2>
+        <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Bericht</h2>
         <table class="kv">
             <tr><th>Berichtsversion</th><td><?= $e($r['report_version']) ?> (Parser <?= $e($r['parser_version']) ?>, Mapping <?= $e($r['mapping_version']) ?>)</td></tr>
             <tr><th>Importdatei</th><td class="break"><a href="/imports/<?= $e($i['id']) ?>"><?= $e($i['filename']) ?></a></td></tr>
@@ -46,7 +47,7 @@ $cell = static function (mixed $value) use ($e): string {
     </section>
     <section class="card">
         <?php foreach (['patient' => 'Patient', 'device' => 'Gerät'] as $key => $title): ?>
-            <h2><?= $e($title) ?></h2>
+            <h2><?= $icon('list', 'app-icon app-icon--sm') ?> <?= $e($title) ?></h2>
             <table class="kv">
                 <?php foreach ($data->summarySection($key) as $row): ?>
                     <tr><th><?= $e($row['label']) ?></th>
@@ -59,7 +60,7 @@ $cell = static function (mixed $value) use ($e): string {
 </div>
 
 <section class="card">
-    <h2>Sonden</h2>
+    <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Sonden</h2>
     <?php if ($data->leads() === []): ?>
         <p class="muted">Keine Sondenangaben in den Quelldaten.</p>
     <?php else: ?>
@@ -82,7 +83,7 @@ $cell = static function (mixed $value) use ($e): string {
 </section>
 
 <section class="card" id="ausweise">
-    <h2>Patientenausweis <small class="muted"><?= $e(count($cards)) ?> Fassung(en)</small></h2>
+    <h2><?= $icon('cards', 'app-icon app-icon--sm') ?> Patientenausweis <small class="muted"><?= $e(count($cards)) ?> Fassung(en)</small></h2>
     <p class="muted">Der Ausweis wird aus diesem Bericht erzeugt und als unveränderliches PDF gespeichert.
         Spätere Änderungen an Stammdaten oder Patientendaten verändern bestehende Ausweise nicht.</p>
     <?php if ($cards === []): ?>
@@ -100,9 +101,9 @@ $cell = static function (mixed $value) use ($e): string {
                     <td><?= $card['follow_up_date'] === null || $card['follow_up_date'] === '' ? '<span class="muted">nicht angegeben</span>' : $e($card['follow_up_date']) ?></td>
                     <td class="muted"><?= $e($card['pdf_filename']) ?></td>
                     <td class="actions">
-                        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>">Anzeigen</a>
-                        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>/pdf?download=1">PDF herunterladen</a>
-                        <a class="button" href="/patient-cards/reports/<?= $e($id) ?>">Neue Fassung</a>
+                        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>"><?= $icon('eye') ?> <span>Anzeigen</span></a>
+                        <a class="button" href="/patient-cards/<?= $e($card['id']) ?>/pdf?download=1"><?= $icon('download') ?> <span>PDF herunterladen</span></a>
+                        <a class="button" href="/patient-cards/reports/<?= $e($id) ?>"><?= $icon('card-plus') ?> <span>Neue Fassung</span></a>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -124,7 +125,7 @@ $cell = static function (mixed $value) use ($e): string {
 
 <?php foreach ($data->categories() as $category): ?>
     <section class="card" id="cat-<?= $e($category['key']) ?>">
-        <h2><?= $e($category['label']) ?> <small class="muted"><?= $e(count($category['parameters'])) ?> Parameter</small></h2>
+        <h2><?= $icon('list', 'app-icon app-icon--sm') ?> <?= $e($category['label']) ?> <small class="muted"><?= $e(count($category['parameters'])) ?> Parameter</small></h2>
         <table class="table params">
             <thead><tr><th class="col-id">ID</th><th>Parameter</th><th class="num">Wert</th><th>Einheit</th></tr></thead>
             <tbody>
@@ -142,7 +143,7 @@ $cell = static function (mixed $value) use ($e): string {
 <?php endforeach; ?>
 
 <section class="card" id="issues">
-    <h2>Importprotokoll <small class="muted"><?= $e(count($data->issues)) ?> Einträge</small></h2>
+    <h2><?= $icon('log', 'app-icon app-icon--sm') ?> Importprotokoll <small class="muted"><?= $e(count($data->issues)) ?> Einträge</small></h2>
     <?php if ($data->issues === []): ?>
         <p class="muted">Keine Fehler oder Warnungen protokolliert.</p>
     <?php else: ?>
@@ -180,7 +181,7 @@ $cell = static function (mixed $value) use ($e): string {
 
 <?php if ($related !== []): ?>
     <section class="card">
-        <h2>Weitere Berichte dieses Geräts</h2>
+        <h2><?= $icon('clock', 'app-icon app-icon--sm') ?> Weitere Berichte dieses Geräts</h2>
         <ul>
             <?php foreach ($related as $rel): ?>
                 <li><a href="/reports/<?= $e($rel['id']) ?>">Bericht Nr. <?= $e($rel['id']) ?></a> –

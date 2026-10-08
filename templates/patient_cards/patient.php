@@ -3,6 +3,7 @@
  * Patientensicht: alle Ausweise und alle Nachsorgeuntersuchungen eines Patienten.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $patient
  * @var list<array<string, mixed>> $cards
@@ -12,7 +13,7 @@
 ?>
 <div class="page-head">
     <div>
-        <h1><?= $e($patient['patient_name']) ?></h1>
+        <h1><?= $icon('patients', 'app-icon app-icon--lg') ?><span><?= $e($patient['patient_name']) ?></span></h1>
         <p class="lead">
             geboren <?= $e($view::dateTime($patient['date_of_birth'], true)) ?>
             <?php if (($patient['patient_identifier'] ?? null) !== null && $patient['patient_identifier'] !== ''): ?>
@@ -21,13 +22,13 @@
         </p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/patient-cards/new">Patientenausweis erstellen</a>
-        <a class="button" href="/patient-cards">Übersicht</a>
+        <a class="button primary" href="/patient-cards/new"><?= $icon('card-plus') ?> <span>Patientenausweis erstellen</span></a>
+        <a class="button" href="/patient-cards"><?= $icon('cards') ?> <span>Übersicht</span></a>
     </div>
 </div>
 
 <section class="card">
-    <h2>Ausweise</h2>
+    <h2><?= $icon('cards', 'app-icon app-icon--sm') ?> Ausweise</h2>
     <?php if ($cards === []): ?>
         <p class="muted">Für diesen Patienten wurde noch kein Patientenausweis erstellt.</p>
     <?php else: ?>
@@ -55,7 +56,7 @@
 </section>
 
 <section class="card">
-    <h2>Nachsorgeuntersuchungen</h2>
+    <h2><?= $icon('calendar', 'app-icon app-icon--sm') ?> Nachsorgeuntersuchungen</h2>
     <?php if ($past === []): ?>
         <p class="muted">Es sind keine weiteren Untersuchungen mit diesem Patienten verknüpft.</p>
     <?php else: ?>

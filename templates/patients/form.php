@@ -6,6 +6,7 @@
  * denselben Angaben, muss die Dublette ausdrücklich bestätigt werden.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var int|null $patientId
  * @var array<string, string> $values
  * @var array<string, string> $errors
@@ -28,15 +29,15 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
 ?>
 <div class="page-head">
     <div>
-        <h1><?= $patientId === null ? 'Patient anlegen' : 'Patient bearbeiten' ?></h1>
+        <h1><?= $icon($patientId === null ? 'user-plus' : 'edit', 'app-icon app-icon--lg') ?><span><?= $patientId === null ? 'Patient anlegen' : 'Patient bearbeiten' ?></span></h1>
         <p class="lead">Patienten können unabhängig von einem Import angelegt werden. Anamnese,
             Vormedikation und Epikrise werden anschließend als versionierte Bausteine erfasst.</p>
     </div>
     <div class="actions">
         <?php if ($patientId === null): ?>
-            <a class="button" href="/patients">Zur Übersicht</a>
+            <a class="button" href="/patients"><?= $icon('back') ?> <span>Zur Übersicht</span></a>
         <?php else: ?>
-            <a class="button" href="/patients/<?= $e($patientId) ?>">Zur Akte</a>
+            <a class="button" href="/patients/<?= $e($patientId) ?>"><?= $icon('patients') ?> <span>Zur Akte</span></a>
         <?php endif; ?>
     </div>
 </div>
@@ -68,7 +69,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
 
 <form method="post" action="<?= $e($action) ?>" class="card">
     <?= $csrf() ?>
-    <h2>Identität</h2>
+    <h2><?= $icon('user-plus', 'app-icon app-icon--sm') ?> Identität</h2>
     <div class="field-row">
         <?= $text('last_name', 'Nachname', 'Pflichtfeld', 255, true) ?>
         <?= $text('first_name', 'Vorname', 'Pflichtfeld', 255, true) ?>
@@ -82,7 +83,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
         <?= $text('patient_identifier', 'Patienten-ID', 'Freie Angabe, z. B. Fallnummer', 191) ?>
     </div>
 
-    <h2>Kontakt</h2>
+    <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Kontakt</h2>
     <div class="field-row">
         <?= $text('street', 'Straße und Hausnummer') ?>
         <?= $text('postal_code', 'Postleitzahl', '', 32) ?>
@@ -90,7 +91,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
         <?= $text('phone', 'Telefon', 'Ziffern sowie + ( ) / - . und Leerzeichen', 64) ?>
     </div>
 
-    <h2>Indikation</h2>
+    <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Indikation</h2>
     <div class="field">
         <label for="f-indication">Indikation / Anlass</label>
         <textarea id="f-indication" name="indication" rows="4" maxlength="2000"><?= $e($val('indication')) ?></textarea>
@@ -109,11 +110,11 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
     <?php endif; ?>
 
     <div class="form-actions">
-        <button type="submit" class="primary" data-once><?= $patientId === null ? 'Patient anlegen' : 'Stammdaten speichern' ?></button>
+        <button type="submit" class="primary" data-once><?= $icon('check') ?> <span data-label><?= $patientId === null ? 'Patient anlegen' : 'Stammdaten speichern' ?></span></button>
         <?php if ($patientId === null): ?>
-            <a class="button" href="/patients">Abbrechen</a>
+            <a class="button" href="/patients"><?= $icon('close') ?> <span>Abbrechen</span></a>
         <?php else: ?>
-            <a class="button" href="/patients/<?= $e($patientId) ?>">Abbrechen</a>
+            <a class="button" href="/patients/<?= $e($patientId) ?>"><?= $icon('close') ?> <span>Abbrechen</span></a>
         <?php endif; ?>
     </div>
 </form>

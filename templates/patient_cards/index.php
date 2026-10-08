@@ -3,6 +3,7 @@
  * Uebersicht der erstellten Patientenausweise.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, string> $filters
  * @var list<array<string, mixed>> $rows
@@ -18,12 +19,12 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
 ?>
 <div class="page-head">
     <div>
-        <h1>Patientenausweise</h1>
+        <h1><?= $icon('cards', 'app-icon app-icon--lg') ?><span>Patientenausweise</span></h1>
         <p class="lead">Erstellte Ausweise sind unveränderliche Dokumente mit eigenem Datenstand und PDF.</p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/patient-cards/new">Patientenausweis erstellen</a>
-        <a class="button" href="/patient-cards/settings">Stammdaten</a>
+        <a class="button primary" href="/patient-cards/new"><?= $icon('card-plus') ?> <span>Patientenausweis erstellen</span></a>
+        <a class="button" href="/patient-cards/settings"><?= $icon('settings') ?> <span>Stammdaten</span></a>
     </div>
 </div>
 

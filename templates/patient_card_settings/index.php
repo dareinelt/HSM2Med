@@ -4,6 +4,7 @@
  * Aenderungen gelten nur fuer kuenftig erzeugte Ausweise (jeder Ausweis haelt seine Fassung fest).
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var array<string, mixed> $settings
  * @var array<string, mixed>|null $logo
  * @var int $versions
@@ -17,13 +18,13 @@ $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
 ?>
 <div class="page-head">
     <div>
-        <h1>Stammdaten des Patientenausweises</h1>
+        <h1><?= $icon('settings', 'app-icon app-icon--lg') ?><span>Stammdaten des Patientenausweises</span></h1>
         <p class="lead">Logo, Nachsorgezentrum und Hinweistexte gelten für neu erstellte Ausweise.
             Bereits erzeugte Ausweise bleiben unverändert.</p>
     </div>
     <div class="actions">
-        <a class="button" href="/patient-cards">Patientenausweise</a>
-        <a class="button primary" href="/patient-cards/new">Ausweis erstellen</a>
+        <a class="button" href="/patient-cards"><?= $icon('cards') ?> <span>Patientenausweise</span></a>
+        <a class="button primary" href="/patient-cards/new"><?= $icon('card-plus') ?> <span>Ausweis erstellen</span></a>
     </div>
 </div>
 
@@ -34,7 +35,7 @@ $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
 <form method="post" action="/patient-cards/settings" enctype="multipart/form-data" class="card">
     <?= $csrf() ?>
 
-    <h2>Nachsorgezentrum</h2>
+    <h2><?= $icon('settings', 'app-icon app-icon--sm') ?> Nachsorgezentrum</h2>
     <?php foreach (['center_name', 'center_address'] as $field): ?>
         <?php [$label, $max, $multiline] = $fields[$field]; ?>
         <div class="field<?= $multiline ? ' wide' : '' ?>">
@@ -48,7 +49,7 @@ $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
         </div>
     <?php endforeach; ?>
 
-    <h2>Hinweistexte</h2>
+    <h2><?= $icon('info', 'app-icon app-icon--sm') ?> Hinweistexte</h2>
     <?php foreach (['notice_text', 'flight_notice_de', 'flight_notice_en'] as $field): ?>
         <?php [$label, $max, $multiline] = $fields[$field]; ?>
         <div class="field wide">
@@ -58,7 +59,7 @@ $hasLogo = is_array($logo) && ($logo['id'] ?? null) !== null;
         </div>
     <?php endforeach; ?>
 
-    <h2>Logo</h2>
+    <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Logo</h2>
     <div class="logo-row">
         <div class="logo-preview">
             <?php if ($hasLogo): ?>

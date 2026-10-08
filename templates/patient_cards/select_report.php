@@ -3,6 +3,7 @@
  * Berichtsauswahl: Grundlage eines Patientenausweises ist immer ein importierter Bericht.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, string> $filters
  * @var list<array<string, mixed>> $rows
@@ -19,12 +20,12 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
 ?>
 <div class="page-head">
     <div>
-        <h1>Patientenausweis erstellen</h1>
+        <h1><?= $icon('card-plus', 'app-icon app-icon--lg') ?><span>Patientenausweis erstellen</span></h1>
         <p class="lead">Schritt 1: den Bericht auswählen, dessen Daten in den Ausweis übernommen werden.</p>
     </div>
     <div class="actions">
-        <a class="button" href="/patient-cards">Erstellte Ausweise</a>
-        <a class="button" href="/patient-cards/settings">Stammdaten (Logo, Zentrum, Hinweise)</a>
+        <a class="button" href="/patient-cards"><?= $icon('cards') ?> <span>Erstellte Ausweise</span></a>
+        <a class="button" href="/patient-cards/settings"><?= $icon('settings') ?> <span>Stammdaten (Logo, Zentrum, Hinweise)</span></a>
     </div>
 </div>
 

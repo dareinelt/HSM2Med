@@ -8,6 +8,7 @@
  * Speichern erzeugt eine neue Fassung; inhaltsgleiche Eingaben erzeugen keine neue Fassung.
  *
  * @var Closure $e
+ * @var Closure $icon
  * @var App\Http\View $view
  * @var array<string, mixed> $patient
  * @var App\Patient\PatientRecordType $type
@@ -27,6 +28,13 @@ $entries = is_array($values['medication'] ?? null) ? $values['medication'] : [];
 if ($structured && $entries === []) {
     $entries = [array_fill_keys(array_keys(\App\Patient\PatientRecordInput::ENTRY_FIELDS), '')];
 }
+$recordIcons = [
+    'anamnesis' => 'list',
+    'premedication' => 'pulse',
+    'epicrisis' => 'letters',
+    'note' => 'edit',
+    'device_check' => 'pulse',
+];
 $err = static function (string $key) use ($errors, $e): string {
     return isset($errors[$key]) ? '<p class="field-error" role="alert">' . $e($errors[$key]) . '</p>' : '';
 };
@@ -92,12 +100,15 @@ $checkField = static function (array $field, string $name, string $current, bool
 ?>
 <div class="page-head">
     <div>
-        <h1><?= $e($type->label()) ?></h1>
+        <div class="page-head__title">
+            <?= $icon($recordIcons[$type->value] ?? 'list', 'app-icon app-icon--lg') ?>
+            <h1><?= $e($type->label()) ?></h1>
+        </div>
         <p class="lead"><?= $e($patient['patient_name']) ?> · Patient Nr. <?= $e($id) ?> · <?= $e($type->hint()) ?></p>
     </div>
     <div class="actions">
-        <a class="button" href="/patients/<?= $e($id) ?>">Zur Akte</a>
-        <a class="button" href="/patient-cards/patients/<?= $e($id) ?>">Ausweise und Nachsorge</a>
+        <a class="button" href="/patients/<?= $e($id) ?>"><?= $icon('back') ?> <span>Zur Akte</span></a>
+        <a class="button" href="/patient-cards/patients/<?= $e($id) ?>"><?= $icon('cards') ?> <span>Ausweise und Nachsorge</span></a>
     </div>
 </div>
 
@@ -136,7 +147,7 @@ $checkField = static function (array $field, string $name, string $current, bool
         <p>
             <button type="submit" class="button"
                     formaction="/patients/<?= $e($id) ?>/records/<?= $e($type->value) ?>/prefill"
-                    formnovalidate>Werte aus dem letzten Bericht übernehmen</button>
+                    formnovalidate><?= $icon('refresh') ?> <span data-label>Werte aus dem letzten Bericht übernehmen</span></button>
             <span class="muted">Nur leere Felder werden ergänzt; vorhandene Eingaben bleiben erhalten.</span>
         </p>
 

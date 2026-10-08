@@ -149,7 +149,7 @@ label.check input { width: auto; margin-top: .25rem; flex: 0 0 auto; }
 details summary { cursor: pointer; font-weight: 600; color: var(--primary); }
 details[open] summary { margin-bottom: .6rem; }
 @media print {
-    .topbar, .footer, .actions, .toc, form { display: none; }
+    .actions, .toc, form { display: none; }
     body { background: #fff; }
     .card { border: none; padding: 0; }
 }
