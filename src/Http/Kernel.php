@@ -39,7 +39,9 @@ final class Kernel
             $app->rootDir . '/templates',
             static function () use ($app): ?array {
                 try {
-                    return $app->activePatientSummary();
+                    // Security fix: ohne gueltige Anmeldung keine Patientendaten im Rahmen
+                    // (Anmeldefenster, Fehlerseiten), auch nicht im Quelltext der Seite.
+                    return $app->auth()->check() ? $app->activePatientSummary() : null;
                 } catch (Throwable) {
                     return null;
                 }

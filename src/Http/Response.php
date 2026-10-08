@@ -33,10 +33,25 @@ final class Response
     public static function redirect(string $location): self
     {
         // Nur relative, anwendungsinterne Ziele (kein Open Redirect)
-        if (!str_starts_with($location, '/') || str_starts_with($location, '//')) {
+        if (!self::isLocalPath($location)) {
             $location = '/';
         }
         return new self('', 303, ['Location' => $location]);
+    }
+
+    /**
+     * Anwendungsinterner, relativer Pfad?
+     *
+     * Security fix: Browser behandeln "\" wie "/" und entfernen Tabulatoren/Zeilenumbrueche aus
+     * URLs – "/\evil.example" oder "/<TAB>/evil.example" wuerden so zu "//evil.example" (fremder
+     * Host). Darum sind Backslash und Steuerzeichen in Weiterleitungszielen nicht erlaubt.
+     */
+    public static function isLocalPath(string $location): bool
+    {
+        return str_starts_with($location, '/')
+            && !str_starts_with($location, '//')
+            && !str_contains($location, '\\')
+            && preg_match('/[\x00-\x1F\x7F]/', $location) !== 1;
     }
 
     public static function pdf(string $content, string $filename, bool $download): self

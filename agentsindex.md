@@ -615,7 +615,12 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
   Sitzung voraus. Ohne Sitzung liefert ein `GET`/`HEAD` die Oberfläche mit dem Anmeldefenster
   als Overlay (Hintergrund abgedunkelt und unscharf gefiltert, HTTP 200); alle anderen Methoden
   werden mit Hinweis auf `/login` umgeleitet. Die Sitzung läuft nach `AUTH_IDLE_MINUTES` ohne
-  Bedienung ab (gleitendes Fenster, `Auth::check()`).
+  Bedienung ab (gleitendes Fenster, `Auth::check()`). `Auth::login()`/`logout()` leeren
+  `$_SESSION` vollständig und erneuern die Session-ID; Sitzungsdaten (aktiver Patient,
+  Uploads) dürfen nie eine Abmeldung überleben. Der Rahmen zeigt den aktiven Patienten nur
+  bei `auth()->check()`. Nach eigener Kennwortänderung `Auth::refreshCredential()` aufrufen
+  (sonst endet auch die eigene Sitzung). Weiterleitungen nur über `Response::redirect()` /
+  `Response::isLocalPath()`.
 - **Rechte:** Rechtematrix Gruppe × Bereich (`user_group_permissions`), geprüft in
   `Kernel::accessDenied()` über `Auth::can()`; die Rechte werden bei jeder Anfrage frisch
   gelesen, damit Änderungen sofort wirken. Ohne Recht: Hinweis und Weiterleitung auf `/`

@@ -42,6 +42,16 @@ try {
     if ($wait > 0) {
         App\Database\Database::connectWithRetry($app->config, $wait);
     }
+    // Security fix: Im Produktivbetrieb wird kein Konto mit dem oeffentlich bekannten
+    // Vorgabekennwort aus .env.example angelegt oder darauf zurueckgesetzt.
+    if ($app->config->isProduction() && $app->config->adminPasswordIsDefault()) {
+        $existing = $app->userRepository()->findByUsername(App\User\UserInput::normalizeUsername($app->config->adminUsername));
+        if ($existing === null || $force) {
+            fwrite(STDERR, "ADMIN_PASSWORD ist noch der Vorgabewert. Im Produktivbetrieb wird damit kein Administratorkonto angelegt.\n"
+                . "Bitte in der .env ein eigenes Kennwort setzen und den Container neu starten.\n");
+            exit(1);
+        }
+    }
     $result = $app->userService()->seedAdmin(
         $app->config->adminUsername,
         $app->config->adminPassword,

@@ -56,6 +56,18 @@ final class UserRepository
         return $row === false ? null : $row;
     }
 
+    /**
+     * Fingerabdruck des aktuellen Kennwort-Hashes (SHA-256) fuer die Sitzungsbindung.
+     * Der Hash selbst verlaesst die Datenzugriffsschicht nicht; null, wenn es das Konto nicht gibt.
+     */
+    public function credentialFingerprint(int $id): ?string
+    {
+        $stmt = $this->pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
+        $stmt->execute([$id]);
+        $hash = $stmt->fetchColumn();
+        return is_string($hash) ? hash('sha256', $hash) : null;
+    }
+
     public function exists(string $username): bool
     {
         $stmt = $this->pdo->prepare('SELECT 1 FROM users WHERE username = ?');

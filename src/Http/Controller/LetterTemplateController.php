@@ -110,13 +110,14 @@ final class LetterTemplateController extends Controller
         if ($content === null) {
             return Response::json(['ok' => false, 'message' => 'Die Vorlage konnte nicht gelesen werden.', 'errors' => ['template' => 'Ungültige Daten.']], 422);
         }
-        $base = (string) ($request->post['base_version_id'] ?? '');
+        // Fix: Request::post() statt (string)-Cast – Arrays im Formular erzeugen keine Warnung mehr.
+        $base = $request->post('base_version_id');
         $type = self::type($request->post('type'));
         $service = $this->app->letterTemplateService();
         try {
             $saved = $service->save(
                 $content,
-                (string) ($request->post['comment'] ?? ''),
+                $request->post('comment'),
                 ctype_digit($base) ? (int) $base : null,
                 $type,
             );
@@ -168,7 +169,7 @@ final class LetterTemplateController extends Controller
 
     private static function decodeContent(Request $request): mixed
     {
-        $raw = (string) ($request->post['content'] ?? '');
+        $raw = $request->post('content');
         if ($raw === '' || strlen($raw) > 512 * 1024) {
             return null;
         }

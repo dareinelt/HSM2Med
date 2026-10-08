@@ -117,6 +117,10 @@ final class UserController extends Controller
             ], $e->fieldErrors(), $e->getMessage())), 422);
         }
 
+        // Bestehende Sitzungen des Kontos enden mit dem neuen Kennwort; die eigene bleibt bestehen.
+        if ($this->app->auth()->id() === $user->id) {
+            $this->app->auth()->refreshCredential();
+        }
         $this->app->logger()->info('Kennwort zurückgesetzt', ['benutzer_id' => $user->id]);
         SessionManager::flash('success', 'Das Kennwort wurde neu gesetzt.');
         return Response::redirect('/system/users');

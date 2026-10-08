@@ -14,25 +14,29 @@
  * @var string|null $message
  */
 $val = static fn (string $key): string => $values[$key] ?? '';
+// A11y: Fehlermeldungen tragen eine Kennung; das Feld verweist per aria-describedby darauf.
 $err = static function (string $key) use ($errors, $e): string {
-    return isset($errors[$key]) ? '<p class="field-error" role="alert">' . $e($errors[$key]) . '</p>' : '';
+    return isset($errors[$key]) ? '<p class="field-error" id="f-' . $e($key) . '-error" role="alert">' . $e($errors[$key]) . '</p>' : '';
 };
-$text = static function (string $name, string $label, string $hint = '', int $max = 255, bool $required = false) use ($val, $err, $e): string {
+$aria = static function (string $key) use ($errors, $e): string {
+    return isset($errors[$key]) ? ' aria-invalid="true" aria-describedby="f-' . $e($key) . '-error"' : '';
+};
+$text = static function (string $name, string $label, string $hint = '', int $max = 255, bool $required = false) use ($val, $err, $aria, $e): string {
     return '<div class="field">'
         . '<label for="f-' . $e($name) . '">' . $e($label) . '</label>'
         . '<input type="text" id="f-' . $e($name) . '" name="' . $e($name) . '" maxlength="' . $e($max) . '"'
-        . ' value="' . $e($val($name)) . '"' . ($required ? ' required' : '') . '>'
+        . ' value="' . $e($val($name)) . '"' . ($required ? ' required' : '') . $aria($name) . '>'
         . ($hint === '' ? '' : '<small class="muted">' . $e($hint) . '</small>')
         . $err($name) . '</div>';
 };
-$salutation = static function (string $name, string $label, string $type) use ($val, $err, $e): string {
+$salutation = static function (string $name, string $label, string $type) use ($val, $err, $aria, $e): string {
     $options = '<option value="">keine Angabe</option>';
     foreach (\App\Letter\LetterSalutation::choices($type) as $value => $choiceLabel) {
         $options .= '<option value="' . $e($value) . '"' . ($val($name) === $value ? ' selected' : '') . '>' . $e($choiceLabel) . '</option>';
     }
     return '<div class="field">'
         . '<label for="f-' . $e($name) . '">' . $e($label) . '</label>'
-        . '<select id="f-' . $e($name) . '" name="' . $e($name) . '">' . $options . '</select>'
+        . '<select id="f-' . $e($name) . '" name="' . $e($name) . '"' . $aria($name) . '>' . $options . '</select>'
         . '<small class="muted">' . $e(\App\Letter\LetterSalutation::hint($type)) . '</small>'
         . $err($name) . '</div>';
 };
@@ -88,7 +92,7 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
         <div class="field">
             <label for="f-date_of_birth">Geburtsdatum (TT.MM.JJJJ)</label>
             <input type="text" id="f-date_of_birth" name="date_of_birth" maxlength="32"
-                   value="<?= $e($val('date_of_birth')) ?>" required>
+                   value="<?= $e($val('date_of_birth')) ?>" required<?= $aria('date_of_birth') ?>>
             <small class="muted">Pflichtfeld – Identitätsmerkmal</small>
             <?= $err('date_of_birth') ?>
         </div>

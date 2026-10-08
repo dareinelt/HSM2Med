@@ -172,12 +172,13 @@ final class LetterController extends Controller
     {
         $letterId = self::id($params);
         $this->loadLetter($letterId);
-        $mode = (string) ($request->post['template'] ?? '');
+        // Fix: Request::post() liefert nur Zeichenketten (Arrays fuehrten zu "Array to string"-Warnungen).
+        $mode = $request->post('template');
         try {
             $result = $this->app->letterService()->regenerate(
                 $letterId,
                 $mode,
-                ($request->post['confirm_current_template'] ?? '') === '1',
+                $request->post('confirm_current_template') === '1',
             );
         } catch (LetterException $e) {
             $errors = $e->fieldErrors();

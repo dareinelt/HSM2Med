@@ -83,6 +83,14 @@ final class LoginViewTest extends DatabaseTestCase
         $this->assertNotContains('example.org', $html);
     }
 
+    public function testLockedPageRejectsBackslashTargets(): void
+    {
+        // "/\\host" wird von Browsern als "//host" gelesen und darf kein Ziel sein.
+        $html = $this->login()->locked(new Request('GET', '/login', ['target' => '/\\evil.example']))->body;
+        $this->assertContains('name="target" value="/"', $html);
+        $this->assertNotContains('evil.example', $html);
+    }
+
     public function testFailedLoginIsReportedWithoutRevealingTheAccount(): void
     {
         $html = $this->login()->login(new Request('POST', '/login', [], [
