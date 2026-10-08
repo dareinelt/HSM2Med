@@ -7,6 +7,7 @@ namespace App\Letter;
 use App\Patient\PatientRecordService;
 use App\Patient\PatientRecordType;
 use App\PatientCard\PatientCardRepository;
+use App\PatientCard\PatientName;
 use App\Report\Pdf\ImageData;
 use App\Report\ReportData;
 use App\Report\ReportService;
@@ -108,8 +109,8 @@ final class LetterService
      */
     public function prepare(int $patientId, ?int $reportId): array
     {
-        $patient = $this->repository->patient($patientId)
-            ?? throw new RuntimeException('Der Patient wurde nicht gefunden.');
+        $patient = self::withIdentity($this->repository->patient($patientId)
+            ?? throw new RuntimeException('Der Patient wurde nicht gefunden.'));
         $masterData = $this->repository->masterData($patientId) ?? [];
         $report = $reportId === null ? null : $this->loadReport($patientId, $reportId);
         $records = $this->records->overview($patientId);
@@ -117,6 +118,10 @@ final class LetterService
         $appendix = $this->appendixFor($records, $mrt);
 
         $warnings = [];
+        $identityError = self::identityError($patient);
+        if ($identityError !== null) {
+            $warnings[] = $identityError;
+        }
         foreach (self::TEXT_TYPES as $type) {
             if (($records[$type->value]['empty'] ?? true) === true) {
                 $warnings[] = sprintf(
@@ -179,6 +184,10 @@ final class LetterService
 
         $prepared = $this->prepare($input->patientId, $input->reportId);
         $patient = $prepared['patient'];
+        $identityError = self::identityError($patient);
+        if ($identityError !== null) {
+            throw LetterException::rule('patient_id', $identityError);
+        }
         $now = $this->now();
 
         $this->pdo->beginTransaction();
@@ -549,6 +558,46 @@ final class LetterService
     }
 
     // ------------------------------------------------------------------- Hilfen
+
+    /**
+     * Ergaenzt fehlende Nach-/Vornamen aus patient_name ("NACHNAME, VORNAME"). Patienten aus
+     * Importen vor Migration 002 haben nur patient_name; last_name/first_name sind dort NULL.
+     *
+     * @param array<string, mixed> $patient
+     * @return array<string, mixed>
+     */
+    private static function withIdentity(array $patient): array
+    {
+        $parts = PatientName::split(isset($patient['patient_name']) ? (string) $patient['patient_name'] : null);
+        $last = PatientName::normalize(isset($patient['last_name']) ? (string) $patient['last_name'] : null) ?? $parts['last'];
+        $first = PatientName::normalize(isset($patient['first_name']) ? (string) $patient['first_name'] : null) ?? $parts['first'];
+        $patient['last_name'] = $last;
+        $patient['first_name'] = $first ?? '';
+        $name = trim((string) ($patient['patient_name'] ?? ''));
+        $patient['patient_name'] = $name !== '' ? $name : PatientName::display($last, $first);
+        return $patient;
+    }
+
+    /**
+     * @param array<string, mixed> $patient Ergebnis von withIdentity()
+     */
+    private static function identityError(array $patient): ?string
+    {
+        $missing = [];
+        if (($patient['last_name'] ?? null) === null) {
+            $missing[] = 'Nachname';
+        }
+        if (($patient['date_of_birth'] ?? null) === null || $patient['date_of_birth'] === '') {
+            $missing[] = 'Geburtsdatum';
+        }
+        if ($missing === []) {
+            return null;
+        }
+        return sprintf(
+            'In den Stammdaten des Patienten fehlt: %s. Bitte zuerst in der Patientenakte ergänzen (Stammdaten bearbeiten).',
+            implode(', ', $missing),
+        );
+    }
 
     private function documentNumber(int $patientId, int $sequence, \DateTimeImmutable $generatedAt): string
     {
