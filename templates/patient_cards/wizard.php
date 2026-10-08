@@ -49,6 +49,18 @@ $tel = static function (string $name, string $label, string $hint = '') use ($va
         . ($hint === '' ? '' : '<small class="muted">' . $e($hint) . '</small>')
         . $err($name) . '</div>';
 };
+$select = static function (string $name, string $label, array $options, string $hint = '') use ($val, $err, $e): string {
+    $html = '<div class="field"><label for="f-' . $e($name) . '">' . $e($label) . '</label>'
+        . '<select id="f-' . $e($name) . '" name="' . $e($name) . '">'
+        . '<option value="">nicht angegeben</option>';
+    foreach ($options as $option) {
+        $selected = $val($name) === $option ? ' selected' : '';
+        $html .= '<option value="' . $e($option) . '"' . $selected . '>' . $e($option) . '</option>';
+    }
+    return $html . '</select>'
+        . ($hint === '' ? '' : '<small class="muted">' . $e($hint) . '</small>')
+        . $err($name) . '</div>';
+};
 $centerConfigured = trim((string) ($settings['center_name'] ?? '')) !== ''
     || trim((string) ($settings['notice_text'] ?? '')) !== '';
 $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::formatDate($val($key));
@@ -171,6 +183,8 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
             <?= $text('city', 'Wohnort') ?>
             <?= $tel('phone', 'Telefon') ?>
             <?= $text('device_implant_location', 'Implantationsort des Geräts', 'z. B. links pectoral') ?>
+            <?= $select('mrt_compatibility', 'MRT-Tauglichkeit', \App\PatientCard\PatientCardInput::MRT_VALUES, 'Erscheint auf Seite 1 des Ausweises.') ?>
+            <?= $text('mrt_compatibility_note', 'MRT-Tauglichkeit: Zusatzangabe', 'z. B. Bedingungen oder Ausnahmen', \App\PatientCard\PatientCardInput::MAX_MRT_NOTE_CHARS) ?>
         </div>
         <div class="field">
             <label for="f-indication">Indikation</label>
@@ -271,6 +285,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
             <tr><th>Nächste Kontrolle</th><td><?= $e($date('next_control_date')) ?></td></tr>
             <tr><th>Arzt zur Kontrolle</th><td><?= $e($val('control_physician')) ?></td></tr>
             <tr><th>Implantationsort</th><td><?= $e($val('device_implant_location')) ?></td></tr>
+            <tr><th>MRT-Tauglichkeit</th><td><?= $e($val('mrt_compatibility') === '' ? 'nicht angegeben' : $val('mrt_compatibility')) ?><?= $val('mrt_compatibility_note') === '' ? '' : ' (' . $e($val('mrt_compatibility_note')) . ')' ?></td></tr>
         </table>
 
         <fieldset class="choice-box">

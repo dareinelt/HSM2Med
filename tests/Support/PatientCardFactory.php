@@ -90,6 +90,8 @@ final class PatientCardFactory
                 'implant_date' => '2024-06-18',
                 'implant_date_display' => '18.06.2024',
                 'implant_location' => 'links pektoral',
+                'mrt_compatibility' => 'MRT-bedingt tauglich',
+                'mrt_compatibility_note' => 'Nur mit Auflagen, jährliche Kontrolle der Sonde.',
                 'mode' => 'VVI',
                 'base_rate' => '60',
             ],

@@ -12,7 +12,17 @@ use App\Import\ImportService;
 use App\Import\ImportValidator;
 use App\Import\MerlinParser;
 use App\Import\PendingUploadStore;
+use App\Letter\DeviceCheckAppendix;
+use App\Letter\LetterPdfGenerator;
+use App\Letter\LetterRepository;
+use App\Letter\LetterService;
 use App\Mapping\ParameterMapping;
+use App\Patient\DeviceCheckPrefill;
+use App\Patient\DeviceCheckTemplate;
+use App\Patient\PatientRecordRepository;
+use App\Patient\PatientRecordService;
+use App\Patient\PatientRepository;
+use App\Patient\PatientService;
 use App\PatientCard\MeasurementTemplate;
 use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
@@ -37,6 +47,11 @@ final class Application
     private ?Logger $logger = null;
     private ?ParameterMapping $mapping = null;
     private ?MeasurementTemplate $measurementTemplate = null;
+    private ?DeviceCheckTemplate $deviceCheckTemplate = null;
+    private ?PatientRepository $patientRepository = null;
+    private ?PatientRecordRepository $patientRecordRepository = null;
+    private ?PatientService $patientService = null;
+    private ?PatientRecordService $patientRecordService = null;
 
     public function __construct(
         public readonly Config $config,
@@ -70,6 +85,20 @@ final class Application
     public function measurementTemplate(): MeasurementTemplate
     {
         return $this->measurementTemplate ??= MeasurementTemplate::default($this->rootDir);
+    }
+
+    public function deviceCheckTemplate(): DeviceCheckTemplate
+    {
+        return $this->deviceCheckTemplate ??= DeviceCheckTemplate::default($this->rootDir);
+    }
+
+    public function deviceCheckPrefill(): DeviceCheckPrefill
+    {
+        return new DeviceCheckPrefill(
+            $this->patientRepository(),
+            $this->patientCardRepository(),
+            $this->reportService(),
+        );
     }
 
     public function importService(): ImportService
@@ -106,6 +135,31 @@ final class Application
         return new PatientCardRepository($this->pdo());
     }
 
+    public function patientRepository(): PatientRepository
+    {
+        return $this->patientRepository ??= new PatientRepository($this->pdo());
+    }
+
+    public function patientRecordRepository(): PatientRecordRepository
+    {
+        return $this->patientRecordRepository ??= new PatientRecordRepository($this->pdo());
+    }
+
+    public function patientService(): PatientService
+    {
+        return $this->patientService ??= new PatientService($this->pdo(), $this->patientRepository(), $this->clock);
+    }
+
+    public function patientRecordService(): PatientRecordService
+    {
+        return $this->patientRecordService ??= new PatientRecordService(
+            $this->patientRecordRepository(),
+            $this->patientRepository(),
+            $this->clock,
+            $this->deviceCheckTemplate(),
+        );
+    }
+
     public function patientCardService(): PatientCardService
     {
         return new PatientCardService(
@@ -123,6 +177,25 @@ final class Application
         return new PatientCardSettingsService(
             $this->patientCardRepository(),
             new ImageUploadValidator(),
+            $this->clock,
+        );
+    }
+
+    public function letterRepository(): LetterRepository
+    {
+        return new LetterRepository($this->pdo());
+    }
+
+    public function letterService(): LetterService
+    {
+        return new LetterService(
+            $this->pdo(),
+            $this->letterRepository(),
+            $this->patientCardRepository(),
+            $this->patientRecordService(),
+            $this->reportService(),
+            new DeviceCheckAppendix($this->deviceCheckTemplate()),
+            new LetterPdfGenerator(),
             $this->clock,
         );
     }

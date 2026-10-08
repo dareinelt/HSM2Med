@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Http;
 
 /**
- * Minimaler Router: Methode + Pfadmuster mit {name}-Platzhaltern (nur Ziffern bzw. Hex-Token).
+ * Minimaler Router: Methode + Pfadmuster mit {name}-Platzhaltern.
+ *
+ * Erlaubte Platzhaltertypen: {id}/{patient} (Ziffern), {token} (Hex-Token),
+ * {slug} (kleingeschriebener Bezeichner, z. B. Bausteintyp der Patientenakte).
  */
 final class Router
 {
@@ -47,6 +50,7 @@ final class Router
     {
         $regex = preg_replace_callback('/\{(\w+)\}/', static fn (array $m): string => match ($m[1]) {
             'token' => '(?P<token>[a-f0-9]{32})',
+            'slug' => '(?P<slug>[a-z][a-z0-9_]{0,31})',
             default => '(?P<' . $m[1] . '>[1-9][0-9]{0,18})',
         }, $pattern);
         $this->routes[] = ['method' => $method, 'regex' => '#^' . $regex . '$#D', 'handler' => $handler];

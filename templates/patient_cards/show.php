@@ -32,6 +32,11 @@ $address = trim(implode(' ', array_filter([
 ])));
 $practice = trim((string) ($physician['practice'] ?? '') . ' '
     . trim((string) ($physician['postal_code'] ?? '') . ' ' . (string) ($physician['city'] ?? '')));
+$mrtValue = trim((string) ($device['mrt_compatibility'] ?? ''));
+$mrtNote = trim((string) ($device['mrt_compatibility_note'] ?? ''));
+$mrtDisplay = $mrtValue === '' && $mrtNote === ''
+    ? ''
+    : trim($mrtValue . ($mrtNote === '' ? '' : ($mrtValue === '' ? $mrtNote : ' (' . $mrtNote . ')')));
 ?>
 <div class="page-head">
     <div>
@@ -96,6 +101,7 @@ $practice = trim((string) ($physician['practice'] ?? '') . ' '
         <?= $row('Seriennummer', $e((string) ($device['serial_number'] ?? ''))) ?>
         <?= $row('Implantation', $e((string) ($device['implant_date_display'] ?? ''))) ?>
         <?= $row('Implantationsort', $e((string) ($device['implant_location'] ?? ''))) ?>
+        <?= $row('MRT-Tauglichkeit', $e($mrtDisplay)) ?>
         <?= $row('Modus / Grundfrequenz', $e(trim((string) ($device['mode'] ?? '') . ' ' . (string) ($device['base_rate'] ?? '')))) ?>
     </table>
     <?php if ($leads === []): ?>

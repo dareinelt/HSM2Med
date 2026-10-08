@@ -349,3 +349,161 @@ CREATE TABLE patient_cards (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('002_patient_card', 'f5c8d0c979c727521d1d199399da8f68e042b1cabb3e5606cfdbd3eb0340c243', NOW());
+
+-- ===== Migration 003_patient_records =====
+
+-- HSM2Med – Migration 003: Patientenakte (versionierte Bausteine)
+--
+-- Grundsaetze (analog zu den Migrationen 001 und 002):
+--  * Ein Patient kann ohne Import angelegt werden. Anamnese, Vormedikation, Epikrise und
+--    Notiz werden als eigene Bausteine zum Patienten gespeichert.
+--  * Jeder Baustein ist versioniert und unveraenderlich: jede Aenderung erzeugt eine neue
+--    Fassung in patient_record_versions. Fruehere Fassungen werden nie ueberschrieben oder
+--    geloescht; die aktuelle Fassung ist die mit der hoechsten Versionsnummer.
+--  * patient_records ist der Behaelter je Patient und Bausteintyp (genau einer je Kombination).
+--    Der Inhalt liegt ausschliesslich in den unveraenderlichen Fassungen.
+--  * content_text ist eine Textfassung des Inhalts (Anzeige, spaetere Verwendung im Brief);
+--    content_hash (SHA-256 des kanonischen JSON) verhindert inhaltsgleiche neue Fassungen.
+--  * Leere Werte werden als '' gespeichert, NULL bedeutet "Feld nicht vorhanden".
+--  * Fremdschluessel durchgaengig ON DELETE RESTRICT; Akteneintraege werden nicht geloescht.
+--  * Es gibt keine Benutzerverwaltung: author_name ist eine Freitextangabe ("erfasst von").
+
+CREATE TABLE patient_records (
+    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    patient_id  BIGINT UNSIGNED NOT NULL,
+    record_type ENUM('anamnesis','premedication','epicrisis','note') NOT NULL
+        COMMENT 'Bausteintyp der Akte',
+    created_at  DATETIME NOT NULL,
+    updated_at  DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_patient_records_patient_type (patient_id, record_type),
+    CONSTRAINT fk_patient_records_patient FOREIGN KEY (patient_id) REFERENCES patients (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE patient_record_versions (
+    id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    record_id    BIGINT UNSIGNED NOT NULL,
+    version      INT UNSIGNED NOT NULL COMMENT 'fortlaufend ab 1',
+    content      JSON NOT NULL COMMENT 'strukturierter Inhalt des Bausteins',
+    content_text MEDIUMTEXT NOT NULL COMMENT 'Textfassung des Inhalts (Anzeige, Suche)',
+    content_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL
+        COMMENT 'SHA-256 des kanonischen JSON',
+    author_name  VARCHAR(255) NULL COMMENT 'Freitext "erfasst von" (keine Benutzerverwaltung)',
+    created_at   DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_patient_record_versions_record_version (record_id, version),
+    CONSTRAINT fk_patient_record_versions_record FOREIGN KEY (record_id) REFERENCES patient_records (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('003_patient_records', '2e7a9d32b0dc201d7a884d0678aca23beb73aa0837fadea7b7216ad2414b9d3c', NOW());
+
+-- ===== Migration 004_patient_card_mrt =====
+
+-- HSM2Med – Migration 004: MRT-Tauglichkeit auf Seite 1 des Patientenausweises
+--
+-- Grundsaetze (analog zu Migration 002):
+--  * Der Patientenausweis bleibt bei genau zwei DIN-A4-Seiten. Die Angabe zur MRT-Tauglichkeit
+--    wird auf Seite 1 im Abschnitt "Implantate" gedruckt und braucht dort keinen zusaetzlichen
+--    Seitenumbruch.
+--  * Die Angabe steht im Merlin-Export nicht zur Verfuegung und wird daher vom Benutzer gepflegt.
+--    Sie gehoert zu Geraet und Sonden und wird je Patient in patient_card_master_data gehalten
+--    (Vorbelegung des Assistenten) und im unveraenderlichen Snapshot des Ausweises archiviert.
+--  * mrt_compatibility enthaelt einen der festen Auswahlwerte
+--    ('MRT-tauglich', 'MRT-bedingt tauglich', 'nicht MRT-tauglich', 'unbekannt').
+--    Leer bedeutet "nicht angegeben"; die Gueltigkeit prueft die Anwendung
+--    (PatientCardInput::MRT_VALUES).
+--  * mrt_compatibility_note ist eine kurze Zusatzangabe (z. B. Bedingungen). Die Laenge ist
+--    bewusst begrenzt, damit Seite 1 des Ausweises sicher passt
+--    (PatientCardPdfGenerator::MAX_MRT_CHARS).
+--  * Fremdschluessel und Unveraenderlichkeit bestehender Ausweise bleiben unberuehrt: bereits
+--    erzeugte Ausweise enthalten die Angabe nicht und werden nicht neu berechnet.
+
+ALTER TABLE patient_card_master_data
+    ADD COLUMN mrt_compatibility VARCHAR(64) NULL
+        COMMENT 'MRT-Tauglichkeit (Ausweis Seite 1), fester Auswahlwert' AFTER device_implant_location,
+    ADD COLUMN mrt_compatibility_note VARCHAR(120) NULL
+        COMMENT 'Zusatzangabe zur MRT-Tauglichkeit (z. B. Bedingungen)' AFTER mrt_compatibility;
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('004_patient_card_mrt', '8e9e51354f24dcbf67823043a8c4d5f75acddb498cf3f591ec8828506298aa98', NOW());
+
+-- ===== Migration 005_patient_record_device_check =====
+
+-- HSM2Med – Migration 005: Baustein "Schrittmacher-/ICD-Abfrage"
+--
+-- Grundsaetze (analog zu Migration 003):
+--  * Die Abfrage ist ein zusaetzlicher Bausteintyp der Akte (device_check). Sie folgt damit
+--    denselben Regeln: ein Behaelter je Patient (patient_records), unveraenderliche Fassungen
+--    in patient_record_versions, inhaltsgleiche Speicherungen erzeugen keine neue Fassung.
+--  * Es werden keine neuen Tabellen und keine neuen Spalten benoetigt. Der Inhalt der Abfrage
+--    ist strukturiertes JSON in patient_record_versions.content:
+--      {"template":"1.0.0","device_type":"pacemaker","values":{...},"leads":[...],"notes":""}
+--    Die Feldliste und die je Geraetetyp zulaessigen Abschnitte stehen in
+--    config/device_check_template.php; die Fassung der Vorlage wird im Inhalt mitgefuehrt.
+--  * content_text enthaelt weiterhin die Textfassung (Anzeige, Suche, spaeterer Brief).
+--  * Die Aufzaehlung ist die einzige Stelle, an der ein neuer Bausteintyp ergaenzt werden muss;
+--    der neue Wert 'device_check' muss exakt dem Wert von PatientRecordType::DeviceCheck
+--    entsprechen.
+--  * Bestehende Akteneintraege bleiben unberuehrt: die Erweiterung einer ENUM-Spalte aendert
+--    vorhandene Zeilen nicht.
+
+ALTER TABLE patient_records
+    MODIFY COLUMN record_type ENUM('anamnesis','premedication','epicrisis','note','device_check') NOT NULL
+        COMMENT 'Bausteintyp der Akte';
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('005_patient_record_device_check', '4611796b2e6713c55e0288bf3c74ff53ee2fd8b53be0c4bae1044e94b451652a', NOW());
+
+-- ===== Migration 006_patient_letters =====
+
+-- HSM2Med – Migration 006: Brief zur Schrittmacher-/ICD-Abfrage
+--
+-- Grundsaetze (analog zu Migration 002):
+--  * Ein Brief ist ein unveraenderliches Dokument: Snapshot (JSON) und PDF (MEDIUMBLOB +
+--    SHA-256) werden gemeinsam in einer Transaktion gespeichert und nie ueberschrieben.
+--  * Der Snapshot friert alles ein, was zum Drucken gebraucht wird: Patientendaten, Fassung
+--    der Stammdaten (patient_card_settings_versions), die Fassungen der Bausteine (Anamnese,
+--    Vormedikation, Epikrise, Schrittmacher-/ICD-Abfrage) und die Befunddaten des gewaehlten
+--    Berichts. Das PDF ist damit allein aus dem Snapshot reproduzierbar.
+--  * report_id ist optional (NULL): ein Brief kann auch ohne Bericht erstellt werden. Dann
+--    entfaellt der Befundteil; die Bausteine werden trotzdem gedruckt.
+--  * sequence_no ist die laufende Nummer je Patient; letter_version die Fassung je Patient und
+--    zugrunde liegendem Bericht (ohne Bericht: je Patient). Beides dient der Nachvollziehbarkeit
+--    und der Dokumentnummer im Fuss des Briefes.
+--  * Der Brief darf mehrere Seiten haben (Anhang mit der vollstaendigen Tabelle der Abfrage).
+--    Die Begrenzung auf zwei Seiten gilt ausschliesslich fuer den Patientenausweis.
+--  * Es werden keine bestehenden Tabellen geaendert; bereits erzeugte Ausweise und
+--    Akteneintraege bleiben unberuehrt.
+
+CREATE TABLE patient_letters (
+    id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    patient_id          BIGINT UNSIGNED NOT NULL,
+    report_id           BIGINT UNSIGNED NULL COMMENT 'zugrunde liegender Bericht (Befundteil), optional',
+    settings_version_id BIGINT UNSIGNED NOT NULL COMMENT 'beim Erstellen gueltige Stammdaten-Fassung',
+    sequence_no         INT UNSIGNED NOT NULL COMMENT 'laufende Nummer je Patient',
+    letter_version      SMALLINT UNSIGNED NOT NULL COMMENT 'Fassung je Patient und Bericht, beginnend bei 1',
+    last_name           VARCHAR(255) NOT NULL,
+    first_name          VARCHAR(255) NOT NULL,
+    date_of_birth       DATE NOT NULL,
+    patient_name        VARCHAR(512) NOT NULL COMMENT 'Anzeige/Suche: Nachname, Vorname',
+    letter_date         DATE NULL COMMENT 'Datum der zugrunde liegenden Untersuchung',
+    snapshot            JSON NOT NULL COMMENT 'vollstaendiger, unveraenderlicher Datenstand des Briefes',
+    pdf_filename        VARCHAR(200) NOT NULL,
+    pdf_sha256          CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    pdf_size            INT UNSIGNED NOT NULL,
+    pdf_content         MEDIUMBLOB NOT NULL,
+    created_at          DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_patient_letters_sequence (patient_id, sequence_no),
+    KEY idx_patient_letters_report (report_id, letter_version),
+    KEY idx_patient_letters_patient_date (patient_id, letter_date),
+    KEY idx_patient_letters_created (created_at),
+    CONSTRAINT fk_patient_letters_patient FOREIGN KEY (patient_id) REFERENCES patients (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT fk_patient_letters_report FOREIGN KEY (report_id) REFERENCES reports (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT fk_patient_letters_settings_version FOREIGN KEY (settings_version_id) REFERENCES patient_card_settings_versions (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('006_patient_letters', '2e38c5888efcac10f237f03e92cee447d008d381ca4e65078ff30c28bb1ce26a', NOW());
