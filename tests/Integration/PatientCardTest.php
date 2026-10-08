@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration;
 
 use App\Import\ImportOutcome;
+use App\PatientCard\MeasurementTemplate;
 use App\PatientCard\PatientCardException;
 use App\PatientCard\PatientCardInput;
 use App\PatientCard\PatientCardPdfGenerator;
@@ -35,6 +36,7 @@ final class PatientCardTest extends DatabaseTestCase
             $this->reportService(),
             new PatientCardPdfGenerator(),
             $this->clock,
+            MeasurementTemplate::default(dirname(__DIR__, 2)),
         );
     }
 
@@ -143,6 +145,7 @@ final class PatientCardTest extends DatabaseTestCase
         $this->assertSame('FIRSTNAME', $card['first_name']);
         $this->assertSame('1938-10-21', $card['date_of_birth']);
         $this->assertSame('2026-10-07', $card['follow_up_date']);
+        // card_version ist der Zaehler je Bericht, nicht die Layoutfassung
         $this->assertSame(1, (int) $card['card_version']);
         $this->assertSame('Patientenausweis_LASTNAME_FIRSTNAME_2026-10-07_Nr1.pdf', $card['pdf_filename']);
         $this->assertSame(hash('sha256', $card['pdf_content']), $card['pdf_sha256']);
@@ -171,8 +174,8 @@ final class PatientCardTest extends DatabaseTestCase
 
         // Snapshot
         $snapshot = $this->snapshot($result['card_id']);
-        $this->assertSame('1.0', $snapshot['patient_card_version']);
-        $this->assertSame(1, $snapshot['card_version']);
+        $this->assertSame('2.0', $snapshot['patient_card_version']);
+        $this->assertSame(2, $snapshot['card_version']);
         $this->assertSame('Musterstraße 12', $snapshot['patient']['street']);
         $this->assertSame('10358141', $snapshot['patient']['patient_identifier']);
         $this->assertSame('Endurity Core', $snapshot['device']['model_name']);
@@ -180,6 +183,26 @@ final class PatientCardTest extends DatabaseTestCase
         $this->assertSame('Dr. med. Hausarzt', $snapshot['physician']['name']);
         $this->assertSame('2027-04-07', $snapshot['follow_up']['next_control_date']);
         $this->assertSame($outcome->importId, $snapshot['source']['import_id']);
+
+        // Messwerttabelle: Vorlage 1:1, nur die aktuelle Untersuchung als Spalte
+        $this->assertSame('1.0.0', $snapshot['measurements']['template_version']);
+        $this->assertSame(7, $snapshot['measurements']['column_count']);
+        $this->assertCount(1, $snapshot['measurements']['columns']);
+        $this->assertTrue($snapshot['measurements']['columns'][0]['current']);
+        $this->assertSame('07.10.2026', $snapshot['measurements']['columns'][0]['date_display']);
+        $this->assertCount(2, $snapshot['measurements']['sections']);
+        $this->assertSame('Messungen', $snapshot['measurements']['sections'][0]['label']);
+        $this->assertSame('Programmierung', $snapshot['measurements']['sections'][1]['label']);
+
+        $pageTwo = PdfText::pages($pdf)[1];
+        $this->assertContains('Messungen', $pageTwo);
+        $this->assertContains('Programmierung', $pageTwo);
+        $this->assertContains('07.10.2026', $pageTwo);
+        $this->assertContains('(aktuelle Untersuchung)', $pageTwo);
+        $this->assertContains('Betriebsart', $pageTwo);
+        $this->assertContains('VVI', $pageTwo);
+        $this->assertContains('60', $pageTwo);
+        $this->assertNotContains('keine Messwerte', $pageTwo);
 
         // Stammdaten und Verknuepfung
         $master = $this->repository()->masterData($result['patient_id']);
@@ -197,10 +220,11 @@ final class PatientCardTest extends DatabaseTestCase
         $service = $this->service();
         $card1 = $service->create(PatientCardInput::fromPost($this->post()), $service->loadReport($first->reportId), null);
         $pdf1 = $service->card($card1['card_id'], true)['pdf_content'];
-        $text1 = PdfText::text((string) $pdf1);
-        $this->assertContains('Nachsorgeuntersuchungen', $text1);
-        $this->assertContains('Bericht Nr. ' . $first->reportId . ' (aktuelle Untersuchung)', $text1);
-        $this->assertNotContains('keine Nachsorgeuntersuchungen', $text1);
+        $pageTwo1 = PdfText::pages((string) $pdf1)[1];
+        $this->assertContains('Messungen', $pageTwo1);
+        $this->assertContains('07.10.2026', $pageTwo1);
+        $this->assertContains('(aktuelle Untersuchung)', $pageTwo1);
+        $this->assertNotContains('Es sind keine Messwerte dieses Patienten gespeichert.', $pageTwo1);
 
         $second = $this->importLaterSample();
         $this->assertSame(2, $this->rowCount('reports'));
@@ -218,12 +242,19 @@ final class PatientCardTest extends DatabaseTestCase
         $this->assertSame(2, $this->rowCount('patient_cards'));
 
         $pdf2 = (string) $service2->card($card2['card_id'], true)['pdf_content'];
-        $text2 = PdfText::text($pdf2);
-        $this->assertContains('Nachsorgeuntersuchungen', $text2);
-        $this->assertContains('Bericht Nr. ' . $second->reportId . ' (aktuelle Untersuchung)', $text2);
-        $this->assertContains('Bericht Nr. ' . $first->reportId, $text2);
-        $this->assertContains('07.10.2026', $text2);
-        $this->assertNotContains('keine Nachsorgeuntersuchungen', $text2);
+        $pageTwo2 = PdfText::pages($pdf2)[1];
+        $this->assertContains('Messungen', $pageTwo2);
+        $this->assertContains('20.11.2026', $pageTwo2, 'Spalte der aktuellen Untersuchung');
+        $this->assertContains('07.10.2026', $pageTwo2, 'Spalte der frueheren Untersuchung');
+        $this->assertContains('(aktuelle Untersuchung)', $pageTwo2);
+        $this->assertNotContains('Es sind keine Messwerte dieses Patienten gespeichert.', $pageTwo2);
+
+        $snapshot2 = $this->snapshot($card2['card_id']);
+        $this->assertCount(2, $snapshot2['measurements']['columns']);
+        $this->assertTrue($snapshot2['measurements']['columns'][0]['current']);
+        $this->assertFalse($snapshot2['measurements']['columns'][1]['current']);
+        $this->assertSame($second->reportId, $snapshot2['measurements']['columns'][0]['report_id']);
+        $this->assertSame($first->reportId, $snapshot2['measurements']['columns'][1]['report_id']);
         $this->assertNotSame(hash('sha256', (string) $pdf1), hash('sha256', $pdf2));
 
         // Der erste Ausweis bleibt unveraendert erhalten

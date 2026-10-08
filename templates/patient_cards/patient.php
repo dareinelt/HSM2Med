@@ -76,7 +76,8 @@
                 </tbody>
             </table>
         </div>
-        <p class="hint">Die Berichte sind nach Untersuchungszeitpunkt absteigend sortiert. Die Auswahl für Seite 2
-            eines Ausweises erfolgt zum Zeitpunkt der Erstellung und ist im Ausweis unveränderlich festgehalten.</p>
+        <p class="hint">Die Berichte sind nach Untersuchungszeitpunkt absteigend sortiert. Seite 2 eines Ausweises
+            zeigt die Messwerte der aktuellen Untersuchung und der bis zu sechs letzten früheren Untersuchungen.
+            Die Auswahl erfolgt zum Zeitpunkt der Erstellung und ist im Ausweis unveränderlich festgehalten.</p>
     <?php endif; ?>
 </section>

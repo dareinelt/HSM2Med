@@ -414,6 +414,13 @@ Die vorhandenen Reports sind unveränderliche Snapshots und müssen als historis
 
 Neue Untersuchungen dürfen alte Untersuchungen nicht verändern.
 
+> **Nachtrag (spätere Anforderung):** Seite 2 zeigt die Messwerte der aktuellen Untersuchung und
+> der letzten sechs Untersuchungen als Tabelle nach der bereitgestellten Vorlage („Messungen" /
+> „Programmierung"), je Untersuchung eine Spalte mit dem Untersuchungsdatum als Kopf. Diese
+> Tabelle ersetzt die frühere Liste der Nachsorgeuntersuchungen auf Seite 2. Die vollständige
+> Historie bleibt in der Webansicht (Patientenseite, Ausweisdetail) erhalten. Details siehe
+> Abschnitt „Nachtrag: Messwerttabelle auf Seite 2" am Ende dieses Dokuments.
+
 12. PDF-Layout
 
 Der Patientenausweis muss als
@@ -959,3 +966,52 @@ und bei relevanten Änderungen zusätzlich die passenden gezielten Tests.
 Die Projektkonvention schreibt nach Änderungen mindestens Syntaxprüfung und den passenden Testlauf vor.
 
 Wichtig: Nicht nur Code schreiben. Erst die vorhandene Architektur verstehen, anschließend implementieren und abschließend die komplette Funktion einschließlich PDF, Historie, UI und Tests verifizieren.
+
+---
+
+## Nachtrag: Messwerttabelle auf Seite 2
+
+Nachgereichte Anforderung (ersetzt Abschnitt 11 für den PDF-Inhalt von Seite 2):
+
+> Auf Seite zwei des Patientenausweises sollen die aktuellen und die letzten sechs Messwerte von
+> vorhandenen Voruntersuchungen dargestellt werden. Verwendet die angehängte Vorlage mit den
+> darin enthaltenen Werten. Diese müssen mit den Daten der jeweiligen Untersuchung übernommen
+> werden.
+
+### Umsetzung
+
+- Die Tabelle der Vorlage („Messungen" / „Programmierung") wird **1:1** abgebildet: gleiche
+  Abschnitte, Gruppen, Zeilen, Beschriftungen und Reihenfolge.
+- Spalten: erste Spalte ist die aktuelle Untersuchung (der Bericht, auf dem der Ausweis beruht),
+  danach folgen die bis zu sechs letzten früheren Untersuchungen desselben Patienten, neueste
+  zuerst. Jede Spalte ist mit dem Datum der Untersuchung überschrieben; die aktuelle Spalte
+  zusätzlich mit „(aktuelle Untersuchung)".
+- Die Werte stammen aus den unveränderlichen Bericht-Snapshots der jeweiligen Untersuchung
+  (`report_parameters`), nicht aus der aktuellen Untersuchung.
+- Zeilen ohne Zuordnung und Zellen ohne Wert bleiben leer – es werden keine Werte erfunden.
+- Die Zuordnung Merlin-Parameter → Zeile ist **zentral** in
+  `config/patient_card_measurements.php` konfigurierbar (`ids` haben Vorrang vor `names`,
+  mehrere Quellen werden mit `glue` verbunden, z. B. `0.5/0.4`). Der PDF-Generator kennt die
+  Vorlage nicht; er rendert ausschließlich die aufgelöste Tabelle aus dem Snapshot.
+- Die frühere Liste der Nachsorgeuntersuchungen auf Seite 2 entfällt; die vollständige Historie
+  bleibt in der Webansicht (Patientenseite und Ausweisdetail).
+
+### Versionierung
+
+- `PatientCardService::PATIENT_CARD_VERSION` `1.0` → `2.0`,
+  `PatientCardService::CARD_VERSION` `1` → `2`,
+  `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` `1` → `2`.
+- Neuer Snapshot-Schlüssel `measurements` mit `template_version`, `column_count`, `columns`
+  (Bericht-ID, Datum, `current`) und `sections` (aufgelöste Werte). Alte Ausweise bleiben
+  unverändert und weiterhin herunterladbar, weil das PDF als Blob gespeichert ist.
+- `config/patient_card_measurements.php` trägt eine eigene `version` (aktuell `1.0.0`); bei
+  inhaltlichen Änderungen erhöhen.
+
+### Tests
+
+- `tests/Unit/MeasurementTemplateTest.php`: Vorlage laden/validieren, Namensnormalisierung,
+  Auflösung über IDs und Bezeichnungen, Vorrang der IDs, `glue`, leere Zellen, Kammerangaben.
+- `tests/Unit/PatientCardPdfTest.php`: Seite 2 enthält die Messwerttabelle, Hinweis bei fehlenden
+  Messwerten, sieben Untersuchungen mit langen Werten passen auf eine Seite.
+- `tests/Integration/PatientCardTest.php`: Werte der jeweiligen Untersuchung landen in der
+  richtigen Spalte, Reihenfolge (aktuelle zuerst), frühere Untersuchung als zweite Spalte.

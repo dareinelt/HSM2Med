@@ -13,6 +13,7 @@ use App\Import\ImportValidator;
 use App\Import\MerlinParser;
 use App\Import\PendingUploadStore;
 use App\Mapping\ParameterMapping;
+use App\PatientCard\MeasurementTemplate;
 use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
 use App\PatientCard\PatientCardService;
@@ -35,6 +36,7 @@ final class Application
     private ?PDO $pdo = null;
     private ?Logger $logger = null;
     private ?ParameterMapping $mapping = null;
+    private ?MeasurementTemplate $measurementTemplate = null;
 
     public function __construct(
         public readonly Config $config,
@@ -63,6 +65,11 @@ final class Application
     public function mapping(): ParameterMapping
     {
         return $this->mapping ??= new ParameterMapping(require $this->rootDir . '/config/parameter_mapping.php');
+    }
+
+    public function measurementTemplate(): MeasurementTemplate
+    {
+        return $this->measurementTemplate ??= MeasurementTemplate::default($this->rootDir);
     }
 
     public function importService(): ImportService
@@ -107,6 +114,7 @@ final class Application
             $this->reportService(),
             new PatientCardPdfGenerator(),
             $this->clock,
+            $this->measurementTemplate(),
         );
     }
 

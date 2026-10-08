@@ -464,11 +464,17 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
   (Logo, Titel, Patientendaten, Notfallkontakt, Hausarzt, Nachsorgezentrum, Implantate- und
   Elektroden-Tabellen mit Modell/Impl.Ort/Lokalisation/Impl.Datum, Hinweise und
   Flugsicherheitstexte DE/EN, Abschlussblock mit Code-39-Barcode der Patient-ID), Seite 2
-  Mess-/Verlaufsangaben und „Vergangene Nachsorgeuntersuchungen“ aus den unveränderlichen
-  Bericht-Snapshots.
+  Messwerttabelle mit den Werten der aktuellen Untersuchung und der bis zu sechs letzten
+  früheren Untersuchungen aus den unveränderlichen Bericht-Snapshots (je Untersuchung eine
+  Spalte, Kopfzeile mit dem Untersuchungsdatum; Aufbau und Zeilen 1:1 nach
+  `config/patient_card_measurements.php`, aufgelöst über `App\PatientCard\MeasurementTemplate`).
 - Aufbau, Reihenfolge und deutsche Beschriftungen von Seite 1 folgen der Vorlage
   `.reference/idcard_ann.png` (Schwarz auf Weiß, keine farbigen Felder). Geänderte Beschriftungen
   wirken sich auf `tests/Unit/PatientCardPdfTest.php` aus.
+- Neue Messzeilen oder geänderte Zuordnungen **nur** in `config/patient_card_measurements.php`
+  ergänzen (nicht im Generator); `version` der Vorlage erhöhen. Zeilen ohne Quelle und Zellen
+  ohne Wert bleiben leer. Alte Ausweise bleiben unverändert, weil die aufgelöste Tabelle im
+  Snapshot (`measurements`) gespeichert wird.
 - Stammdatentexte und Logo kommen aus den Fassungstabellen, **nicht** aus dem Generator.
 - Reicht der Platz nicht, bricht die Erzeugung mit klarer Meldung ab – Inhalte werden nie
   abgeschnitten. `SUPPORTED_CARD_VERSION` prüft `patient_cards.card_version`.
@@ -587,6 +593,7 @@ eingesetzt.
 | Neues Parser-Fehlerkennzeichen | in `MerlinParser`/`ImportValidator` erzeugen, Code + Art in README-Tabelle und in `templates/import/preview.php` ergänzen, Test in `tests/Unit/MerlinParserTest.php` |
 | PDF-Layout ändern | `PdfGenerator` anpassen; bei strukturellen Snapshot-Änderungen `REPORT_VERSION` und `SUPPORTED_REPORT_VERSION` erhöhen und Versionszweig ergänzen |
 | Ausweis-Layout ändern | `PatientCardPdfGenerator` anpassen (Vorlage `.reference/idcard_ann.png` beachten); bei strukturellen Snapshot-Änderungen `PatientCardService::CARD_VERSION` und `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` erhöhen; bestehende Ausweise bleiben unverändert |
+| Messzeile auf Ausweis-Seite 2 ergänzen | `config/patient_card_measurements.php` (`sections` → `groups` → `rows` mit `label`, `chamber`, `sources.ids`/`sources.names`, `glue`) anpassen, `version` erhöhen; Generator und Tests bleiben unberührt, bestehende Ausweise unverändert |
 | Template ändern | Rendering im Browser **und** über `tests/Integration/PatientCardViewTest.php` (echter Controller + `View`) prüfen – `php -l` erkennt Template-Fehler nicht |
 | Neues CLI-Werkzeug | `bin/<name>.php` mit `require __DIR__ . '/../src/bootstrap.php'`, `PHP_SAPI !== 'cli'`-Guard, definierte Exit-Codes, README-Abschnitt aktualisieren |
 | Konfigurationsvariable | `Config` (+ Validierung), `docker-compose.yml`, `.env.example` und README-Tabelle ergänzen |

@@ -13,6 +13,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\View;
 use App\Import\ImportOutcome;
+use App\PatientCard\MeasurementTemplate;
 use App\PatientCard\PatientCardInput;
 use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
@@ -60,6 +61,7 @@ final class PatientCardViewTest extends DatabaseTestCase
             $this->reportService(),
             new PatientCardPdfGenerator(),
             $this->clock,
+            MeasurementTemplate::default(dirname(__DIR__, 2)),
         );
     }
 

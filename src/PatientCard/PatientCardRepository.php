@@ -384,7 +384,7 @@ final class PatientCardRepository
     }
 
     /**
-     * Vergangene Nachsorgeuntersuchungen desselben Patienten (Seite 2 des Ausweises).
+     * Vergangene Untersuchungen desselben Patienten (Quelle der Messwertspalten auf Seite 2).
      *
      * @return list<array<string, mixed>>
      */
@@ -423,6 +423,65 @@ final class PatientCardRepository
         $result = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $result[(int) $row['report_id']] ??= trim((string) $row['value']);
+        }
+        return $result;
+    }
+
+    /**
+     * Messwerte mehrerer Berichte fuer die Messwerttabelle auf Seite 2 des Ausweises.
+     * Gelesen werden nur die angefragten Parameter-IDs und -Bezeichnungen; je Bericht und
+     * Parameter gewinnt der erste nicht leere Wert (Reihenfolge wie im Bericht).
+     *
+     * @param list<int> $reportIds
+     * @param list<string> $parameterIds
+     * @param list<string> $parameterNames bereits normalisiert (Kleinbuchstaben, ohne Rand-Leerzeichen)
+     * @return array<int, array{ids: array<string, string>, names: array<string, string>}>
+     */
+    public function measurementValues(array $reportIds, array $parameterIds, array $parameterNames): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $reportIds), static fn (int $id): bool => $id > 0));
+        $parameters = array_values(array_filter(
+            array_map('strval', $parameterIds),
+            static fn (string $id): bool => $id !== '',
+        ));
+        $names = array_values(array_filter(
+            array_map(static fn (mixed $name): string => mb_strtolower(trim((string) $name)), $parameterNames),
+            static fn (string $name): bool => $name !== '',
+        ));
+        if ($ids === [] || ($parameters === [] && $names === [])) {
+            return [];
+        }
+
+        $conditions = [];
+        $bindings = $ids;
+        if ($parameters !== []) {
+            $conditions[] = 'parameter_id IN (' . implode(', ', array_fill(0, count($parameters), '?')) . ')';
+            $bindings = [...$bindings, ...$parameters];
+        }
+        if ($names !== []) {
+            $conditions[] = 'LOWER(TRIM(parameter_name)) IN (' . implode(', ', array_fill(0, count($names), '?')) . ')';
+            $bindings = [...$bindings, ...$names];
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT report_id, parameter_id, parameter_name, value FROM report_parameters'
+            . ' WHERE report_id IN (' . implode(', ', array_fill(0, count($ids), '?')) . ')'
+            . ' AND (' . implode(' OR ', $conditions) . ')'
+            . ' AND value IS NOT NULL AND value <> \'\''
+            . ' ORDER BY report_id, original_position'
+        );
+        $stmt->execute($bindings);
+
+        $result = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $value = trim((string) $row['value']);
+            if ($value === '') {
+                continue;
+            }
+            $reportId = (int) $row['report_id'];
+            $result[$reportId] ??= ['ids' => [], 'names' => []];
+            $result[$reportId]['ids'][(string) $row['parameter_id']] ??= $value;
+            $result[$reportId]['names'][mb_strtolower(trim((string) $row['parameter_name']))] ??= $value;
         }
         return $result;
     }
