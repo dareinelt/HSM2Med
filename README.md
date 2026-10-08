@@ -613,8 +613,9 @@ Spalte *Empfänger* zeigt, an wen er gerichtet ist. Eine Neuausfertigung behält
 
 Briefe ab Fassung 2 werden nach **DIN 5008, Form B** gesetzt: Briefkopf 45 mm, Anschriftfeld
 85 × 45 mm ab 45 mm von oben (Schrift ab 25 mm links) mit Rücksendeangabe in der Zusatz- und
-Vermerkzone, Informationsblock ab 125 mm links und 50 mm oben (Unser Zeichen, Patient, Geburtsdatum, Patienten-ID,
-Brief-Nr., Stammdatenfassung, Datum), Betreff fett ohne das Wort „Betreff", Anrede, Brieftext,
+Vermerkzone, Informationsblock ab 125 mm links und 50 mm oben (Unser Zeichen, Patient,
+Geburtsdatum, Patienten-ID, Brief-Nr., Stammdatenfassung, Datum – je Zeile per Häkchen in der
+Vorlage ein- und ausblendbar), Betreff fett ohne das Wort „Betreff", Anrede, Brieftext,
 Grußformel; Falzmarken bei 105 mm und 210 mm sowie Lochmarke bei 148,5 mm; linker Rand
 25 mm, rechter Rand 20 mm; Folgeseiten mit Kurzkopf und Seitenangabe. Inhalt, Reihenfolge und
 alle festen Texte bestimmt die [Briefvorlage](#briefvorlage-und-vorlageneditor), deren
@@ -700,7 +701,8 @@ der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
 - **Seitenvorschau** (Mitte): maßstabsgetreue A4-Seite mit Beispieldaten; ein Klick wählt den
   Bereich bzw. Baustein.
 - **Eigenschaften** (rechts): alle festen Texte des gewählten Bereichs bzw. Bausteins,
-  Optionen (z. B. Falzmarken; Empfängertext für Briefe ohne Empfängerauswahl) und Platzhalter wie
+  Optionen (z. B. Falzmarken; Empfängertext für Briefe ohne Empfängerauswahl; je Zeile des
+  Informationsblocks ein Häkchen zum Ein- und Ausblenden) und Platzhalter wie
   `{salutation}`, `{patient_name}`, `{date_of_birth}`, `{document_number}`, `{letter_date}`;
   `{page}` und `{pages}` nur in der Seitenangabe. „Standard" setzt einen Text zurück.
 

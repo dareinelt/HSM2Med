@@ -197,6 +197,39 @@ final class LetterTemplateTest extends TestCase
         $this->assertSame($pdf, $this->generate($template), 'Die Ausgabe ist deterministisch.');
     }
 
+    /** Jede Zeile des Informationsblocks laesst sich per Haekchen ein- und ausblenden. */
+    public function testInfoBlockRowsFollowOptions(): void
+    {
+        $default = LetterTemplate::default();
+        $text = PdfText::text($this->generate($default));
+        foreach (['Unser Zeichen', 'Brief-Nr.', 'Stammdatenfassung'] as $needle) {
+            $this->assertContains($needle, $text);
+        }
+
+        // Nur die Dokumentnummer abwaehlen: alle uebrigen Zeilen bleiben stehen.
+        $template = LetterTemplate::default();
+        $template['zones']['info_block']['options']['show_reference'] = false;
+        $template = LetterTemplate::normalize($template);
+        $this->assertFalse($template['zones']['info_block']['options']['show_reference']);
+        $text = PdfText::text($this->generate($template));
+        $this->assertNotContains('Unser Zeichen', $text);
+        $this->assertContains('Brief-Nr.', $text);
+        $this->assertContains('Stammdatenfassung', $text);
+
+        // Alle Zeilen bis auf das Datum abwaehlen; der Baustein Patientendaten wird ausgeblendet,
+        // damit die Beschriftungen eindeutig aus dem Informationsblock stammen.
+        $template = LetterTemplate::default();
+        foreach (array_keys(LetterTemplate::zoneDefinitions()['info_block']['options']) as $option) {
+            $template['zones']['info_block']['options'][$option] = $option === 'show_date';
+        }
+        $template['blocks'][$this->blockIndex($template, 'patient')]['enabled'] = false;
+        $text = PdfText::text($this->generate(LetterTemplate::normalize($template)));
+        foreach (['Unser Zeichen', 'Brief-Nr.', 'Stammdatenfassung', 'Geburtsdatum', 'Patienten-ID'] as $needle) {
+            $this->assertNotContains($needle, $text);
+        }
+        $this->assertContains('Datum', $text);
+    }
+
     public function testFoldMarksAndLegacyDispatch(): void
     {
         $template = LetterTemplate::default();

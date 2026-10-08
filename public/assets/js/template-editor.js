@@ -408,18 +408,20 @@
         ), 20, 50.5, 85, 40));
 
         // Informationsblock
-        const info = zones.info_block.texts;
+        const info = zones.info_block;
         const infoRows = [
-            [info.label_reference, sample.document_number],
-            [info.label_patient, sample.patient_name],
-            [info.label_birth, sample.date_of_birth],
-            [info.label_identifier, sample.patient_identifier],
-            [info.label_sequence, sample.sequence_no],
-            [info.label_settings, 'Fassung 1'],
-            [info.label_date, sample.letter_date],
-        ].filter(([label]) => String(label).trim() !== '');
-        head.append(place(zoneBox('info_block', 'te-zone--info',
-            h('dl', { class: 'te-info' }, ...infoRows.flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })])),
+            ['show_reference', info.texts.label_reference, sample.document_number],
+            ['show_patient', info.texts.label_patient, sample.patient_name],
+            ['show_birth', info.texts.label_birth, sample.date_of_birth],
+            ['show_identifier', info.texts.label_identifier, sample.patient_identifier],
+            ['show_sequence', info.texts.label_sequence, sample.sequence_no],
+            ['show_settings', info.texts.label_settings, 'Fassung 1'],
+            ['show_date', info.texts.label_date, sample.letter_date],
+        ].filter(([option, label]) => info.options[option] !== false && String(label).trim() !== '');
+        head.append(place(zoneBox('info_block', 'te-zone--info' + (infoRows.length === 0 ? ' is-off' : ''),
+            infoRows.length === 0
+                ? h('span', { class: 'te-empty', text: 'Informationsblock ausgeblendet' })
+                : h('dl', { class: 'te-info' }, ...infoRows.flatMap(([, label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })])),
         ), 125, 50, 75, 44));
 
         // Falz- und Lochmarken
