@@ -225,6 +225,7 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
 
     <section class="card wizard-step" data-step="5" id="schritt-5">
         <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 5 · Bestätigen und erzeugen</h2>
+        <?= $err('patient_id') ?>
         <fieldset class="choice-box">
             <legend>Bestätigungen</legend>
             <div class="field">

@@ -400,4 +400,38 @@ final class LetterViewTest extends DatabaseTestCase
             fn (): Response => $this->letters()->patient(new Request('GET', '/letters/patients/999'), ['patient' => '999']),
         );
     }
+
+    /**
+     * Patienten aus Importen vor Migration 002 haben nur patient_name; last_name/first_name
+     * sind NULL. Der Brief leitet die Namen daraus ab, statt mit HTTP 500 abzubrechen.
+     */
+    public function testCreateDerivesNamesForLegacyImportedPatient(): void
+    {
+        $this->importAndSelectPatient();
+        $this->pdo->prepare('UPDATE patients SET last_name = NULL, first_name = NULL WHERE id = ?')
+            ->execute([$this->patientId]);
+
+        $response = $this->createLetter([]);
+
+        $this->assertSame(303, $response->status);
+        $stmt = $this->pdo->prepare('SELECT last_name, first_name, patient_name FROM patient_letters WHERE patient_id = ?');
+        $stmt->execute([$this->patientId]);
+        $this->assertSame(
+            ['last_name' => 'LASTNAME', 'first_name' => 'FIRSTNAME', 'patient_name' => 'LASTNAME, FIRSTNAME'],
+            $stmt->fetch(\PDO::FETCH_ASSOC),
+        );
+    }
+
+    /** Fehlt das Geburtsdatum, erscheint ein Hinweis im Assistenten statt HTTP 500. */
+    public function testCreateRejectsPatientWithoutDateOfBirth(): void
+    {
+        $this->importAndSelectPatient();
+        $this->pdo->prepare('UPDATE patients SET date_of_birth = NULL WHERE id = ?')->execute([$this->patientId]);
+
+        $response = $this->createLetter([]);
+
+        $this->assertSame(422, $response->status);
+        $this->assertContains('In den Stammdaten des Patienten fehlt: Geburtsdatum.', $response->body);
+        $this->assertSame(0, $this->rowCount('patient_letters'));
+    }
 }

@@ -35,6 +35,7 @@ use App\Repository\ImportRepository;
 use App\Repository\ReportRepository;
 use App\Security\ImageUploadValidator;
 use App\Support\Clock;
+use App\Support\LogReader;
 use App\Support\Logger;
 use App\Support\SystemClock;
 use PDO;
@@ -74,9 +75,17 @@ final class Application
 
     public function logger(): Logger
     {
-        return $this->logger ??= new Logger(
-            is_dir($this->config->dataDir . '/logs') ? $this->config->dataDir . '/logs/app.log' : null,
-        );
+        return $this->logger ??= new Logger($this->logFile());
+    }
+
+    public function logReader(): LogReader
+    {
+        return new LogReader($this->logFile());
+    }
+
+    private function logFile(): ?string
+    {
+        return is_dir($this->config->dataDir . '/logs') ? $this->config->dataDir . '/logs/app.log' : null;
     }
 
     public function mapping(): ParameterMapping

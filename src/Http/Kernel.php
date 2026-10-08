@@ -58,7 +58,7 @@ final class Kernel
         } catch (Throwable $e) {
             $reference = $this->app->logger()->error('Unbehandelter Fehler', ['path' => $request->path], $e);
             $details = $this->app->config->isProduction() ? null : $e::class . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString();
-            return $this->error(500, 'Es ist ein technischer Fehler aufgetreten. Referenz: ' . $reference, $details);
+            return $this->error(500, 'Es ist ein technischer Fehler aufgetreten. Referenz: ' . $reference, $details, $reference);
         }
     }
 
@@ -118,6 +118,7 @@ final class Kernel
         $router->post('/patient-cards/reports/{id}', $cards->generate(...), true);
         $router->get('/patient-cards/{id}', $cards->show(...));
         $router->get('/patient-cards/{id}/pdf', $cards->pdf(...));
+        $router->get('/system/logs', $system->logs(...));
         $router->get('/letters', $letters->index(...));
         $router->get('/letters/new', $letters->newLetter(...), true);
         $router->post('/letters', $letters->create(...), true);
@@ -128,7 +129,7 @@ final class Kernel
         return $router;
     }
 
-    private function error(int $status, string $message, ?string $details): Response
+    private function error(int $status, string $message, ?string $details, ?string $reference = null): Response
     {
         try {
             $title = match ($status) {
@@ -142,6 +143,7 @@ final class Kernel
                 'status' => $status,
                 'message' => $message,
                 'details' => $details,
+                'reference' => $reference,
             ]), $status);
         } catch (Throwable) {
             return new Response('Fehler ' . $status, $status, ['Content-Type' => 'text/plain; charset=UTF-8']);

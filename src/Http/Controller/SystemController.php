@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace App\Http\Controller;
 
 use App\Config\Config;
+use App\Http\Request;
 use App\Http\Response;
 use App\Import\ImportService;
 use App\Import\MerlinParser;
 use App\Security\UploadValidator;
+use App\Support\LogReader;
 use Throwable;
 
 final class SystemController extends Controller
 {
+    private const int LOGS_PER_PAGE = 50;
+
     public function index(): Response
     {
         $database = ['ok' => false, 'version' => null, 'migrations' => [], 'pending' => []];
@@ -53,6 +57,37 @@ final class SystemController extends Controller
             'database' => $database,
             'stats' => $stats,
         ], 'system'));
+    }
+
+    /**
+     * Fehlerprotokoll: Eintraege des Anwendungsprotokolls, durchsuchbar nach Referenz.
+     */
+    public function logs(Request $request): Response
+    {
+        $filters = [
+            'ref' => mb_substr(trim($request->query('ref')), 0, 64),
+            'level' => trim($request->query('level')),
+            'q' => mb_substr(trim($request->query('q')), 0, 200),
+        ];
+        if (!isset(LogReader::LEVELS[$filters['level']])) {
+            $filters['level'] = '';
+        }
+        $page = self::page($request->query('page', '1'));
+        $reader = $this->app->logReader();
+        $result = $reader->search($filters, self::LOGS_PER_PAGE, ($page - 1) * self::LOGS_PER_PAGE);
+
+        return Response::html($this->view->render('system_logs', [
+            'title' => 'Fehlerprotokoll',
+            'filters' => $filters,
+            'invalidRef' => $filters['ref'] !== '' && LogReader::normalizeReference($filters['ref']) === '',
+            'available' => $reader->available(),
+            'logFile' => $reader->logFile(),
+            'rows' => $result['rows'],
+            'total' => $result['total'],
+            'truncated' => $result['truncated'],
+            'page' => $page,
+            'pages' => max(1, (int) ceil($result['total'] / self::LOGS_PER_PAGE)),
+        ], 'logs'));
     }
 
     public function health(): Response

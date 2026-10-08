@@ -119,7 +119,7 @@ final class RibbonTest extends TestCase
         foreach ([
             '/import', '/reports', '/patients', '/patients/new', '/patient-cards',
             '/patient-cards/new', '/patient-cards/settings', '/letters', '/letters/new',
-            '/imports', '/system',
+            '/imports', '/system', '/system/logs',
         ] as $expected) {
             $this->assertTrue(in_array($expected, $hrefs, true), 'Ziel fehlt im Funktionsband: ' . $expected);
         }
