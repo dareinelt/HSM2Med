@@ -188,6 +188,21 @@ document.addEventListener('DOMContentLoaded', () => {
         sync();
     });
 
+    // Autoren-Info in der Statusleiste: Overlay oeffnen, geschlossen wird nur ueber das Kreuz.
+    const authorInfo = document.querySelector('dialog[data-author-info-dialog]');
+    if (authorInfo) {
+        document.querySelectorAll('[data-author-info]').forEach((trigger) => {
+            trigger.addEventListener('click', () => {
+                if (typeof authorInfo.showModal === 'function') {
+                    authorInfo.showModal();
+                    return;
+                }
+                // Ohne Unterstuetzung fuer modale Dialoge bleibt der Hinweis wenigstens sichtbar.
+                authorInfo.setAttribute('open', '');
+            });
+        });
+    }
+
     // Schrittmacher-/ICD-Abfrage: Abschnitte und Felder nach Geraeteart ein- und ausblenden.
     // Ohne JavaScript bleibt alles sichtbar; gueltig ist serverseitig die gewaehlte Geraeteart.
     document.querySelectorAll('[data-device-type]').forEach((select) => {

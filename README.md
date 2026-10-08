@@ -154,7 +154,10 @@ docker compose up -d   # ohne --build
 
 Die Oberfläche ist wie ein Office-Programm aufgebaut: oben ein **Funktionsband (Ribbon)**
 mit Reitern, darunter der Arbeitsbereich der jeweiligen Seite und am unteren Rand eine
-Statusleiste mit dem Hinweis zur Verwendung der Daten.
+Statusleiste mit dem aktiven Patienten, dem Hinweis zur Verwendung der Daten und der
+**Autoren-Info** (`HSM2Med by Daniel-André Reinelt`). Ein Klick auf die Autoren-Info öffnet
+einen Hinweistext zu Anspruch und Entstehung der Anwendung; das Overlay lässt sich
+ausschließlich über das Schließen-Kreuz oben rechts verlassen.
 
 **Funktionsband (Ribbon)** – jeder Reiter bündelt die Funktionen eines Themas in Gruppen
 mit großen Symbolen und Beschriftung:
