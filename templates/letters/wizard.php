@@ -1,7 +1,7 @@
 <?php
 /**
- * Brief erstellen – Schritte 2 bis 5: Bericht zuordnen, Bausteine pruefen, Zusammenfassung,
- * bestaetigen und erzeugen.
+ * Brief erstellen – Schritte 2 bis 6: Bericht zuordnen, Bausteine pruefen, Empfaenger waehlen,
+ * Zusammenfassung, bestaetigen und erzeugen. Je ausgewaehltem Empfaenger entsteht ein Brief.
  *
  * Die Berichtzuordnung erfolgt ueber Links (serverseitig, ohne JavaScript). Alle Schritte liegen
  * in einem Formular; JavaScript schaltet die Schritte um (CSP-konform, keine Inline-Skripte).
@@ -20,7 +20,9 @@
  * @var int $nextSequence
  * @var array<string, string> $errors
  * @var string|null $message
- * @var array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool} $selection
+ * @var array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool, recipients: list<string>} $selection
+ * @var array<string, array<string, mixed>> $recipients
+ * @var int $startStep
  * @var array<int, string> $steps
  */
 $patientId = (int) $patient['id'];
@@ -43,6 +45,10 @@ $reportDate = $report === null ? null : ($report->report['session_timestamp']
     ?? null);
 $reportDateLabel = $reportDate === null ? '' : $view::dateTime((string) $reportDate);
 $reportParameters = $report === null ? 0 : count($report->parameters);
+$selectedRecipients = array_values(array_filter(
+    $selection['recipients'],
+    static fn (string $type): bool => ($recipients[$type]['available'] ?? false) === true,
+));
 ?>
 <div class="page-head">
     <div>
@@ -67,7 +73,7 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </div>
 <?php endif; ?>
 
-<form method="post" action="/letters" class="wizard-form" data-wizard data-step="2" novalidate>
+<form method="post" action="/letters" class="wizard-form" data-wizard data-step="<?= $e($startStep) ?>" novalidate>
     <?= $csrf() ?>
     <input type="hidden" name="patient_id" value="<?= $e($patientId) ?>">
     <input type="hidden" name="report_id" value="<?= $e($selectedReportId ?? '') ?>">
@@ -202,11 +208,55 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
     </section>
 
     <section class="card wizard-step" data-step="4" id="schritt-4">
-        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 4 · Zusammenfassung</h2>
+        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> 4 · Empfänger wählen</h2>
+        <p class="muted">Für jeden ausgewählten Empfänger wird ein eigener Brief mit dessen Anschrift im
+            Anschriftfeld erzeugt. Inhalt und Datengrundlage sind bei allen Briefen gleich.</p>
+        <?= $err('recipients') ?>
+        <fieldset class="choice-box recipient-choices" data-recipient-choices>
+            <legend>Empfänger</legend>
+            <?php foreach ($recipients as $type => $recipient): ?>
+                <?php $available = ($recipient['available'] ?? false) === true; ?>
+                <div class="recipient-choice<?= $available ? '' : ' is-unavailable' ?>">
+                    <label class="check" for="recipient-<?= $e($type) ?>">
+                        <input type="checkbox" id="recipient-<?= $e($type) ?>" name="recipients[]" value="<?= $e($type) ?>"
+                            data-recipient-label="<?= $e($recipient['label']) ?>"
+                            <?= in_array($type, $selectedRecipients, true) ? ' checked' : '' ?><?= $available ? '' : ' disabled' ?>>
+                        <span>
+                            <strong><?= $e($recipient['label']) ?></strong>
+                            <?php if ($recipient['lines'] !== []): ?>
+                                <span class="recipient-address"><?= nl2br($e(implode("\n", $recipient['lines']))) ?></span>
+                            <?php endif; ?>
+                            <?php if (!$available): ?>
+                                <small class="field-error">Nicht wählbar – in den Stammdaten fehlt:
+                                    <?= $e(implode(', ', $recipient['missing'])) ?>.
+                                    <a href="/patients/<?= $e($patientId) ?>/edit">Stammdaten ergänzen</a></small>
+                            <?php elseif ($recipient['street'] === ''): ?>
+                                <small class="muted">Hinweis: Straße und Hausnummer fehlen in den Stammdaten.</small>
+                            <?php endif; ?>
+                        </span>
+                    </label>
+                </div>
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="muted">Anschriften werden in den <a href="/patients/<?= $e($patientId) ?>/edit">Stammdaten des
+            Patienten</a> gepflegt (Kontakt, Hausarzt, Überweisender Arzt).</p>
+    </section>
+
+    <section class="card wizard-step" data-step="5" id="schritt-5">
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 5 · Zusammenfassung</h2>
         <table class="kv">
             <tr><th>Patient</th><td><?= $e($patient['patient_name']) ?>,
                 geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?></td></tr>
-            <tr><th>Briefnummer</th><td>Nr. <?= $e($nextSequence) ?> für diesen Patienten</td></tr>
+            <tr><th>Empfänger</th><td>
+                <ul class="plain-list" data-recipient-summary>
+                    <?php foreach ($recipients as $type => $recipient): ?>
+                        <li data-recipient-item="<?= $e($type) ?>"<?= in_array($type, $selectedRecipients, true) ? '' : ' hidden' ?>>
+                            <?= $e($recipient['label']) ?><?= \App\Letter\LetterRecipient::displayName($recipient) === '' ? '' : ': ' . $e(\App\Letter\LetterRecipient::displayName($recipient)) ?></li>
+                    <?php endforeach; ?>
+                    <li data-recipient-none<?= $selectedRecipients === [] ? '' : ' hidden' ?> class="field-error">Kein Empfänger ausgewählt</li>
+                </ul>
+            </td></tr>
+            <tr><th>Briefnummer</th><td>ab Nr. <?= $e($nextSequence) ?> für diesen Patienten (je Empfänger eine Nummer)</td></tr>
             <tr><th>Befundteil</th><td><?= $report === null
                 ? 'ohne Bericht (entfällt)'
                 : 'Bericht Nr. ' . $e($report->id()) . ($reportDateLabel === '' ? '' : ' vom ' . $e($reportDateLabel)) ?></td></tr>
@@ -223,8 +273,8 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
             ausschließlich aus dem Snapshot reproduzierbar.</p>
     </section>
 
-    <section class="card wizard-step" data-step="5" id="schritt-5">
-        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 5 · Bestätigen und erzeugen</h2>
+    <section class="card wizard-step" data-step="6" id="schritt-6">
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 6 · Bestätigen und erzeugen</h2>
         <?= $err('patient_id') ?>
         <fieldset class="choice-box">
             <legend>Bestätigungen</legend>
@@ -245,12 +295,13 @@ $reportParameters = $report === null ? 0 : count($report->parameters);
                 <?= $err('confirm_letter') ?>
             </div>
         </fieldset>
-        <p class="muted">Die Prüfung erfolgt immer serverseitig. Ohne beide Bestätigungen wird kein Brief erzeugt.</p>
+        <p class="muted">Die Prüfung erfolgt immer serverseitig. Ohne beide Bestätigungen wird kein Brief erzeugt.
+            Je ausgewähltem Empfänger entsteht ein eigener Brief.</p>
     </section>
 
     <div class="wizard-controls">
         <button type="button" class="button" data-wizard-prev><?= $icon('back') ?> <span>Zurück</span></button>
         <button type="button" class="button" data-wizard-next><?= $icon('next') ?> <span>Weiter</span></button>
-        <button type="submit" class="button primary" data-wizard-submit data-once><?= $icon('mail-new') ?> <span data-label>Brief erzeugen</span></button>
+        <button type="submit" class="button primary" data-wizard-submit data-once><?= $icon('mail-new') ?> <span data-label data-recipient-submit><?= count($selectedRecipients) > 1 ? $e(count($selectedRecipients)) . ' Briefe erzeugen' : 'Brief erzeugen' ?></span></button>
     </div>
 </form>

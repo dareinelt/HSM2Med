@@ -507,3 +507,73 @@ CREATE TABLE patient_letters (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('006_patient_letters', '2e38c5888efcac10f237f03e92cee447d008d381ca4e65078ff30c28bb1ce26a', NOW());
+
+-- ===== Migration 007_letter_templates =====
+
+-- HSM2Med – Migration 007: versionierte Briefvorlagen (DIN 5008)
+--
+-- Grundsaetze:
+--  * Eine Briefvorlage beschreibt Aufbau (Reihenfolge der Bausteine) und alle festen Texte des
+--    Briefes. Jede gespeicherte Aenderung ergibt eine neue, unveraenderliche Fassung
+--    (version_no fortlaufend). Die aktuelle Vorlage ist die Fassung mit der hoechsten Nummer.
+--  * Der Inhalt (JSON) wird beim Erstellen eines Briefes zusaetzlich in dessen Snapshot
+--    eingefroren. template_version_id verweist auf die verwendete Fassung; Briefe aus der Zeit
+--    vor dieser Migration (Brief-Fassung 1) haben keine Vorlagenfassung (NULL) und werden mit
+--    dem damaligen festen Aufbau reproduziert.
+--  * source_letter_id verweist bei einer Neuausfertigung auf den historischen Brief, dessen
+--    Datengrundlage verwendet wurde. Bestehende Briefe werden nicht veraendert.
+
+CREATE TABLE letter_template_versions (
+    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    version_no      INT UNSIGNED NOT NULL COMMENT 'fortlaufende Fassung der Briefvorlage, beginnend bei 1',
+    name            VARCHAR(200) NOT NULL,
+    comment         VARCHAR(500) NULL COMMENT 'Aenderungsnotiz zur Fassung',
+    schema_version  SMALLINT UNSIGNED NOT NULL COMMENT 'Aufbau des Vorlagen-JSON',
+    content         JSON NOT NULL COMMENT 'Bausteine, Reihenfolge und feste Texte',
+    content_sha256  CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    created_at      DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_letter_template_versions_no (version_no),
+    KEY idx_letter_template_versions_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+ALTER TABLE patient_letters
+    ADD COLUMN template_version_id BIGINT UNSIGNED NULL COMMENT 'verwendete Fassung der Briefvorlage' AFTER settings_version_id,
+    ADD COLUMN source_letter_id BIGINT UNSIGNED NULL COMMENT 'Neuausfertigung: Brief mit der Datengrundlage' AFTER template_version_id,
+    ADD KEY idx_patient_letters_template (template_version_id),
+    ADD KEY idx_patient_letters_source (source_letter_id),
+    ADD CONSTRAINT fk_patient_letters_template_version FOREIGN KEY (template_version_id) REFERENCES letter_template_versions (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT,
+    ADD CONSTRAINT fk_patient_letters_source_letter FOREIGN KEY (source_letter_id) REFERENCES patient_letters (id)
+        ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('007_letter_templates', 'fe40c5380d95491af646b90e748d080f3de291bdd51273c12a62a14b8bc0fd7f', NOW());
+
+-- ===== Migration 008_letter_recipients =====
+
+-- HSM2Med – Migration 008: Briefempfaenger (Patient, Hausarzt, ueberweisender Arzt)
+--
+-- Grundsaetze:
+--  * Die Stammdaten eines Patienten fuehren neben dem Hausarzt (jetzt mit Strasse) den
+--    ueberweisenden Arzt. Beide liefern die Anschrift fuer das Anschriftfeld des Briefes.
+--  * Der Brief-Assistent erzeugt je ausgewaehltem Empfaenger einen eigenen, unveraenderlichen
+--    Brief. Die Anschrift wird im Snapshot eingefroren; recipient_type und recipient_name
+--    dienen nur der Anzeige in Listen. Briefe vor dieser Migration haben keinen Empfaenger
+--    (NULL) und behalten das Anschriftfeld ihrer Vorlage.
+
+ALTER TABLE patient_card_master_data
+    ADD COLUMN physician_street      VARCHAR(255) NULL COMMENT 'Hausarzt: Strasse und Hausnummer' AFTER physician_practice,
+    ADD COLUMN referrer_name         VARCHAR(255) NULL COMMENT 'Ueberweisender Arzt: Name' AFTER physician_phone,
+    ADD COLUMN referrer_practice     VARCHAR(255) NULL COMMENT 'Ueberweisender Arzt: Praxis' AFTER referrer_name,
+    ADD COLUMN referrer_street       VARCHAR(255) NULL COMMENT 'Ueberweisender Arzt: Strasse und Hausnummer' AFTER referrer_practice,
+    ADD COLUMN referrer_postal_code  VARCHAR(32) NULL COMMENT 'Ueberweisender Arzt: Postleitzahl' AFTER referrer_street,
+    ADD COLUMN referrer_city         VARCHAR(255) NULL COMMENT 'Ueberweisender Arzt: Ort' AFTER referrer_postal_code,
+    ADD COLUMN referrer_phone        VARCHAR(64) NULL COMMENT 'Ueberweisender Arzt: Telefon' AFTER referrer_city;
+
+ALTER TABLE patient_letters
+    ADD COLUMN recipient_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL
+        COMMENT 'patient, family_doctor oder referring_physician; NULL bei Briefen vor Migration 008' AFTER source_letter_id,
+    ADD COLUMN recipient_name VARCHAR(512) NULL COMMENT 'Empfaenger fuer Listen (Anschrift im Snapshot)' AFTER recipient_type,
+    ADD KEY idx_patient_letters_recipient (patient_id, recipient_type);
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('008_letter_recipients', '97d7f995f74241442156f62f836c9e073de42642b6a00e9bec9251f27ffaf4c9', NOW());

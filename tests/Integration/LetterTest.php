@@ -175,13 +175,30 @@ final class LetterTest extends DatabaseTestCase
         ]), $wizard['report'], $wizard['masterData'])['card_id'];
     }
 
-    private function createLetter(?int $reportId = null): array
+    /** Hausarzt mit vollstaendiger Anschrift (Standardempfaenger der Tests). */
+    private function saveFamilyDoctor(): void
     {
+        (new PatientRepository($this->pdo))->saveMasterData($this->patientId, [
+            'physician_name' => 'Dr. med. Anna Weber',
+            'physician_practice' => 'Hausarztpraxis am Markt',
+            'physician_street' => 'Marktplatz 3',
+            'physician_postal_code' => '54321',
+            'physician_city' => 'Hausarztstadt',
+        ], '2026-01-01 00:00:00');
+    }
+
+    /**
+     * @param list<string> $recipients
+     */
+    private function createLetter(?int $reportId = null, array $recipients = ['family_doctor']): array
+    {
+        $this->saveFamilyDoctor();
         return $this->letters->create(LetterInput::fromPost([
             'patient_id' => (string) $this->patientId,
             'report_id' => $reportId === null ? '' : (string) $reportId,
             'confirm_data' => '1',
             'confirm_letter' => '1',
+            'recipients' => $recipients,
         ]));
     }
 
@@ -199,13 +216,17 @@ final class LetterTest extends DatabaseTestCase
 
         $letter = $this->letters->letter($result['letter_id']);
         $this->assertTrue($letter !== null);
-        $this->assertSame(LetterService::LETTER_VERSION, $letter['letter_version']);
-        $this->assertSame(LetterService::LETTER_TEMPLATE_VERSION, $letter['snapshot']['letter_template_version']);
+        $this->assertSame(1, (int) $letter['letter_version']);
+        $this->assertSame(LetterService::LETTER_VERSION, $letter['snapshot']['letter_version']);
+        $this->assertSame('1', $letter['snapshot']['letter_template_version']);
+        $this->assertSame(1, $letter['snapshot']['template']['version_no']);
+        $this->assertSame($letter['snapshot']['template']['version_id'], (int) $letter['template_version_id']);
+        $this->assertSame('Standardvorlage', $letter['snapshot']['template']['content']['name']);
         $this->assertSame('LASTNAME', $letter['last_name']);
         $this->assertSame('2026-10-07', $letter['letter_date']);
         $this->assertSame('2026-10-07 08:00:00', $letter['created_at']);
         $this->assertContains('LASTNAME_FIRSTNAME', (string) $letter['pdf_filename']);
-        $this->assertContains('Nr1.pdf', (string) $letter['pdf_filename']);
+        $this->assertContains('Nr1_an-Hausarzt.pdf', (string) $letter['pdf_filename']);
 
         // Pruefsumme und Groesse gehoeren zum gespeicherten PDF.
         $pdf = $this->letters->pdfContent($result['letter_id']);
@@ -327,6 +348,63 @@ final class LetterTest extends DatabaseTestCase
         $this->assertThrows(LetterException::class, fn (): LetterInput => LetterInput::fromPost(['patient_id' => '0']));
     }
 
+    /**
+     * Mehrere Empfaenger: je Empfaenger ein Brief mit eigener Nummer, eigener Anschrift und
+     * gleicher Datengrundlage; eine Neuausfertigung behaelt den Empfaenger.
+     */
+    public function testCreatesOneLetterPerRecipient(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $this->patients->saveMasterData($this->patientId, [
+            'referrer_name' => 'Dr. med. Jonas Klein',
+            'referrer_postal_code' => '50667',
+            'referrer_city' => 'Köln',
+        ], '2026-01-01 00:00:00');
+
+        $result = $this->createLetter(null, ['referring_physician', 'patient', 'family_doctor']);
+        $this->assertCount(3, $result['letters']);
+        $this->assertSame(['patient', 'family_doctor', 'referring_physician'], array_column($result['letters'], 'recipient_type'));
+        $this->assertSame([1, 2, 3], array_column($result['letters'], 'sequence_no'));
+
+        $expected = [
+            ['patient', 'Musterstraße 12'],
+            ['family_doctor', 'Marktplatz 3'],
+            ['referring_physician', '50667 Köln'],
+        ];
+        $versions = [];
+        foreach ($result['letter_ids'] as $index => $letterId) {
+            $letter = $this->letters->letter($letterId);
+            [$type, $needle] = $expected[$index];
+            $this->assertSame($type, $letter['recipient_type']);
+            $this->assertSame($type, $letter['snapshot']['recipient']['type']);
+            $this->assertContains($needle, PdfText::text((string) $this->letters->pdfContent($letterId)));
+            $versions[] = (int) $letter['letter_version'];
+        }
+        $this->assertSame([1, 1, 1], $versions, 'Alle Briefe eines Vorgangs teilen sich die Fassung.');
+
+        $reissue = $this->letters->regenerate($result['letter_ids'][2], LetterService::TEMPLATE_ORIGINAL, false);
+        $copy = $this->letters->letter($reissue['letter_id']);
+        $this->assertSame('referring_physician', $copy['recipient_type']);
+        $this->assertSame('Dr. med. Jonas Klein', $copy['recipient_name']);
+        $this->assertContains('50667 Köln', PdfText::text((string) $this->letters->pdfContent($reissue['letter_id'])));
+    }
+
+    /** Ohne Empfaenger oder mit unvollstaendiger Anschrift entsteht kein Brief. */
+    public function testRecipientsAreValidated(): void
+    {
+        $this->fillRecords();
+        $none = $this->assertThrows(LetterException::class, fn (): array => $this->createLetter(null, []));
+        $this->assertTrue(isset($none->fieldErrors()['recipients']));
+
+        $missing = $this->assertThrows(LetterException::class, fn (): array => $this->createLetter(null, ['family_doctor', 'referring_physician']));
+        $message = $missing->fieldErrors()['recipients'] ?? '';
+        $this->assertContains('Überweisender Arzt', $message);
+        $this->assertContains('Name oder Praxis, Postleitzahl, Ort', $message);
+        $this->assertSame(0, $this->rowCount('patient_letters'));
+    }
+
     /** Ein Bericht eines anderen Patienten wird nicht uebernommen. */
     public function testReportOfAnotherPatientIsRejected(): void
     {
@@ -397,6 +475,113 @@ final class LetterTest extends DatabaseTestCase
     }
 
     /** Die Patientensuche des Assistenten findet nach Namensteilen. */
+    /** Ein Brief laesst sich jederzeit bitgleich aus seinem Snapshot (inkl. Vorlage) reproduzieren. */
+    public function testReproduceYieldsIdenticalPdf(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $result = $this->createLetter();
+
+        // Spaetere Vorlagenaenderungen und eine andere Uhrzeit wirken sich nicht aus.
+        $templates = $this->app->letterTemplateService();
+        $content = $templates->current()['content'];
+        $content['blocks'][1]['texts']['text'] = 'Liebe Kolleginnen und Kollegen,';
+        $templates->save($content, 'Anrede', $templates->current()['id']);
+        $this->clock->set(new \DateTimeImmutable('2027-01-02 10:00:00'));
+
+        $letter = $this->letters->letter($result['letter_id']);
+        $reproduced = $this->letters->reproducePdf($result['letter_id']);
+        $this->assertTrue($reproduced !== null);
+        $this->assertSame($letter['pdf_sha256'], hash('sha256', $reproduced['content']));
+        $this->assertSame($letter['pdf_filename'], $reproduced['filename']);
+        $this->assertNull($this->letters->reproducePdf(999999));
+    }
+
+    /** Neuausfertigung: standardmaessig mit der damaligen Vorlage, mit der aktuellen nur per Opt-in. */
+    public function testRegenerateWithOriginalOrCurrentTemplate(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $first = $this->createLetter();
+        $source = $this->letters->letter($first['letter_id']);
+
+        $templates = $this->app->letterTemplateService();
+        $content = $templates->current()['content'];
+        $content['name'] = 'Hausvorlage';
+        $content['blocks'][1]['texts']['text'] = 'Liebe Kolleginnen und Kollegen,';
+        $saved = $templates->save($content, 'Anrede geändert', $templates->current()['id']);
+        $this->assertSame(2, $saved['version_no']);
+
+        // Spaetere Daten aendern die Datengrundlage der Neuausfertigung nicht.
+        $this->records->save($this->patientId, PatientRecordType::Anamnesis, [
+            'text' => 'Geänderte Anamnese nach dem Brief.',
+            'author_name' => 'Dr. med. Beispiel',
+        ]);
+        $this->clock->set(new \DateTimeImmutable('2026-11-01 09:30:00'));
+
+        $original = $this->letters->regenerate($first['letter_id'], LetterService::TEMPLATE_ORIGINAL, false);
+        $this->assertSame(2, $original['sequence_no']);
+        $copy = $this->letters->letter($original['letter_id']);
+        $this->assertSame($first['letter_id'], (int) $copy['source_letter_id']);
+        $this->assertSame($source['template_version_id'], $copy['template_version_id']);
+        $this->assertSame(1, $copy['snapshot']['template']['version_no']);
+        $this->assertSame($source['snapshot']['anamnesis'], $copy['snapshot']['anamnesis']);
+        $this->assertSame('2026-11-01', $copy['letter_date']);
+        $this->assertSame($source['snapshot']['document']['document_number'], $copy['snapshot']['reissue']['source_document_number']);
+        $text = PdfText::text((string) $this->letters->pdfContent($original['letter_id']));
+        $this->assertContains('Sehr geehrte Damen und Herren', $text);
+        $this->assertContains('Neuausfertigung von', $text);
+        $this->assertNotContains('Liebe Kolleginnen', $text);
+
+        // Ohne Opt-in keine aktuelle Vorlage.
+        $error = $this->assertThrows(LetterException::class, fn () => $this->letters->regenerate($first['letter_id'], LetterService::TEMPLATE_CURRENT, false));
+        $this->assertTrue(isset($error->fieldErrors()['confirm_current_template']));
+        $this->assertThrows(LetterException::class, fn () => $this->letters->regenerate($first['letter_id'], 'beliebig', true));
+
+        $current = $this->letters->regenerate($first['letter_id'], LetterService::TEMPLATE_CURRENT, true);
+        $rebuilt = $this->letters->letter($current['letter_id']);
+        $this->assertSame($saved['id'], (int) $rebuilt['template_version_id']);
+        $this->assertSame(2, $rebuilt['snapshot']['template']['version_no']);
+        $this->assertSame(LetterService::TEMPLATE_CURRENT, $rebuilt['snapshot']['reissue']['template_mode']);
+        $this->assertSame($source['snapshot']['anamnesis'], $rebuilt['snapshot']['anamnesis']);
+        $text = PdfText::text((string) $this->letters->pdfContent($current['letter_id']));
+        $this->assertContains('Liebe Kolleginnen und Kollegen', $text);
+
+        // Der Ausgangsbrief bleibt unveraendert.
+        $this->assertSame($source['pdf_sha256'], $this->letters->letter($first['letter_id'])['pdf_sha256']);
+        $this->assertSame(3, $this->rowCount('patient_letters'));
+    }
+
+    /** Briefe der Fassung 1 (vor dem Vorlageneditor) bleiben mit ihrem Aufbau reproduzierbar. */
+    public function testLegacyLetterIsRegeneratedWithLegacyLayout(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $first = $this->createLetter();
+
+        // Brief auf den Stand vor dem Vorlageneditor zuruecksetzen (Fassung 1 ohne Vorlage).
+        $letter = $this->letters->letter($first['letter_id']);
+        $snapshot = $letter['snapshot'];
+        unset($snapshot['template']);
+        $snapshot['letter_version'] = 1;
+        $snapshot['letter_template_version'] = '1.0';
+        $this->pdo->prepare('UPDATE patient_letters SET snapshot = ?, template_version_id = NULL WHERE id = ?')
+            ->execute([json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $first['letter_id']]);
+
+        $copy = $this->letters->regenerate($first['letter_id'], LetterService::TEMPLATE_ORIGINAL, false);
+        $legacy = $this->letters->letter($copy['letter_id']);
+        $this->assertSame(1, $legacy['snapshot']['letter_version']);
+        $this->assertFalse(isset($legacy['snapshot']['template']));
+        $this->assertNull($legacy['template_version_id']);
+        $this->assertTrue(PdfText::pageCount((string) $this->letters->pdfContent($copy['letter_id'])) > 0);
+
+        $current = $this->letters->regenerate($first['letter_id'], LetterService::TEMPLATE_CURRENT, true);
+        $this->assertSame(LetterService::LETTER_VERSION, $this->letters->letter($current['letter_id'])['snapshot']['letter_version']);
+    }
+
     public function testPatientChoicesSearchByName(): void
     {
         $byName = $this->letters->patientChoices('Mustermann');

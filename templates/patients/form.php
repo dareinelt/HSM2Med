@@ -91,6 +91,30 @@ $action = $patientId === null ? '/patients' : '/patients/' . $patientId;
         <?= $text('phone', 'Telefon', 'Ziffern sowie + ( ) / - . und Leerzeichen', 64) ?>
     </div>
 
+    <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Hausarzt</h2>
+    <p class="muted">Anschrift für Briefe an den Hausarzt. Für einen Brief sind Name oder Praxis sowie
+        Postleitzahl und Ort erforderlich.</p>
+    <div class="field-row">
+        <?= $text('physician_name', 'Name', 'z. B. Dr. med. Anna Weber') ?>
+        <?= $text('physician_practice', 'Praxis') ?>
+        <?= $text('physician_street', 'Straße und Hausnummer') ?>
+        <?= $text('physician_postal_code', 'Postleitzahl', '', 32) ?>
+        <?= $text('physician_city', 'Ort') ?>
+        <?= $text('physician_phone', 'Telefon', 'Ziffern sowie + ( ) / - . und Leerzeichen', 64) ?>
+    </div>
+
+    <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Überweisender Arzt</h2>
+    <p class="muted">Anschrift für Briefe an den überweisenden Arzt. Für einen Brief sind Name oder Praxis
+        sowie Postleitzahl und Ort erforderlich.</p>
+    <div class="field-row">
+        <?= $text('referrer_name', 'Name', 'z. B. Dr. med. Jonas Klein') ?>
+        <?= $text('referrer_practice', 'Praxis') ?>
+        <?= $text('referrer_street', 'Straße und Hausnummer') ?>
+        <?= $text('referrer_postal_code', 'Postleitzahl', '', 32) ?>
+        <?= $text('referrer_city', 'Ort') ?>
+        <?= $text('referrer_phone', 'Telefon', 'Ziffern sowie + ( ) / - . und Leerzeichen', 64) ?>
+    </div>
+
     <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Indikation</h2>
     <div class="field">
         <label for="f-indication">Indikation / Anlass</label>

@@ -48,7 +48,7 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
         <div class="table-scroll">
             <table class="table">
                 <thead>
-                <tr><th>Nr.</th><th>Erstellt</th><th>Patient</th><th>Geburtsdatum</th><th>Bericht</th><th>Fassung</th><th>Anhang</th><th>PDF</th><th></th></tr>
+                <tr><th>Nr.</th><th>Erstellt</th><th>Patient</th><th>Geburtsdatum</th><th>Empfänger</th><th>Bericht</th><th>Fassung</th><th>Anhang</th><th>PDF</th><th></th></tr>
                 </thead>
                 <tbody>
                 <?php foreach ($rows as $l): ?>
@@ -57,6 +57,7 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
                         <td><?= $e($view::dateTime($l['created_at'])) ?></td>
                         <td><a href="/letters/<?= $e($l['id']) ?>"><?= $e($l['patient_name']) ?></a></td>
                         <td><?= $e($view::dateTime($l['date_of_birth'], true)) ?></td>
+                        <td><?= $e(\App\Letter\LetterRecipient::listLabel($l['recipient_type'] ?? null, $l['recipient_name'] ?? null)) ?></td>
                         <td>
                             <?php if (($l['report_id'] ?? null) === null): ?>
                                 <span class="muted">ohne Bericht</span>

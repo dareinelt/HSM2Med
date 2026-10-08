@@ -7,6 +7,7 @@ namespace Tests\Integration;
 use App\Application;
 use App\Config\Config;
 use App\Http\Controller\LetterController;
+use App\Http\Controller\LetterTemplateController;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
@@ -186,16 +187,30 @@ final class LetterViewTest extends DatabaseTestCase
         ]), $wizard['report'], $wizard['masterData'])['card_id'];
     }
 
+    /** Hausarzt mit vollstaendiger Anschrift (Standardempfaenger der Tests). */
+    private function saveFamilyDoctor(): void
+    {
+        (new PatientRepository($this->pdo))->saveMasterData($this->patientId, [
+            'physician_name' => 'Dr. med. Anna Weber',
+            'physician_practice' => 'Hausarztpraxis am Markt',
+            'physician_street' => 'Marktplatz 3',
+            'physician_postal_code' => '54321',
+            'physician_city' => 'Hausarztstadt',
+        ], '2026-01-01 00:00:00');
+    }
+
     /**
-     * @param array<string, string> $post
+     * @param array<string, string|list<string>> $post
      */
     private function createLetter(array $post): Response
     {
+        $this->saveFamilyDoctor();
         return $this->letters()->create(new Request('POST', '/letters', [], $post + [
             'patient_id' => (string) $this->patientId,
             'report_id' => '',
             'confirm_data' => '1',
             'confirm_letter' => '1',
+            'recipients' => ['family_doctor'],
         ]));
     }
 
@@ -241,8 +256,8 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('LASTNAME, FIRSTNAME', $found->body);
     }
 
-    /** Schritte 2 bis 5: Assistent mit Formular, Bestaetigungen und serverseitiger Navigation. */
-    public function testWizardRendersAllFiveSteps(): void
+    /** Schritte 2 bis 6: Assistent mit Formular, Empfaengern, Bestaetigungen und Navigation. */
+    public function testWizardRendersAllSteps(): void
     {
         $reportId = $this->importAndSelectPatient();
         $this->fillRecords();
@@ -257,7 +272,7 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('data-step="2"', $response->body);
         $this->assertContains('name="patient_id" value="' . $this->patientId . '"', $response->body);
         $this->assertContains('name="report_id" value="' . $reportId . '"', $response->body);
-        // Schritt 1 (Patientenauswahl) ist eine eigene Seite; im Formular gibt es die Schritte 2 bis 5.
+        // Schritt 1 (Patientenauswahl) ist eine eigene Seite; im Formular gibt es die Schritte 2 bis 6.
         foreach (array_slice(LetterController::WIZARD_STEPS, 1, null, true) as $number => $label) {
             $this->assertContains('data-wizard-goto="' . $number . '"', $response->body);
             $this->assertContains($label, $response->body);
@@ -268,8 +283,58 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('name="confirm_letter"', $response->body);
         $this->assertContains('Anhang: vollständige Abfrage', $response->body);
         $this->assertContains('MRT-bedingt tauglich', $response->body);
-        $this->assertContains('Nr. 1 für diesen Patienten', $response->body);
+        $this->assertContains('ab Nr. 1 für diesen Patienten', $response->body);
         $this->assertNotContains('Noch nicht erfasst', $response->body);
+        // Empfaenger: Patient mit Anschrift aus dem Ausweis waehlbar, Aerzte ohne Anschrift gesperrt.
+        $this->assertContains('4 · Empfänger wählen', $response->body);
+        foreach (['patient', 'family_doctor', 'referring_physician'] as $type) {
+            $this->assertContains('id="recipient-' . $type . '" name="recipients[]" value="' . $type . '"', $response->body);
+        }
+        $this->assertContains('Überweisender Arzt', $response->body);
+        $this->assertContains('Nicht wählbar – in den Stammdaten fehlt:', $response->body);
+        $this->assertContains('Stammdaten ergänzen', $response->body);
+    }
+
+    /** Je ausgewaehltem Empfaenger entsteht ein Brief; die Uebersicht zeigt den Empfaenger. */
+    public function testCreateForSeveralRecipients(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        (new PatientRepository($this->pdo))->saveMasterData($this->patientId, [
+            'referrer_name' => 'Dr. med. Jonas Klein',
+            'referrer_practice' => 'Kardiologie am Dom',
+            'referrer_street' => 'Domplatz 1',
+            'referrer_postal_code' => '50667',
+            'referrer_city' => 'Köln',
+        ], '2026-01-01 00:00:00');
+
+        $this->saveFamilyDoctor();
+        $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $checked = static fn (string $type): bool => preg_match('/value="' . $type . '"\\s+data-recipient-label="[^"]*"\\s+checked/u', $wizard->body) === 1;
+        $this->assertTrue($checked('family_doctor') && $checked('referring_physician'), 'Aerzte mit Anschrift sind vorausgewaehlt.');
+        $this->assertFalse($checked('patient'), 'Der Patient wird nur auf Wunsch angeschrieben.');
+        $this->assertContains('Kardiologie am Dom', $wizard->body);
+
+        $none = $this->createLetter(['recipients' => []]);
+        $this->assertSame(422, $none->status);
+        $this->assertContains('Bitte mindestens einen Empfänger auswählen', $none->body);
+        $this->assertContains('data-step="4"', $none->body, 'Der Assistent oeffnet den Schritt mit dem Fehler.');
+        $this->assertSame(0, $this->rowCount('patient_letters'));
+
+        $created = $this->createLetter(['recipients' => ['patient', 'family_doctor', 'referring_physician']]);
+        $this->assertSame(303, $created->status);
+        $this->assertSame('/letters/patients/' . $this->patientId, $created->headers['Location'] ?? '');
+        $this->assertSame(3, $this->rowCount('patient_letters'));
+        $this->assertContains('3 Briefe wurden erstellt', implode(' ', array_column($_SESSION['_flash'] ?? [], 'message')));
+
+        $list = $this->letters()->patient(new Request('GET', '/letters/patients/' . $this->patientId), ['patient' => (string) $this->patientId]);
+        foreach (['Patient: FIRSTNAME LASTNAME', 'Hausarzt: Dr. med. Anna Weber, Hausarztpraxis am Markt', 'Überweisender Arzt: Dr. med. Jonas Klein, Kardiologie am Dom'] as $needle) {
+            $this->assertContains($needle, $list->body);
+        }
+        $show = $this->letters()->show(new Request('GET', '/letters/3'), ['id' => '3']);
+        $this->assertContains('Domplatz 1', $show->body);
+        $this->assertContains('an Überweisender Arzt', $show->body);
     }
 
     /** Ohne Bausteine, Abfrage und Ausweis benennt der Assistent jeden fehlenden Teil. */
@@ -373,6 +438,111 @@ final class LetterViewTest extends DatabaseTestCase
             HttpException::class,
             fn (): Response => $this->letters()->pdf(new Request('GET', '/letters/999/pdf'), ['id' => '999']),
         );
+    }
+
+    /** Neuausfertigung und Reproduktion ueber die Briefansicht; die aktuelle Vorlage nur per Opt-in. */
+    public function testShowOffersReissueAndReproduction(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $this->createLetter(['report_id' => (string) $reportId]);
+
+        $show = $this->letters()->show(new Request('GET', '/letters/1'), ['id' => '1']);
+        $this->assertContains('id="neuausfertigung"', $show->body);
+        $this->assertContains('action="/letters/1/regenerate"', $show->body);
+        $this->assertContains('name="confirm_current_template"', $show->body);
+        $this->assertContains('/letters/1/reproduce', $show->body);
+        $this->assertContains('Standardvorlage', $show->body);
+
+        $reproduced = $this->letters()->reproduce(new Request('GET', '/letters/1/reproduce'), ['id' => '1']);
+        $this->assertSame(200, $reproduced->status);
+        $this->assertSame('application/pdf', $reproduced->headers['Content-Type'] ?? '');
+
+        $_SESSION = [];
+        $refused = $this->letters()->regenerate(new Request('POST', '/letters/1/regenerate', [], ['template' => 'current']), ['id' => '1']);
+        $this->assertSame(303, $refused->status);
+        $this->assertSame('/letters/1#neuausfertigung', $refused->headers['Location'] ?? '');
+        $this->assertSame('error', $_SESSION['_flash'][0]['type'] ?? '');
+        $this->assertSame(1, $this->rowCount('patient_letters'));
+
+        $_SESSION = [];
+        $done = $this->letters()->regenerate(new Request('POST', '/letters/1/regenerate', [], ['template' => 'original']), ['id' => '1']);
+        $this->assertSame(303, $done->status);
+        $this->assertSame('/letters/2', $done->headers['Location'] ?? '');
+        $this->assertSame('success', $_SESSION['_flash'][0]['type'] ?? '');
+
+        $copy = $this->letters()->show(new Request('GET', '/letters/2'), ['id' => '2']);
+        $this->assertContains('Neuausfertigung von', $copy->body);
+        $this->assertContains('/letters/1', $copy->body);
+        $_SESSION = [];
+    }
+
+    /** Der Vorlageneditor rendert als eigenstaendige Seite; Speichern, Fassungen und Vorschau per JSON/PDF. */
+    public function testTemplateEditorEndpoints(): void
+    {
+        $controller = new LetterTemplateController($this->app, new View(dirname(__DIR__, 2) . '/templates'));
+
+        $page = $controller->editor(new Request('GET', '/system/letter-templates'));
+        $this->assertSame(200, $page->status);
+        $this->assertContains('/assets/js/template-editor.js', $page->body);
+        $this->assertContains('/assets/css/template-editor.css', $page->body);
+        $this->assertContains('id="template-editor-data"', $page->body);
+        $this->assertContains('data-te-blocks', $page->body);
+        $this->assertNotContains('<script>', $page->body);
+        $this->assertNotContains('style="', $page->body);
+        preg_match('#<script type="application/json" id="template-editor-data">(.*?)</script>#s', $page->body, $match);
+        $data = json_decode($match[1] ?? '', true);
+        $this->assertSame(1, $data['current']['version_no']);
+        $this->assertSame('subject', $data['definition']['default']['blocks'][0]['type']);
+        $this->assertSame('/system/letter-templates', $data['urls']['save']);
+
+        $content = $data['current']['content'];
+        $content['blocks'] = array_reverse($content['blocks']);
+        $content['blocks'][] = ['id' => 'text-2', 'type' => 'text', 'enabled' => true, 'texts' => ['heading' => 'Hinweis', 'text' => 'Bitte {unbekannt} beachten.']];
+        $invalid = $controller->save(new Request('POST', '/system/letter-templates', [], [
+            'content' => json_encode($content),
+            'base_version_id' => (string) $data['current']['id'],
+        ]));
+        $this->assertSame(422, $invalid->status);
+        $errors = json_decode($invalid->body, true)['errors'];
+        $this->assertTrue(isset($errors['blocks.' . (count($content['blocks']) - 1) . '.texts.text']));
+
+        $content['blocks'][count($content['blocks']) - 1]['texts']['text'] = 'Bitte beachten, {patient_name}.';
+        $saved = $controller->save(new Request('POST', '/system/letter-templates', [], [
+            'content' => json_encode($content),
+            'comment' => 'Reihenfolge umgekehrt',
+            'base_version_id' => (string) $data['current']['id'],
+        ]));
+        $this->assertSame(200, $saved->status);
+        $payload = json_decode($saved->body, true);
+        $this->assertTrue($payload['ok']);
+        $this->assertSame(2, $payload['current']['version_no']);
+        $this->assertSame('closing', $payload['current']['content']['blocks'][0]['type']);
+        $this->assertCount(2, $payload['versions']);
+        $this->assertSame('Reihenfolge umgekehrt', $payload['versions'][0]['comment']);
+
+        // Veraltete Grundlage wird abgelehnt (kein stilles Ueberschreiben).
+        $conflict = $controller->save(new Request('POST', '/system/letter-templates', [], [
+            'content' => json_encode($data['current']['content']),
+            'base_version_id' => (string) $data['current']['id'],
+        ]));
+        $this->assertSame(422, $conflict->status);
+        $this->assertTrue(isset(json_decode($conflict->body, true)['errors']['base_version']));
+
+        $broken = $controller->save(new Request('POST', '/system/letter-templates', [], ['content' => '{kaputt']));
+        $this->assertSame(422, $broken->status);
+
+        $version = $controller->version(new Request('GET', '/system/letter-templates/versions/1'), ['id' => (string) $data['current']['id']]);
+        $this->assertSame(1, json_decode($version->body, true)['version']['version_no']);
+        $this->assertThrows(HttpException::class, fn (): Response => $controller->version(new Request('GET', '/x'), ['id' => '999']));
+
+        $preview = $controller->preview(new Request('POST', '/system/letter-templates/preview', [], ['content' => json_encode($content)]));
+        $this->assertSame(200, $preview->status);
+        $this->assertSame('application/pdf', $preview->headers['Content-Type'] ?? '');
+        $badPreview = $controller->preview(new Request('POST', '/system/letter-templates/preview', [], ['content' => '[]']));
+        $this->assertSame(422, $badPreview->status);
+        $this->assertContains('Die Vorschau ist nicht möglich', $badPreview->body);
     }
 
     /** Die Patientenseite listet die Briefe eines Patienten und lehnt unbekannte ab. */

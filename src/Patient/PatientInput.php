@@ -16,7 +16,8 @@ use App\Support\DateInput;
  *
  * Alle Felder werden serverseitig validiert; die Anzeige der Fehler erfolgt feldbezogen.
  * Leere Werte sind erlaubt (die Datenbank speichert sie als ''), Pflichtfelder sind
- * Nachname, Vorname und Geburtsdatum.
+ * Nachname, Vorname und Geburtsdatum. Hausarzt und ueberweisender Arzt liefern die Anschrift
+ * fuer Briefe an diese Empfaenger.
  */
 final class PatientInput
 {
@@ -27,7 +28,23 @@ final class PatientInput
         'city' => 255,
         'phone' => 64,
         'indication' => 2000,
+        'physician_name' => 255,
+        'physician_practice' => 255,
+        'physician_street' => 255,
+        'physician_postal_code' => 32,
+        'physician_city' => 255,
+        'physician_phone' => 64,
+        'referrer_name' => 255,
+        'referrer_practice' => 255,
+        'referrer_street' => 255,
+        'referrer_postal_code' => 32,
+        'referrer_city' => 255,
+        'referrer_phone' => 64,
     ];
+
+    /** Felder mit Telefonnummer bzw. Postleitzahl (gleiche Pruefung wie beim Patienten). */
+    private const array PHONE_FIELDS = ['phone', 'physician_phone', 'referrer_phone'];
+    private const array POSTAL_FIELDS = ['postal_code', 'physician_postal_code', 'referrer_postal_code'];
 
     public const int MAX_IDENTIFIER = 191;
     public const int MAX_NAME = 255;
@@ -96,10 +113,10 @@ final class PatientInput
                 $errors[$field] = sprintf('Höchstens %d Zeichen erlaubt.', $maxLength);
                 $value = mb_substr($value, 0, $maxLength);
             }
-            if ($field === 'phone' && $value !== '' && preg_match('/^[0-9+()\/.\-\s]+$/u', $value) !== 1) {
+            if (in_array($field, self::PHONE_FIELDS, true) && $value !== '' && preg_match('/^[0-9+()\/.\-\s]+$/u', $value) !== 1) {
                 $errors[$field] = 'Erlaubt sind Ziffern sowie + ( ) / - . und Leerzeichen.';
             }
-            if ($field === 'postal_code' && $value !== '' && preg_match('/^[0-9A-Za-z][0-9A-Za-z\s\-]{0,31}$/u', $value) !== 1) {
+            if (in_array($field, self::POSTAL_FIELDS, true) && $value !== '' && preg_match('/^[0-9A-Za-z][0-9A-Za-z\s\-]{0,31}$/u', $value) !== 1) {
                 $errors[$field] = 'Die Postleitzahl enthält ungültige Zeichen.';
             }
             $values[$field] = $value;

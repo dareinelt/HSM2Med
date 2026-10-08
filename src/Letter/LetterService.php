@@ -29,14 +29,25 @@ use RuntimeException;
  *    reproduzierbar.
  *  * Die MRT-Tauglichkeit wird nicht im Brief gepflegt, sondern aus dem neuesten
  *    Patientenausweis uebernommen und nur lesend gezeigt.
+ *  * Aufbau und feste Texte stammen aus der aktuellen Fassung der Briefvorlage (DIN 5008); die
+ *    Vorlage wird vollstaendig in den Snapshot eingefroren. Ein Brief kann jederzeit mit der
+ *    damaligen Vorlage reproduziert oder – auf ausdruecklichen Wunsch – aus derselben
+ *    Datengrundlage mit der aktuellen Vorlage neu ausgefertigt werden (neuer Brief).
  */
 final class LetterService
 {
-    /** Fassung des Brief-Snapshots. */
-    public const int LETTER_VERSION = 1;
+    /** Fassung des Brief-Snapshots (2: mit eingefrorener Briefvorlage, DIN 5008). */
+    public const int LETTER_VERSION = 2;
 
-    /** Fassung der Briefvorlage (Aufbau und Reihenfolge der Abschnitte). */
-    public const string LETTER_TEMPLATE_VERSION = '1.0';
+    /** Vorlage einer Neuausfertigung: die des Ausgangsbriefes oder die aktuelle Fassung. */
+    public const string TEMPLATE_ORIGINAL = 'original';
+    public const string TEMPLATE_CURRENT = 'current';
+
+    /** Datenteile eines Snapshots, die eine Neuausfertigung unveraendert uebernimmt. */
+    private const array DATA_PARTS = [
+        'master', 'patient', 'anamnesis', 'premedication', 'epicrisis', 'device_check',
+        'report', 'appendix', 'mrt', 'source', 'recipient',
+    ];
 
     /** Bausteine, die in den Brieftext einfliessen. */
     public const array TEXT_TYPES = [
@@ -54,16 +65,20 @@ final class LetterService
         private readonly DeviceCheckAppendix $appendix,
         private readonly LetterPdfGenerator $generator,
         private readonly Clock $clock,
+        private readonly LetterTemplateService $templates,
     ) {
     }
 
-    public static function pdfFilename(string $patientName, ?string $date, int $sequence): string
+    public static function pdfFilename(string $patientName, ?string $date, int $sequence, string $recipientLabel = ''): string
     {
         $parts = ['Brief', 'Schrittmacher-ICD-Abfrage', $patientName];
         if ($date !== null && $date !== '') {
             $parts[] = substr($date, 0, 10);
         }
         $parts[] = 'Nr' . $sequence;
+        if ($recipientLabel !== '') {
+            $parts[] = 'an-' . $recipientLabel;
+        }
         return FileName::downloadName(implode('_', $parts) . '.pdf');
     }
 
@@ -149,6 +164,7 @@ final class LetterService
             'appendix' => $appendix,
             'appendix_lines' => DeviceCheckAppendix::lines($appendix),
             'warnings' => $warnings,
+            'recipients' => LetterRecipient::all($patient, $masterData),
             'next_sequence' => $this->repository->nextSequence($patientId),
         ];
     }
@@ -164,14 +180,20 @@ final class LetterService
     }
 
     /**
-     * Erzeugt den Brief: prueft die Bestaetigungen, friert den Stand ein, erzeugt das PDF und
-     * speichert beides unveraenderlich.
+     * Erzeugt die Briefe: prueft Bestaetigungen und Empfaenger, friert den Stand ein und
+     * erzeugt je ausgewaehltem Empfaenger einen eigenen Brief (eigene Briefnummer, eigene
+     * Dokumentnummer, eigenes PDF). Alle Briefe entstehen in einer Transaktion und teilen
+     * sich die Fassung (letter_version) sowie die Datengrundlage.
      *
-     * @return array{letter_id: int, patient_id: int, sequence_no: int, page_count: int}
+     * @return array{letter_id: int, letter_ids: list<int>, patient_id: int, sequence_no: int, page_count: int,
+     *     letters: list<array{letter_id: int, sequence_no: int, recipient_type: string, recipient_label: string, page_count: int}>}
      */
     public function create(LetterInput $input): array
     {
         $errors = [];
+        if ($input->recipients === []) {
+            $errors['recipients'] = 'Bitte mindestens einen Empfänger auswählen (Patient, Hausarzt oder Überweisender Arzt).';
+        }
         if (!$input->confirmData) {
             $errors['confirm_data'] = 'Die Bestätigung „Ja, die Angaben sind geprüft und vollständig." ist erforderlich.';
         }
@@ -188,39 +210,226 @@ final class LetterService
         if ($identityError !== null) {
             throw LetterException::rule('patient_id', $identityError);
         }
+        $recipients = [];
+        foreach ($input->recipients as $type) {
+            $recipient = $prepared['recipients'][$type];
+            if (!$recipient['available']) {
+                throw LetterException::rule('recipients', sprintf(
+                    'Für den Empfänger „%s“ fehlt in den Stammdaten: %s.',
+                    $recipient['label'],
+                    implode(', ', $recipient['missing']),
+                ));
+            }
+            $recipients[] = $recipient;
+        }
         $now = $this->now();
+        $template = $this->templates->current();
 
+        $letters = [];
         $this->pdo->beginTransaction();
         try {
             $settingsVersionId = $this->ensureSettingsVersion($now);
             $settings = $this->withLogoMetadata($this->cards->settingsVersion($settingsVersionId) ?? []);
-            $sequence = $this->repository->nextSequence($input->patientId);
             $letterVersion = $this->repository->nextLetterVersion($input->patientId, $input->reportId);
-            $generatedAt = $this->clock->now();
-            $documentNumber = $this->documentNumber($input->patientId, $sequence, $generatedAt);
-
-            $snapshot = $this->snapshot($prepared, $settings, $settingsVersionId, $sequence, $letterVersion, $documentNumber, $generatedAt);
             $logo = $this->logoImage($settings);
-            $pdf = $this->generator->generate($snapshot, $logo, $generatedAt);
             $patientName = (string) $patient['patient_name'];
 
-            $letterId = $this->repository->insertLetter([
-                'patient_id' => $input->patientId,
-                'report_id' => $input->reportId,
-                'settings_version_id' => $settingsVersionId,
+            foreach ($recipients as $recipient) {
+                $sequence = $this->repository->nextSequence($input->patientId);
+                $generatedAt = $this->clock->now();
+                $documentNumber = $this->documentNumber($input->patientId, $sequence, $generatedAt);
+
+                $snapshot = $this->snapshot($prepared, $settings, $settingsVersionId, $sequence, $letterVersion, $documentNumber, $generatedAt);
+                $snapshot['recipient'] = LetterRecipient::snapshotPart($recipient);
+                $snapshot = self::withTemplate($snapshot, $template);
+                $pdf = $this->generator->generate($snapshot, $logo, $generatedAt);
+
+                $letterId = $this->repository->insertLetter([
+                    'patient_id' => $input->patientId,
+                    'report_id' => $input->reportId,
+                    'settings_version_id' => $settingsVersionId,
+                    'sequence_no' => $sequence,
+                    'letter_version' => $letterVersion,
+                    'last_name' => $patient['last_name'],
+                    'first_name' => $patient['first_name'],
+                    'date_of_birth' => $patient['date_of_birth'],
+                    'patient_name' => $patientName,
+                    'letter_date' => $snapshot['document']['letter_date'],
+                    'snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'pdf_filename' => self::pdfFilename($patientName, $snapshot['document']['letter_date'], $sequence, LetterRecipient::fileLabel((string) $recipient['type'])),
+                    'pdf_sha256' => hash('sha256', $pdf),
+                    'pdf_size' => strlen($pdf),
+                    'pdf_content' => $pdf,
+                    'created_at' => $now,
+                    'template_version_id' => $template['id'],
+                    'source_letter_id' => null,
+                    'recipient_type' => $recipient['type'],
+                    'recipient_name' => self::recipientName($snapshot['recipient']),
+                ]);
+                $letters[] = [
+                    'letter_id' => $letterId,
+                    'sequence_no' => $sequence,
+                    'recipient_type' => (string) $recipient['type'],
+                    'recipient_label' => (string) $recipient['label'],
+                    'page_count' => LetterPdfGenerator::pageCount($pdf),
+                ];
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        return [
+            'letter_id' => $letters[0]['letter_id'],
+            'letter_ids' => array_column($letters, 'letter_id'),
+            'patient_id' => $input->patientId,
+            'sequence_no' => $letters[0]['sequence_no'],
+            'page_count' => $letters[0]['page_count'],
+            'letters' => $letters,
+        ];
+    }
+
+    /**
+     * Empfaenger fuer Listen (recipient_name), gekuerzt auf die Spaltenlaenge.
+     *
+     * @param array<string, mixed>|null $recipient Snapshot-Teil „recipient"
+     */
+    private static function recipientName(?array $recipient): ?string
+    {
+        if ($recipient === null) {
+            return null;
+        }
+        $name = LetterRecipient::displayName($recipient);
+        return $name === '' ? null : mb_substr($name, 0, 512);
+    }
+
+    // ------------------------------------------------------- Reproduktion und Neuausfertigung
+
+    /**
+     * Erzeugt das PDF eines gespeicherten Briefes erneut aus seinem Snapshot – mit der damals
+     * eingefrorenen Vorlage, dem damaligen Erstellungszeitpunkt und dem Logo der eingefrorenen
+     * Stammdatenfassung. Es wird nichts gespeichert.
+     *
+     * @return array{content: string, filename: string}|null
+     */
+    public function reproducePdf(int $letterId): ?array
+    {
+        $letter = $this->letter($letterId);
+        if ($letter === null) {
+            return null;
+        }
+        $snapshot = $letter['snapshot'];
+        $generatedAt = $this->snapshotTime($snapshot, (string) $letter['created_at']);
+        $pdf = $this->generator->generate($snapshot, $this->snapshotLogo($snapshot), $generatedAt);
+        return ['content' => $pdf, 'filename' => (string) $letter['pdf_filename']];
+    }
+
+    /**
+     * Fertigt einen gespeicherten Brief als neuen, unveraenderlichen Brief neu aus. Die
+     * Datengrundlage (Patient, Bausteine, Bericht, Anhang, Stammdatenfassung) bleibt die des
+     * Ausgangsbriefes; neu sind Briefnummer, Dokumentnummer und Datum.
+     *
+     * $templateMode TEMPLATE_ORIGINAL verwendet die Vorlage des Ausgangsbriefes (bei Briefen der
+     * Fassung 1 den damaligen festen Aufbau). TEMPLATE_CURRENT verwendet die aktuelle Vorlage und
+     * erfordert die ausdrueckliche Bestaetigung $confirmCurrent (Opt-in).
+     *
+     * @return array{letter_id: int, patient_id: int, sequence_no: int, page_count: int}
+     * @throws LetterException
+     */
+    public function regenerate(int $letterId, string $templateMode, bool $confirmCurrent): array
+    {
+        $source = $this->letter($letterId) ?? throw LetterException::rule('letter', 'Der Brief wurde nicht gefunden.');
+        if (!in_array($templateMode, [self::TEMPLATE_ORIGINAL, self::TEMPLATE_CURRENT], true)) {
+            throw LetterException::rule('template', 'Bitte auswählen, mit welcher Vorlage der Brief neu erstellt wird.');
+        }
+        if ($templateMode === self::TEMPLATE_CURRENT && !$confirmCurrent) {
+            throw LetterException::rule(
+                'confirm_current_template',
+                'Für die Neuausfertigung mit der aktuellen Vorlage ist die ausdrückliche Bestätigung erforderlich.',
+            );
+        }
+        $old = $source['snapshot'];
+        $oldVersion = (int) ($old['letter_version'] ?? 0);
+        if ($oldVersion !== self::LETTER_VERSION && !in_array($oldVersion, LetterPdfGenerator::LEGACY_LETTER_VERSIONS, true)) {
+            throw LetterException::rule('letter', 'Die Fassung dieses Briefes kann nicht neu ausgefertigt werden.');
+        }
+        foreach (['patient', 'master'] as $part) {
+            if (!is_array($old[$part] ?? null)) {
+                throw LetterException::rule('letter', 'Der Snapshot dieses Briefes ist unvollständig.');
+            }
+        }
+
+        $template = null;
+        if ($templateMode === self::TEMPLATE_CURRENT) {
+            $template = $this->templates->current();
+        } elseif ($oldVersion === self::LETTER_VERSION) {
+            $template = $this->snapshotTemplate($old, (int) ($source['template_version_id'] ?? 0));
+        }
+
+        $patientId = (int) $source['patient_id'];
+        $reportId = $source['report_id'] === null ? null : (int) $source['report_id'];
+        $now = $this->now();
+
+        $this->pdo->beginTransaction();
+        try {
+            $sequence = $this->repository->nextSequence($patientId);
+            $letterVersion = $this->repository->nextLetterVersion($patientId, $reportId);
+            $generatedAt = $this->clock->now();
+            $documentNumber = $this->documentNumber($patientId, $sequence, $generatedAt);
+
+            $snapshot = [
+                'letter_version' => $template === null ? $oldVersion : self::LETTER_VERSION,
+                'letter_template_version' => (string) ($old['letter_template_version'] ?? ''),
+                'generated_at' => $generatedAt->format('Y-m-d H:i:s'),
+                'sequence_no' => $sequence,
+                'document' => [
+                    'document_number' => $documentNumber,
+                    'letter_date' => $generatedAt->format('Y-m-d'),
+                    'created_at' => $generatedAt->format('Y-m-d H:i:s'),
+                ],
+            ];
+            foreach (self::DATA_PARTS as $part) {
+                if (array_key_exists($part, $old)) {
+                    $snapshot[$part] = $old[$part];
+                }
+            }
+            if ($template !== null) {
+                $snapshot = self::withTemplate($snapshot, $template);
+            }
+            $snapshot['reissue'] = [
+                'source_letter_id' => (int) $source['id'],
+                'source_document_number' => (string) ($old['document']['document_number'] ?? ''),
+                'source_letter_date' => (string) ($source['letter_date'] ?? ''),
+                'source_created_at' => (string) $source['created_at'],
+                'template_mode' => $templateMode,
+            ];
+
+            $pdf = $this->generator->generate($snapshot, $this->snapshotLogo($old), $generatedAt);
+            $patientName = (string) $source['patient_name'];
+            $newId = $this->repository->insertLetter([
+                'patient_id' => $patientId,
+                'report_id' => $reportId,
+                'settings_version_id' => (int) $source['settings_version_id'],
                 'sequence_no' => $sequence,
                 'letter_version' => $letterVersion,
-                'last_name' => $patient['last_name'],
-                'first_name' => $patient['first_name'],
-                'date_of_birth' => $patient['date_of_birth'],
+                'last_name' => $source['last_name'],
+                'first_name' => $source['first_name'],
+                'date_of_birth' => $source['date_of_birth'],
                 'patient_name' => $patientName,
                 'letter_date' => $snapshot['document']['letter_date'],
                 'snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'pdf_filename' => self::pdfFilename($patientName, $snapshot['document']['letter_date'], $sequence),
+                'pdf_filename' => self::pdfFilename($patientName, $snapshot['document']['letter_date'], $sequence, LetterRecipient::fileLabel($source['recipient_type'] ?? null)),
                 'pdf_sha256' => hash('sha256', $pdf),
                 'pdf_size' => strlen($pdf),
                 'pdf_content' => $pdf,
                 'created_at' => $now,
+                'template_version_id' => $template === null ? null : ($template['id'] > 0 ? $template['id'] : null),
+                'source_letter_id' => (int) $source['id'],
+                'recipient_type' => $source['recipient_type'] ?? null,
+                'recipient_name' => self::recipientName(is_array($snapshot['recipient'] ?? null) ? $snapshot['recipient'] : null),
             ]);
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -231,11 +440,110 @@ final class LetterService
         }
 
         return [
-            'letter_id' => $letterId,
-            'patient_id' => $input->patientId,
+            'letter_id' => $newId,
+            'patient_id' => $patientId,
             'sequence_no' => $sequence,
             'page_count' => LetterPdfGenerator::pageCount($pdf),
         ];
+    }
+
+    /**
+     * Vorschau einer (auch ungespeicherten) Vorlage mit Beispieldaten und den aktuellen
+     * Stammdaten des Nachsorgezentrums. Es wird nichts gespeichert.
+     *
+     * @throws LetterException wenn die Vorlage ungueltig ist
+     */
+    public function previewPdf(mixed $templateContent): string
+    {
+        $content = LetterTemplate::normalize($templateContent);
+        $settings = $this->cards->settings() ?? [];
+        $generatedAt = $this->clock->now();
+        $snapshot = self::withTemplate(LetterSample::snapshot($settings, $generatedAt), [
+            'id' => 0,
+            'version_no' => 0,
+            'name' => (string) $content['name'],
+            'content_sha256' => hash('sha256', LetterTemplate::encode($content)),
+            'content' => $content,
+        ]);
+        $snapshot['template']['version_no'] = 'Vorschau';
+        return $this->generator->generate($snapshot, $this->logoImage($settings), $generatedAt);
+    }
+
+    /**
+     * Vorlage des Snapshots mit Fassungsangaben (fuer die Neuausfertigung mit Originalvorlage).
+     *
+     * @param array<string, mixed> $snapshot
+     * @return array{id: int, version_no: int|string, name: string, content_sha256: string, content: array<string, mixed>}
+     */
+    private function snapshotTemplate(array $snapshot, int $templateVersionId): array
+    {
+        $frozen = (array) ($snapshot['template'] ?? []);
+        try {
+            $content = LetterTemplate::normalize($frozen['content'] ?? null);
+        } catch (LetterException) {
+            throw LetterException::rule('letter', 'Die im Brief eingefrorene Vorlage ist ungültig.');
+        }
+        return [
+            'id' => $templateVersionId > 0 ? $templateVersionId : (int) ($frozen['version_id'] ?? 0),
+            'version_no' => $frozen['version_no'] ?? '',
+            'name' => (string) ($frozen['name'] ?? $content['name']),
+            'content_sha256' => (string) ($frozen['content_sha256'] ?? ''),
+            'content' => $content,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $snapshot
+     * @param array{id: int, version_no: int|string, name: string, content_sha256: string, content: array<string, mixed>} $template
+     * @return array<string, mixed>
+     */
+    private static function withTemplate(array $snapshot, array $template): array
+    {
+        $snapshot['letter_version'] = self::LETTER_VERSION;
+        $snapshot['letter_template_version'] = (string) $template['version_no'];
+        $snapshot['template'] = [
+            'version_id' => $template['id'],
+            'version_no' => $template['version_no'],
+            'name' => $template['name'],
+            'content_sha256' => $template['content_sha256'],
+            'content' => $template['content'],
+        ];
+        return $snapshot;
+    }
+
+    /**
+     * Logo der im Snapshot eingefrorenen Stammdatenfassung (nur wenn die Pruefsumme passt).
+     *
+     * @param array<string, mixed> $snapshot
+     */
+    private function snapshotLogo(array $snapshot): ?ImageData
+    {
+        $settingsVersionId = (int) ($snapshot['master']['settings_version_id'] ?? 0);
+        $expected = (string) ($snapshot['master']['logo_sha256'] ?? '');
+        if ($settingsVersionId <= 0 || $expected === '') {
+            return null;
+        }
+        $settings = $this->cards->settingsVersion($settingsVersionId) ?? [];
+        $logoId = $settings['logo_id'] ?? null;
+        $logo = $logoId === null ? null : $this->cards->logo((int) $logoId);
+        if ($logo === null || !hash_equals($expected, (string) $logo['sha256'])) {
+            return null;
+        }
+        try {
+            return ImageData::fromBytes((string) $logo['content']);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $snapshot
+     */
+    private function snapshotTime(array $snapshot, string $fallback): \DateTimeImmutable
+    {
+        $value = (string) ($snapshot['generated_at'] ?? $fallback);
+        $time = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', substr($value, 0, 19), $this->clock->now()->getTimezone());
+        return $time === false ? new \DateTimeImmutable($fallback) : $time;
     }
 
     // ------------------------------------------------------------------- Auslesen
@@ -315,13 +623,13 @@ final class LetterService
 
         return [
             'letter_version' => self::LETTER_VERSION,
-            'letter_template_version' => self::LETTER_TEMPLATE_VERSION,
-            'generated_at' => $this->now(),
+            'letter_template_version' => '',
+            'generated_at' => $generatedAt->format('Y-m-d H:i:s'),
             'sequence_no' => $sequence,
             'document' => [
                 'document_number' => $documentNumber,
                 'letter_date' => $generatedAt->format('Y-m-d'),
-                'created_at' => $this->now(),
+                'created_at' => $generatedAt->format('Y-m-d H:i:s'),
             ],
             'master' => [
                 'settings_version_id' => $settingsVersionId,

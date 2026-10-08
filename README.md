@@ -66,9 +66,16 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   Er enthält Anamnese, Vormedikation und Epikrise als Textteile, den Befundteil
   „Schrittmacher-/ICD-Abfrage" (nur wenn ein Bericht zugeordnet wurde) und als Anhang die
   vollständige Tabelle der Schrittmacher-/ICD-Abfrage samt MRT-Tauglichkeit aus dem
-  Patientenausweis. Assistent in fünf Schritten, zwei ausdrückliche Bestätigungen,
+  Patientenausweis. Assistent in sechs Schritten, zwei ausdrückliche Bestätigungen,
   unveränderlicher Snapshot mit SHA-256-geprüftem PDF. Der Brief darf mehrseitig sein –
-  die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis.
+  die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis. Briefe folgen
+  **DIN 5008 (Form B)**. Empfänger per Checkbox: **Patient**, **Hausarzt** und
+  **Überweisender Arzt** – je Empfänger entsteht ein eigener Brief mit dessen Anschrift.
+- **Vorlageneditor für Briefe** (System → *Briefvorlage bearbeiten*, öffnet in neuem Tab):
+  alle festen Texte bearbeiten, Bausteine per Drag and Drop anordnen, Live-Vorschau und
+  PDF-Vorschau. Vorlagen werden **versioniert**; jeder Brief kann mit seiner ursprünglichen
+  Vorlage reproduziert oder – auf ausdrücklichen Wunsch – mit der aktuellen Vorlage neu
+  ausgefertigt werden. Technische Referenz: [docs/editor-referenz.md](docs/editor-referenz.md).
 - CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
 - Keine externen Abhängigkeiten zur Laufzeit: kein CDN, keine Webfonts, keine Composer-Pakete.
 
@@ -276,13 +283,20 @@ Patient automatisch als aktiver Patient gesetzt.
 ### Anlegen vor dem Import
 
 **1. Patient anlegen** (`/patients/new`) – Pflichtfelder sind Nachname, Vorname und
-Geburtsdatum; optional sind Patienten-ID, Anschrift, Telefon und Indikation. Das Geburtsdatum
+Geburtsdatum; optional sind Patienten-ID, Anschrift, Telefon, Indikation sowie **Hausarzt** und
+**Überweisender Arzt** (je Name, Praxis, Straße, PLZ, Ort, Telefon – die Anschriften der
+Briefempfänger). Das Geburtsdatum
 wird als `TT.MM.JJJJ` erfasst (zusätzlich erkannt: `JJJJ-MM-TT`, `TT/MM/JJJJ`, `TT-MM-JJJJ`) und
 als ISO-Datum gespeichert; unplausible oder in der Zukunft liegende Daten werden abgelehnt.
 Das Formular meldet Fehler je Feld mit HTTP 422 und behält die Eingaben. Nach dem Speichern
 führt es auf die Akte; der neue Patient ist dort als aktiver Patient gekennzeichnet.
 
 ![Patient anlegen](docs/screenshots/25-akte-anlegen.png)
+
+Über *Stammdaten bearbeiten* in der Akte werden Hausarzt und überweisender Arzt nachgetragen.
+Die Hausarztangaben aus dem Patientenausweis-Assistenten stehen dort bereits:
+
+![Hausarzt und überweisender Arzt](docs/screenshots/49-akte-aerzte.png)
 
 **2. Dublettenprüfung** – die Identität eines Patienten ist **Nachname + Vorname +
 Geburtsdatum** (Groß-/Kleinschreibung und umgebende Leerzeichen bleiben ohne Bedeutung).
@@ -545,12 +559,24 @@ erfassender Person und Zeitpunkt sowie die Hinweise, die der Brief enthalten wir
 
 ![Bausteine prüfen](docs/screenshots/39-brief-assistent-bausteine.png)
 
-**4. Zusammenfassung** – Patient, Briefnummer, Befundteil, Textteile, Anhang und
+**4. Empfänger wählen** – Checkboxen für **Patient**, **Hausarzt** und **Überweisender Arzt**
+mit der Anschrift aus den Stammdaten. Für **jeden** gewählten Empfänger entsteht ein eigener
+Brief (eigene Briefnummer, Dokumentnummer und PDF) mit dessen Anschrift im Anschriftfeld;
+Inhalt und Datengrundlage sind gleich. Wählbar ist ein Empfänger mit Name oder Praxis, PLZ und
+Ort (die Straße ist optional); fehlt etwas, nennt der Assistent die fehlenden Angaben und
+verlinkt die Stammdaten. Vorausgewählt sind die Ärzte mit vollständiger Anschrift, der
+Patient nur auf Wunsch. Mindestens ein Empfänger ist Pflicht.
+
+![Empfänger wählen](docs/screenshots/50-brief-assistent-empfaenger.png)
+
+**5. Zusammenfassung** – Patient, Briefnummer(n), Empfänger, Befundteil, Textteile, Anhang und
 MRT-Tauglichkeit vor dem Erzeugen:
 
 ![Zusammenfassung](docs/screenshots/40-brief-assistent-zusammenfassung.png)
 
-**5. Bestätigen und erzeugen** – ohne **beide** Bestätigungen wird kein Brief gespeichert.
+**6. Bestätigen und erzeugen** – ohne **beide** Bestätigungen wird kein Brief gespeichert.
+Alle Briefe eines Vorgangs werden in einer Transaktion gespeichert; bei einem Brief führt die
+Anwendung auf dessen Detailseite, bei mehreren auf die Briefe des Patienten.
 Bei fehlender Bestätigung antwortet der Server mit HTTP 422 und zeigt die Meldungen am Feld:
 
 ![Bestätigen](docs/screenshots/41-brief-assistent-bestaetigen.png)
@@ -564,13 +590,25 @@ vollständige Abfragetabelle. Der Brief ist **unveränderlich**: Snapshot und PD
 Transaktion gespeichert und nie überschrieben; das PDF ist allein aus dem Snapshot
 reproduzierbar.
 
-Der Brief erscheint sowohl in der Briefübersicht als auch in der Akte des Patienten:
+Der Brief erscheint sowohl in der Briefübersicht als auch in der Akte des Patienten; die
+Spalte *Empfänger* zeigt, an wen er gerichtet ist. Eine Neuausfertigung behält den Empfänger:
 
 ![Briefe am Patienten](docs/screenshots/44-brief-patient.png)
 
 ![Akte mit Brief](docs/screenshots/45-akte-mit-brief.png)
 
-### Aufbau des Briefes
+### Aufbau des Briefes (DIN 5008)
+
+Briefe ab Fassung 2 werden nach **DIN 5008, Form B** gesetzt: Briefkopf 45 mm, Anschriftfeld
+85 × 45 mm ab 45 mm von oben (Schrift ab 25 mm links) mit Rücksendeangabe in der Zusatz- und
+Vermerkzone, Informationsblock ab 125 mm links und 50 mm oben (Unser Zeichen, Patient, Geburtsdatum, Patienten-ID,
+Brief-Nr., Stammdatenfassung, Datum), Betreff fett ohne das Wort „Betreff", Anrede, Brieftext,
+Grußformel; Falzmarken bei 105 mm und 210 mm sowie Lochmarke bei 148,5 mm; linker Rand
+25 mm, rechter Rand 20 mm; Folgeseiten mit Kurzkopf und Seitenangabe. Inhalt, Reihenfolge und
+alle festen Texte bestimmt die [Briefvorlage](#briefvorlage-und-vorlageneditor), deren
+Fassung im Snapshot des Briefes eingefroren wird.
+
+Briefe der Fassung 1 (vor Einführung der Vorlagen) behalten ihren damaligen Aufbau:
 
 Seite 1: Kopfbereich mit Logo und Nachsorgezentrum, Titel „Brief zur Schrittmacher-/ICD-Abfrage",
 Dokumentnummer, Briefdatum und Stammdatenfassung, Patientendaten (Name, Geburtsdatum,
@@ -603,11 +641,56 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 |---|---|---|
 | GET | `/letters` | Übersicht mit Suche (Patient, Patienten-ID, Bericht-Nr.) |
 | GET | `/letters/new` | Patient für einen neuen Brief wählen |
-| GET | `/letters/new?patient={id}&report={id}` | Assistent (Schritte 2–5) |
-| POST | `/letters` | Brief erzeugen (CSRF, beide Bestätigungen) |
+| GET | `/letters/new?patient={id}&report={id}` | Assistent (Schritte 2–6) |
+| POST | `/letters` | Briefe erzeugen, je Eintrag in `recipients[]` (`patient`, `family_doctor`, `referring_physician`) einer (CSRF, beide Bestätigungen) |
 | GET | `/letters/patients/{patient}` | Alle Briefe eines Patienten |
 | GET | `/letters/{id}` | Briefdetail mit Snapshot |
 | GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
+| GET | `/letters/{id}/reproduce` | PDF erneut aus dem Snapshot mit der damaligen Vorlage erzeugen (nichts wird gespeichert) |
+| POST | `/letters/{id}/regenerate` | Neuausfertigung als neuer Brief: `template=original` oder `template=current` (nur mit `confirm_current_template=1`) |
+| GET | `/system/letter-templates` | Vorlageneditor (eigener Tab) |
+| POST | `/system/letter-templates` | Vorlage als neue Fassung speichern (JSON-Antwort, CSRF) |
+| POST | `/system/letter-templates/preview` | PDF-Vorschau einer ungespeicherten Vorlage mit Beispieldaten |
+| GET | `/system/letter-templates/versions/{id}` | Gespeicherte Fassung als JSON (zum Laden in den Editor) |
+
+### Briefvorlage und Vorlageneditor
+
+Der Editor öffnet sich über **System → Briefvorlage bearbeiten** in einem neuen Tab und folgt
+der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
+
+- **Aufbau** (links): Name der Vorlage, feste Bereiche nach DIN 5008 (Briefkopf,
+  Rücksendeangabe, Anschriftfeld, Informationsblock, Fußzeile und Seitenränder, Anhang) und die
+  Bausteine des Brieftextes. Bausteine werden **per Drag and Drop** (am Griff, in der Liste oder
+  direkt auf der Seitenvorschau), mit den Pfeil-Schaltflächen oder mit `Alt`+`↑`/`↓`
+  verschoben und per Häkchen ein- oder ausgeblendet. Eigene Textbausteine (Überschrift + Text)
+  lassen sich hinzufügen und löschen.
+- **Seitenvorschau** (Mitte): maßstabsgetreue A4-Seite mit Beispieldaten; ein Klick wählt den
+  Bereich bzw. Baustein.
+- **Eigenschaften** (rechts): alle festen Texte des gewählten Bereichs bzw. Bausteins,
+  Optionen (z. B. Falzmarken; Empfängertext für Briefe ohne Empfängerauswahl) und Platzhalter wie
+  `{patient_name}`, `{date_of_birth}`, `{document_number}`, `{letter_date}`; `{page}` und
+  `{pages}` nur in der Seitenangabe. „Standard" setzt einen Text zurück.
+
+**Versionierung:** *Als neue Fassung speichern* legt eine neue, unveränderliche Fassung an
+(optional mit Änderungsnotiz); neue Briefe verwenden ab dann diese Fassung. Unter *Fassungen*
+lassen sich frühere Fassungen laden und als neue Fassung wiederherstellen. Gleichzeitige
+Bearbeitung wird erkannt (Speichern auf veralteter Grundlage wird abgelehnt).
+
+**Historische Briefe:** Jeder Brief speichert die vollständige Vorlage im Snapshot. In der
+Briefdetailansicht kann das PDF jederzeit **mit der damaligen Vorlage reproduziert** werden
+(identisch zum gespeicherten PDF). Eine **Neuausfertigung** erzeugt einen neuen Brief aus
+derselben Datengrundlage – standardmäßig mit der ursprünglichen Vorlage, nur nach
+ausdrücklicher Bestätigung (Opt-in) mit der aktuellen Vorlage. Der Ausgangsbrief bleibt
+unverändert; die Neuausfertigung verweist im Informationsblock auf ihn.
+
+![Vorlageneditor](docs/screenshots/51-vorlageneditor.png)
+
+![Anschriftfeld im Vorlageneditor](docs/screenshots/52-vorlageneditor-empfaenger.png)
+
+![Fassungen der Vorlage](docs/screenshots/53-vorlageneditor-fassungen.png)
+
+Aufbau, Datenmodell, Regeln und Erweiterungspunkte des Editors für Entwickler und Agenten:
+[docs/editor-referenz.md](docs/editor-referenz.md).
 
 ## Kommandozeile (CLI)
 
@@ -919,17 +1002,18 @@ docker compose --profile docs down -v
 Das Skript liegt in `docs/screenshots/capture.py`. Es legt Beispieldaten an (Patient mit
 Anamnese, Vormedikation, Epikrise und Schrittmacher-/ICD-Abfrage, Import der Testdatei,
 Stammdaten mit Beispiel-Logo, Patientenausweis, Brief zur Schrittmacher-/ICD-Abfrage) und erzeugt
-daraus die Bilder `01`–`48`, darunter die Sperre des Importvorgangs ohne Patienten (`47`), den
+daraus die Bilder `01`–`53`, darunter Hausarzt und überweisender Arzt in den Stammdaten
+(`49`), die Empfängerauswahl des Brief-Assistenten (`50`), den Vorlageneditor (`51`–`53`), die Sperre des Importvorgangs ohne Patienten (`47`), den
 automatisch aktiven Patienten (`48`), Assistent, Konfliktdialog, Patientenakte, die Abfrage mit
 Vorbelegung und Sperrung der MRT-Tauglichkeit, beide Seiten des Ausweis-PDF, der Brief-Assistent
-(Schritte 2–5), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–3 des
+(Schritte 2–6, drei Empfänger), Briefdetail, Briefübersicht, Briefliste am Patienten sowie die Seiten 1–3 des
 Brief-PDF. Das Skript prüft dabei zugleich die harten Anforderungen: Der Import leitet ohne
 aktiven Patienten auf die Patientenübersicht um, das Anlegen eines Patienten setzt ihn als
 aktiven Patienten, das Ausweis-PDF hat **genau
 zwei** Seiten, Seite 1 nennt die MRT-Tauglichkeit, das MRT-Feld der Abfrage ist gesperrt und die
 Abfrage wird gespeichert; das Brief-PDF hat **mindestens zwei** Seiten und enthält Titel,
 Anamnese, Vormedikation, Epikrise, den Befundteil, den Anhang, die MRT-Tauglichkeit und die
-Tachykardie-Abschnitte. Der Build des
+Tachykardie-Abschnitte sowie die Anschrift des Hausarztes im Anschriftfeld. Der Build des
 Screenshot-Images benötigt einmalig Internetzugang; für den Betrieb der Anwendung ist er nicht
 erforderlich. `web-docs` bindet das Projektverzeichnis nicht ein – nach Änderungen an
 Templates, `src/` oder `public/assets/` ist `docker compose build web-docs` erforderlich. Ein

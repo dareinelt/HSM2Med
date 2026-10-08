@@ -11,6 +11,7 @@
  * @var array<string, mixed> $letter
  * @var array<string, mixed> $snapshot
  * @var list<array<string, mixed>> $previous
+ * @var array{id: int, version_no: int, name: string, created_at: string} $currentTemplate
  */
 $id = (int) $letter['id'];
 $patientId = (int) $letter['patient_id'];
@@ -21,6 +22,13 @@ $report = $snapshot['report'] ?? null;
 $appendix = (array) ($snapshot['appendix'] ?? []);
 $mrt = (array) ($snapshot['mrt'] ?? []);
 $sections = (array) ($appendix['sections'] ?? []);
+$frozenTemplate = is_array($snapshot['template'] ?? null) ? $snapshot['template'] : null;
+$reissue = is_array($snapshot['reissue'] ?? null) ? $snapshot['reissue'] : null;
+$recipient = is_array($snapshot['recipient'] ?? null) ? $snapshot['recipient'] : null;
+$templateLabel = $frozenTemplate === null
+    ? 'fester Aufbau der Brief-Fassung 1 (vor Einführung der Briefvorlagen)'
+    : 'Briefvorlage Fassung ' . (string) ($frozenTemplate['version_no'] ?? '') . ' – ' . (string) ($frozenTemplate['name'] ?? '');
+$sameTemplate = $frozenTemplate !== null && (int) ($letter['template_version_id'] ?? 0) === (int) $currentTemplate['id'];
 $textParts = [
     'Anamnese' => (array) ($snapshot['anamnesis'] ?? []),
     'Vormedikation' => (array) ($snapshot['premedication'] ?? []),
@@ -35,6 +43,9 @@ $textParts = [
             · geboren am <?= $e($view::dateTime($letter['date_of_birth'], true)) ?>
             · Briefnummer <?= $e($letter['sequence_no']) ?> für diesen Patienten
             · Fassung <?= $e($letter['letter_version']) ?>
+            <?php if ($recipient !== null): ?>
+                · an <?= $e($recipient['label'] ?? '') ?>
+            <?php endif; ?>
         </p>
     </div>
     <div class="actions">
@@ -50,6 +61,12 @@ $textParts = [
         <h2><?= $icon('letters', 'app-icon app-icon--sm') ?> Dokument</h2>
         <table class="kv">
             <tr><th>Dokumentnummer</th><td><?= $e($document['document_number'] ?? '') ?></td></tr>
+            <tr><th>Empfänger</th><td><?php if ($recipient === null): ?>
+                <span class="muted">Anschriftfeld laut Vorlage (Brief ohne Empfängerauswahl)</span>
+            <?php else: ?>
+                <strong><?= $e($recipient['label'] ?? '') ?></strong><br>
+                <?= nl2br($e(implode("\n", array_map('strval', (array) ($recipient['lines'] ?? []))))) ?>
+            <?php endif; ?></td></tr>
             <tr><th>Briefdatum</th><td><?= $e($view::dateTime($document['letter_date'] ?? '', true)) ?></td></tr>
             <tr><th>Erstellt</th><td><?= $e($view::dateTime($letter['created_at'])) ?></td></tr>
             <tr><th>Bericht (Befundteil)</th><td>
@@ -95,8 +112,17 @@ $textParts = [
             <tr><th>Dateiname</th><td class="break"><?= $e($letter['pdf_filename']) ?></td></tr>
             <tr><th>Größe</th><td><?= $e(number_format(((int) $letter['pdf_size']) / 1024, 0, ',', '.')) ?> kB</td></tr>
             <tr><th>SHA-256</th><td class="hash"><?= $e($letter['pdf_sha256']) ?></td></tr>
-            <tr><th>Snapshot-Fassung</th><td>Brief <?= $e($snapshot['letter_version'] ?? '') ?>,
-                Vorlage <?= $e($snapshot['letter_template_version'] ?? '') ?></td></tr>
+            <tr><th>Snapshot-Fassung</th><td>Brief <?= $e($snapshot['letter_version'] ?? '') ?></td></tr>
+            <tr><th>Vorlage</th><td><?= $e($templateLabel) ?></td></tr>
+            <?php if ($reissue !== null): ?>
+                <tr><th>Neuausfertigung von</th><td>
+                    <a href="/letters/<?= $e($reissue['source_letter_id'] ?? '') ?>">Brief Nr. <?= $e($reissue['source_letter_id'] ?? '') ?></a>
+                    (<?= $e($reissue['source_document_number'] ?? '') ?>)
+                    <br><small class="muted"><?= ($reissue['template_mode'] ?? '') === 'current'
+                        ? 'mit der damals aktuellen Vorlage neu erstellt'
+                        : 'mit der Vorlage des Ausgangsbriefes neu erstellt' ?></small>
+                </td></tr>
+            <?php endif; ?>
             <tr><th>Eingefrorene Bausteine</th><td>
                 <?php foreach ((array) ($snapshot['source']['record_versions'] ?? []) as $type => $info): ?>
                     <?= $e($type) ?>:
@@ -121,6 +147,39 @@ $textParts = [
         <?php endif; ?>
     </section>
 </div>
+
+<section class="card" id="neuausfertigung">
+    <h2><?= $icon('refresh', 'app-icon app-icon--sm') ?> Erneut erstellen</h2>
+    <p>Dieser Brief bleibt unverändert. Er kann jederzeit mit der damals verwendeten Vorlage
+        (<?= $e($templateLabel) ?>) erneut angezeigt oder als neuer Brief ausgefertigt werden.</p>
+    <div class="actions">
+        <a class="button" href="/letters/<?= $e($id) ?>/reproduce" target="_blank" rel="noopener"
+           title="PDF aus dem gespeicherten Snapshot mit der ursprünglichen Vorlage erneut erzeugen (wird nicht gespeichert)">
+            <?= $icon('eye') ?> <span>Mit ursprünglicher Vorlage anzeigen</span></a>
+    </div>
+    <form method="post" action="/letters/<?= $e($id) ?>/regenerate" class="regenerate-form">
+        <?= $csrf() ?>
+        <fieldset class="choice-box">
+            <legend>Als neuen Brief ausfertigen (gleiche Datengrundlage, neue Briefnummer und neues Datum)</legend>
+            <label class="check" for="template_original">
+                <input type="radio" id="template_original" name="template" value="original" checked>
+                <span><strong>Ursprüngliche Vorlage</strong> – <?= $e($templateLabel) ?></span>
+            </label>
+            <label class="check" for="template_current">
+                <input type="radio" id="template_current" name="template" value="current">
+                <span><strong>Aktuelle Vorlage</strong> – Briefvorlage Fassung <?= $e($currentTemplate['version_no']) ?>
+                    (<?= $e($currentTemplate['name']) ?>, gespeichert am <?= $e($view::dateTime($currentTemplate['created_at'])) ?>)<?=
+                    $sameTemplate ? ' <small class="muted">– identisch mit der ursprünglichen Vorlage</small>' : '' ?></span>
+            </label>
+            <label class="check" for="confirm_current_template">
+                <input type="checkbox" id="confirm_current_template" name="confirm_current_template" value="1">
+                <span>Ja, für die historische Datengrundlage dieses Briefes soll ausdrücklich die
+                    <strong>aktuelle</strong> Vorlage verwendet werden (nur bei „Aktuelle Vorlage“ erforderlich).</span>
+            </label>
+        </fieldset>
+        <button type="submit" class="primary"><?= $icon('refresh') ?> <span>Neuen Brief erstellen</span></button>
+    </form>
+</section>
 
 <section class="card">
     <h2><?= $icon('letters', 'app-icon app-icon--sm') ?> Brieftext</h2>

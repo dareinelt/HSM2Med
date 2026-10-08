@@ -135,10 +135,29 @@ final class PatientInputTest extends TestCase
         $input = PatientInput::fromPost($this->post(['street' => '', 'postal_code' => '', 'city' => '', 'phone' => '', 'indication' => '', 'patient_identifier' => '']));
 
         $this->assertNull($input->patientIdentifier, 'Leere Patienten-ID wird nicht gespeichert.');
-        $this->assertSame(
-            ['street' => '', 'postal_code' => '', 'city' => '', 'phone' => '', 'indication' => ''],
-            $input->masterValues(),
-        );
+        $this->assertSame(array_fill_keys(array_keys(PatientInput::TEXT_FIELDS), ''), $input->masterValues());
+    }
+
+    /** Hausarzt und ueberweisender Arzt: gleiche Pruefung von Telefon und Postleitzahl. */
+    public function testPhysicianAddressesAreValidated(): void
+    {
+        $input = PatientInput::fromPost($this->post([
+            'physician_name' => ' Dr. med. Anna Weber ',
+            'physician_street' => 'Marktplatz 3',
+            'physician_postal_code' => '54321',
+            'physician_city' => 'Hausarztstadt',
+            'referrer_name' => 'Dr. med. Jonas Klein',
+            'referrer_phone' => '0221 123456',
+        ]));
+        $this->assertSame('Dr. med. Anna Weber', $input->masterValues()['physician_name']);
+        $this->assertSame('Marktplatz 3', $input->masterValues()['physician_street']);
+        $this->assertSame('0221 123456', $input->masterValues()['referrer_phone']);
+
+        $exception = $this->assertThrows(PatientException::class, fn (): PatientInput => PatientInput::fromPost($this->post([
+            'physician_phone' => 'abc',
+            'referrer_postal_code' => '#123',
+        ])));
+        $this->assertSame(['physician_phone', 'referrer_postal_code'], array_keys($exception->fieldErrors()));
     }
 
     public function testDateInputRoundTrip(): void
