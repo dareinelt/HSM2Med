@@ -197,7 +197,10 @@ final class PatientCardTest extends DatabaseTestCase
         $service = $this->service();
         $card1 = $service->create(PatientCardInput::fromPost($this->post()), $service->loadReport($first->reportId), null);
         $pdf1 = $service->card($card1['card_id'], true)['pdf_content'];
-        $this->assertContains('keine früheren Nachsorgeuntersuchungen', PdfText::text((string) $pdf1));
+        $text1 = PdfText::text((string) $pdf1);
+        $this->assertContains('Nachsorgeuntersuchungen', $text1);
+        $this->assertContains('Bericht Nr. ' . $first->reportId . ' (aktuelle Untersuchung)', $text1);
+        $this->assertNotContains('keine Nachsorgeuntersuchungen', $text1);
 
         $second = $this->importLaterSample();
         $this->assertSame(2, $this->rowCount('reports'));
@@ -216,10 +219,11 @@ final class PatientCardTest extends DatabaseTestCase
 
         $pdf2 = (string) $service2->card($card2['card_id'], true)['pdf_content'];
         $text2 = PdfText::text($pdf2);
-        $this->assertContains('Vergangene Nachsorgeuntersuchungen', $text2);
+        $this->assertContains('Nachsorgeuntersuchungen', $text2);
+        $this->assertContains('Bericht Nr. ' . $second->reportId . ' (aktuelle Untersuchung)', $text2);
         $this->assertContains('Bericht Nr. ' . $first->reportId, $text2);
         $this->assertContains('07.10.2026', $text2);
-        $this->assertNotContains('keine früheren Nachsorgeuntersuchungen', $text2);
+        $this->assertNotContains('keine Nachsorgeuntersuchungen', $text2);
         $this->assertNotSame(hash('sha256', (string) $pdf1), hash('sha256', $pdf2));
 
         // Der erste Ausweis bleibt unveraendert erhalten

@@ -134,6 +134,15 @@ final class PatientCardFactory
             ],
             'history' => [
                 [
+                    'report_id' => 2,
+                    'date' => '2026-10-07',
+                    'date_display' => '07.10.2026',
+                    'report_label' => 'Bericht Nr. 2 (aktuelle Untersuchung)',
+                    'physician' => 'Dr. med. Kontrolle',
+                    'center' => 'Nachsorgezentrum Beispielstadt',
+                    'filename' => 'MERLIN__ANN_5809481.log',
+                ],
+                [
                     'report_id' => 1,
                     'date' => '2026-04-07',
                     'date_display' => '07.04.2026',

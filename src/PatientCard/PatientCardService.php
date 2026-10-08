@@ -30,7 +30,7 @@ final class PatientCardService
     public const string PATIENT_CARD_VERSION = '1.0';
     public const int CARD_VERSION = 1;
 
-    /** Anzahl der auf Seite 2 dargestellten vergangenen Untersuchungen. */
+    /** Anzahl der zusaetzlich zur aktuellen Untersuchung auf Seite 2 dargestellten frueheren Untersuchungen. */
     public const int HISTORY_LIMIT = 20;
 
     /** Quellparameter des Merlin-Exports, die nicht in der Parameterzuordnung gefuehrt werden. */
@@ -262,7 +262,7 @@ final class PatientCardService
             $cardVersion = $this->repository->nextCardVersion($report->id());
             $settings = $this->repository->settingsVersion($settingsVersionId) ?? [];
             $settings = $this->withLogoMetadata($settings);
-            $history = $this->historyEntries($patientId, $report->id(), $settings);
+            $history = $this->historyEntries($patientId, $report, $settings);
 
             $snapshot = $this->snapshot($input, $report, $values, $settings, $settingsVersionId, $history, $sequence, $cardVersion, $now);
             $logo = $this->logoImage($settings);
@@ -469,19 +469,35 @@ final class PatientCardService
     }
 
     /**
+     * Nachsorgeuntersuchungen fuer Seite 2 des Ausweises. Die aktuelle Untersuchung – der
+     * Bericht, auf dem der Ausweis beruht – steht immer an erster Stelle, danach folgen die
+     * bereits gespeicherten frueheren Untersuchungen.
+     *
      * @param array<string, mixed> $settings
      * @return list<array<string, mixed>>
      */
-    private function historyEntries(int $patientId, int $excludeReportId, array $settings): array
+    private function historyEntries(int $patientId, ReportData $report, array $settings): array
     {
-        $reports = $this->repository->pastReports($patientId, $excludeReportId, self::HISTORY_LIMIT);
-        if ($reports === []) {
-            return [];
+        $currentId = $report->id();
+        $reports = $this->repository->pastReports($patientId, $currentId, self::HISTORY_LIMIT);
+        $ids = [$currentId];
+        foreach ($reports as $row) {
+            $ids[] = (int) $row['id'];
         }
-        $physicians = $this->repository->followUpPhysicians(array_map(static fn (array $row): int => (int) $row['id'], $reports));
+        $physicians = $this->repository->followUpPhysicians($ids);
         $center = (string) ($settings['center_name'] ?? '');
+        $currentDate = $this->reportDate($report);
 
-        $entries = [];
+        $entries = [[
+            'report_id' => $currentId,
+            'date' => $currentDate,
+            'date_display' => PatientCardInput::formatDate($currentDate),
+            'report_label' => 'Bericht Nr. ' . $currentId . ' (aktuelle Untersuchung)',
+            'physician' => $physicians[$currentId] ?? '',
+            'center' => $center,
+            'filename' => (string) ($report->import['filename'] ?? ''),
+        ]];
+
         foreach ($reports as $row) {
             $date = $row['session_timestamp'] ?? $row['interrogation_timestamp'] ?? $row['created_at'];
             $entries[] = [
