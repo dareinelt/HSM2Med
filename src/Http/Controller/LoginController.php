@@ -89,8 +89,9 @@ final class LoginController extends Controller
      */
     private function safeTarget(string $target): string
     {
-        $target = trim(str_replace(["\r", "\n"], '', $target));
-        if ($target === '' || !str_starts_with($target, '/') || str_starts_with($target, '//')) {
+        $target = trim($target);
+        // Security fix: auch Backslash- und Steuerzeichen-Varianten ("/\host") abweisen.
+        if ($target === '' || !Response::isLocalPath($target)) {
             return '/';
         }
         // Pfad ohne Abfrage pruefen: /login und /logout waeren eine Schleife.

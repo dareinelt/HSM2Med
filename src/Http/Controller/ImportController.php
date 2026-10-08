@@ -99,7 +99,10 @@ final class ImportController extends Controller
      */
     public function cancel(Request $request, array $params): Response
     {
-        $this->discard($params['token']);
+        // Security fix: nur eigene Uploads verwerfen (Token muss zur Sitzung gehoeren).
+        if (isset($_SESSION['pending_uploads'][$params['token']])) {
+            $this->discard($params['token']);
+        }
         SessionManager::flash('info', 'Der Import wurde verworfen. Es wurden keine Daten gespeichert.');
         return Response::redirect('/import');
     }

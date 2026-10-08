@@ -151,7 +151,8 @@ $permitted = $permitted ?? View::permitted($user);
 </div>
 <main class="workspace container" id="inhalt"<?= $inert ?>>
     <?php foreach ($flashes as $flash): ?>
-        <div class="alert alert-<?= $e($flash['type']) ?>" role="status">
+        <?php // A11y: Fehler und Warnungen werden sofort vorgelesen (alert), Hinweise hoeflich (status). ?>
+        <div class="alert alert-<?= $e($flash['type']) ?>" role="<?= in_array($flash['type'], ['error', 'warning'], true) ? 'alert' : 'status' ?>">
             <?= $icon($flashIcons[$flash['type']] ?? 'info') ?>
             <span><?= $e($flash['message']) ?></span>
         </div>

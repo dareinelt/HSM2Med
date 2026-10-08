@@ -7,6 +7,7 @@ namespace Tests\Integration;
 use App\Application;
 use App\Config\Config;
 use App\Http\Controller\DashboardController;
+use App\Http\Controller\LoginController;
 use App\Http\Controller\PatientController;
 use App\Http\Kernel;
 use App\Http\Request;
@@ -293,5 +294,41 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
         $this->assertNull($this->app->activePatientSummary());
         $this->assertNull($this->app->activePatient()->id());
         $this->assertFalse($this->app->activePatient()->isSelected());
+    }
+
+    /**
+     * Ohne Anmeldung (abgemeldet oder Ruhezeit abgelaufen) zeigt der Rahmen des Kernels keine
+     * Patientendaten – auch dann nicht, wenn in der Sitzung noch eine Auswahl steht.
+     */
+    public function testKernelFrameHidesThePatientWithoutLogin(): void
+    {
+        $this->create();
+        $this->assertTrue($this->app->activePatient()->isSelected());
+
+        $view = (new \ReflectionProperty(Kernel::class, 'view'))->getValue(new Kernel($this->app));
+        $html = (new LoginController($this->app, $view))->locked(new Request('GET', '/'))->body;
+        $this->assertNotContains('Mustermann', $html);
+
+        // Gegenprobe: angemeldet erscheint der aktive Patient im Rahmen.
+        $this->app->userService()->seedAdmin('admin', 'admin-kennwort-2026');
+        $user = $this->app->userService()->authenticate('admin', 'admin-kennwort-2026');
+        $patientId = $this->create(['last_name' => 'Musterfrau', 'date_of_birth' => '02.03.1950', 'patient_identifier' => 'P-200']);
+        $this->app->auth()->login($user);
+        $this->app->activePatient()->select($patientId);
+        $html = (new DashboardController($this->app, $view))->index(new Request('GET', '/'))->body;
+        $this->assertContains('Musterfrau, Erika', $html);
+    }
+
+    /** Platzhalter im Suchbegriff (%, _) werden woertlich gesucht, nicht als Muster. */
+    public function testSearchTreatsWildcardsLiterally(): void
+    {
+        $this->create();
+        $service = $this->app->patientService();
+
+        $this->assertSame(1, $service->search(['q' => 'Muster'], 10, 0)['total']);
+        $this->assertSame(0, $service->search(['q' => '%'], 10, 0)['total']);
+        $this->assertSame(0, $service->search(['q' => 'M_ster'], 10, 0)['total']);
+        $this->assertSame(0, $service->search(['identifier' => '_'], 10, 0)['total']);
+        $this->assertSame(1, $service->search(['identifier' => 'P-1'], 10, 0)['total']);
     }
 }

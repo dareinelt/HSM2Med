@@ -34,25 +34,29 @@ foreach ($report->summarySection('device') as $row) {
     $deviceRow[(string) $row['label']] = (string) ($row['value'] ?? '');
 }
 $val = static fn (string $key): string => $values[$key] ?? '';
+// A11y: Fehlermeldungen tragen eine Kennung; das Feld verweist per aria-describedby darauf.
 $err = static function (string $key) use ($errors, $e): string {
-    return isset($errors[$key]) ? '<p class="field-error" role="alert">' . $e($errors[$key]) . '</p>' : '';
+    return isset($errors[$key]) ? '<p class="field-error" id="f-' . $e($key) . '-error" role="alert">' . $e($errors[$key]) . '</p>' : '';
 };
-$text = static function (string $name, string $label, string $hint = '', int $max = 255) use ($val, $err, $e): string {
+$aria = static function (string $key) use ($errors, $e): string {
+    return isset($errors[$key]) ? ' aria-invalid="true" aria-describedby="f-' . $e($key) . '-error"' : '';
+};
+$text = static function (string $name, string $label, string $hint = '', int $max = 255) use ($val, $err, $aria, $e): string {
     return '<div class="field">'
         . '<label for="f-' . $e($name) . '">' . $e($label) . '</label>'
-        . '<input type="text" id="f-' . $e($name) . '" name="' . $e($name) . '" maxlength="' . $e($max) . '" value="' . $e($val($name)) . '">'
+        . '<input type="text" id="f-' . $e($name) . '" name="' . $e($name) . '" maxlength="' . $e($max) . '" value="' . $e($val($name)) . '"' . $aria($name) . '>'
         . ($hint === '' ? '' : '<small class="muted">' . $e($hint) . '</small>')
         . $err($name) . '</div>';
 };
-$tel = static function (string $name, string $label, string $hint = '') use ($val, $err, $e): string {
+$tel = static function (string $name, string $label, string $hint = '') use ($val, $err, $aria, $e): string {
     return '<div class="field"><label for="f-' . $e($name) . '">' . $e($label) . '</label>'
-        . '<input type="tel" id="f-' . $e($name) . '" name="' . $e($name) . '" maxlength="64" value="' . $e($val($name)) . '">'
+        . '<input type="tel" id="f-' . $e($name) . '" name="' . $e($name) . '" maxlength="64" value="' . $e($val($name)) . '"' . $aria($name) . '>'
         . ($hint === '' ? '' : '<small class="muted">' . $e($hint) . '</small>')
         . $err($name) . '</div>';
 };
-$select = static function (string $name, string $label, array $options, string $hint = '') use ($val, $err, $e): string {
+$select = static function (string $name, string $label, array $options, string $hint = '') use ($val, $err, $aria, $e): string {
     $html = '<div class="field"><label for="f-' . $e($name) . '">' . $e($label) . '</label>'
-        . '<select id="f-' . $e($name) . '" name="' . $e($name) . '">'
+        . '<select id="f-' . $e($name) . '" name="' . $e($name) . '"' . $aria($name) . '>'
         . '<option value="">nicht angegeben</option>';
     foreach ($options as $option) {
         $selected = $val($name) === $option ? ' selected' : '';
@@ -144,7 +148,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
             <?= $text('first_name', 'Vorname', 'Pflichtfeld', 255) ?>
             <div class="field">
                 <label for="f-date_of_birth">Geburtsdatum (TT.MM.JJJJ)</label>
-                <input type="text" id="f-date_of_birth" name="date_of_birth" maxlength="32" value="<?= $e($date('date_of_birth')) ?>" required>
+                <input type="text" id="f-date_of_birth" name="date_of_birth" maxlength="32" value="<?= $e($date('date_of_birth')) ?>" required<?= $aria('date_of_birth') ?>>
                 <small class="muted">Pflichtfeld – Identitätsmerkmal</small>
                 <?= $err('date_of_birth') ?>
             </div>

@@ -148,13 +148,14 @@ class PatientRepository
         if (($filters['q'] ?? '') !== '') {
             // Zwei getrennte Parameter: native Prepared Statements erlauben keine Wiederholung.
             $where[] = '(p.patient_name LIKE :q_name OR p.last_name LIKE :q_last OR p.first_name LIKE :q_first)';
-            $params[':q_name'] = '%' . $filters['q'] . '%';
-            $params[':q_last'] = '%' . $filters['q'] . '%';
-            $params[':q_first'] = '%' . $filters['q'] . '%';
+            // Fix: Platzhalter (%, _, Backslash) im Suchbegriff werden woertlich gesucht, nicht als Muster.
+            $params[':q_name'] = self::like($filters['q']);
+            $params[':q_last'] = self::like($filters['q']);
+            $params[':q_first'] = self::like($filters['q']);
         }
         if (($filters['identifier'] ?? '') !== '') {
             $where[] = 'p.patient_identifier LIKE :identifier';
-            $params[':identifier'] = '%' . $filters['identifier'] . '%';
+            $params[':identifier'] = self::like($filters['identifier']);
         }
         if (($filters['dob'] ?? '') !== '') {
             $where[] = 'p.date_of_birth = :dob';
@@ -227,6 +228,12 @@ class PatientRepository
     public function saveMasterData(int $patientId, array $values, string $now): void
     {
         $columns = array_keys($values);
+        // Defense in depth: Spaltennamen werden in das SQL eingesetzt und muessen Bezeichner sein.
+        foreach ($columns as $column) {
+            if (!is_string($column) || preg_match('/^[a-z][a-z0-9_]{0,63}$/D', $column) !== 1) {
+                throw new \InvalidArgumentException('Ungueltige Spalte fuer Stammdaten.');
+            }
+        }
         $placeholders = implode(', ', array_fill(0, count($columns), '?'));
         $updates = implode(', ', array_map(static fn (string $column): string => sprintf('%s = VALUES(%s)', $column, $column), $columns));
         $sql = 'INSERT INTO patient_card_master_data (patient_id, ' . implode(', ', $columns) . ', created_at, updated_at)'
@@ -234,5 +241,13 @@ class PatientRepository
             . ' ON DUPLICATE KEY UPDATE ' . $updates . ', updated_at = VALUES(updated_at)';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$patientId, ...array_values($values), $now, $now]);
+    }
+
+    /**
+     * LIKE-Muster "enthaelt" mit maskierten Platzhaltern (%, _ und Backslash werden woertlich gesucht).
+     */
+    private static function like(string $value): string
+    {
+        return '%' . addcslashes($value, '%_\\') . '%';
     }
 }

@@ -147,6 +147,72 @@ final class AuthTest extends DatabaseTestCase
         }
     }
 
+    public function testLogoutDiscardsAllSessionData(): void
+    {
+        $this->createAdmin();
+        $this->auth->login($this->service->authenticate('admin', 'admin-kennwort-2026'));
+        $_SESSION['active_patient_id'] = 42;
+        $_SESSION['pending_uploads'] = ['abc' => true];
+        $_SESSION['_csrf'] = 'alt';
+
+        $this->auth->logout();
+
+        // Kein Patientenbezug und kein Upload darf in die naechste Anmeldung uebergehen.
+        $this->assertSame([], $_SESSION);
+    }
+
+    public function testIdleTimeoutDiscardsAllSessionData(): void
+    {
+        $this->createAdmin();
+        $this->auth->login($this->service->authenticate('admin', 'admin-kennwort-2026'));
+        $_SESSION['active_patient_id'] = 42;
+
+        $this->clock->set(new DateTimeImmutable('2026-10-07 09:00:01'));
+        $this->assertFalse($this->freshAuth()->check());
+        $this->assertFalse(isset($_SESSION['active_patient_id']));
+    }
+
+    public function testLoginStartsWithACleanSession(): void
+    {
+        $id = $this->createAdmin();
+        $_SESSION['active_patient_id'] = 42;
+        $_SESSION['pending_uploads'] = ['abc' => true];
+        $_SESSION['_csrf'] = 'vor-der-anmeldung';
+
+        $this->auth->login($this->service->authenticate('admin', 'admin-kennwort-2026'));
+
+        $this->assertSame($id, $this->auth->id());
+        $this->assertFalse(isset($_SESSION['active_patient_id']));
+        $this->assertFalse(isset($_SESSION['pending_uploads']));
+        $this->assertFalse(isset($_SESSION['_csrf']));
+    }
+
+    public function testPasswordChangeElsewhereEndsTheSession(): void
+    {
+        $id = $this->createAdmin();
+        $this->auth->login($this->service->authenticate('admin', 'admin-kennwort-2026'));
+        $this->assertTrue($this->freshAuth()->check());
+
+        // Kennwort wird in einer anderen Sitzung (oder durch die Verwaltung) geaendert.
+        $this->pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+            ->execute([password_hash('ganz-neues-kennwort-2026', PASSWORD_DEFAULT), $id]);
+
+        $this->assertFalse($this->freshAuth()->check());
+        $this->assertFalse(isset($_SESSION['_auth_user_id']));
+    }
+
+    public function testRefreshCredentialKeepsTheOwnSessionAfterPasswordChange(): void
+    {
+        $this->createAdmin();
+        $user = $this->service->authenticate('admin', 'admin-kennwort-2026');
+        $this->auth->login($user);
+
+        $this->service->changeOwnPassword($user, 'admin-kennwort-2026', 'neues-kennwort-2026', 'neues-kennwort-2026');
+        $this->freshAuth()->refreshCredential();
+
+        $this->assertTrue($this->freshAuth()->check());
+    }
+
     private function freshAuth(): Auth
     {
         return new Auth($this->users, $this->clock, 30 * 60);

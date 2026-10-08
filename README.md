@@ -150,6 +150,10 @@ Alternativ kann das Schema ohne Migrator eingespielt werden:
 `.env` wirken nicht auf ein bestehendes Konto (das Kennwort wird in der Anwendung geändert).
 Ist kein Administratorkonto mehr erreichbar, setzt `docker compose exec web php bin/seed-admin.php --force`
 das Kennwort auf den Wert aus `.env` zurück.
+Mit `APP_ENV=production` wird ein Konto **nicht** mit dem Vorgabekennwort aus `.env.example`
+angelegt (auch nicht per `--force`): der Web-Container bricht den Start dann mit einem Hinweis
+ab, bis in `.env` ein eigenes `ADMIN_PASSWORD` steht. Ein bereits bestehendes Konto bleibt
+unberührt (nur Hinweis).
 
 ## Start, Stopp, Aktualisierung
 
@@ -861,6 +865,8 @@ Exit-Codes `import.php`: `0` Erfolg, `1` Import fehlgeschlagen, `2` Aufruffehler
 `seed-admin.php` legt die Gruppe *Admin* (alle Rechte), die Standardgruppen *MFA* und *Arzt*
 sowie den Benutzer aus `ADMIN_USERNAME`/`ADMIN_PASSWORD` an. Ohne `--force` bleibt ein bereits
 vorhandenes Kennwort unverändert; der Benutzer wird dann nur in die Gruppe *Admin* aufgenommen.
+In `production` verweigert das Skript (Exit-Code `1`) das Anlegen bzw. Zurücksetzen mit dem
+Vorgabekennwort.
 
 ## Importformat
 
@@ -1080,8 +1086,13 @@ bleiben unverändert, weil jede Fassung ihren Inhalt als Snapshot speichert.
   aller Werte, nur lokale Weiterleitungen.
 - **Sitzung:** Die Kennung der angemeldeten Person liegt serverseitig in der Sitzung; ein
   Wechsel des Kontos in der Datenbank wirkt sofort. Die automatische Abmeldung
-  (`AUTH_IDLE_MINUTES`) misst die Zeit seit der letzten Bedienung. Das Anmeldefenster nimmt
-  als Rücksprungziel ausschließlich anwendungsinterne Pfade an (kein offener Umleitungspfad).
+  (`AUTH_IDLE_MINUTES`) misst die Zeit seit der letzten Bedienung. An- und Abmeldung (auch
+  die automatische) verwerfen den **gesamten** Sitzungsinhalt – aktiver Patient, offene
+  Uploads, CSRF-Token – und erneuern die Sitzungs-ID; ohne Anmeldung erscheinen keine
+  Patientendaten im Rahmen. Eine Kennwortänderung beendet alle anderen Sitzungen des Kontos
+  (Fingerabdruck des Kennwort-Hashes in der Sitzung). Das Anmeldefenster nimmt als
+  Rücksprungziel ausschließlich anwendungsinterne Pfade an (kein `//`, kein Backslash, keine
+  Steuerzeichen – kein offener Umleitungspfad).
 - **Fehler:** in `production` keine technischen Details im Browser, nur eine Referenz-ID;
   Details stehen im Anwendungsprotokoll (`/var/www/storage/logs/app.log`) und sind unter
   `/system/logs` (Fehlerprotokoll) nach Referenz durchsuchbar.
@@ -1180,8 +1191,9 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   Systemgruppen und Gruppenzählung ab. `tests/Integration/AuthTest.php` prüft Sitzung ohne
   Anmeldung, Anmeldung und Abmeldung, den Ablauf nach Leerlauf (und die Verlängerung durch
   Aktivität), einen Zeitstempel in der Zukunft, deaktivierte und gelöschte Konten, frisch
-  gelesene Rechte je Anfrage, das eigene Kennwort sowie die Normalisierung des Benutzernamens
-  bei der Anmeldung. `tests/Unit/UserInputTest.php` deckt Normalisierung und Prüfregeln der
+  gelesene Rechte je Anfrage, das eigene Kennwort, das vollständige Verwerfen der Sitzung bei
+  An-/Abmeldung und Leerlauf, das Ende fremder Sitzungen nach einer Kennwortänderung sowie
+  die Normalisierung des Benutzernamens bei der Anmeldung. `tests/Unit/UserInputTest.php` deckt Normalisierung und Prüfregeln der
   Eingaben ab (Benutzername, Kennwortlänge, Anzeigename, Gruppenzuordnung, Rechtevereinigung
   mehrerer Gruppen).
 - **Anmeldung und Benutzeroberfläche (Integration):** `tests/Integration/LoginViewTest.php`

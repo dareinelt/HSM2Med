@@ -50,6 +50,8 @@ final class AccountController extends Controller
             ]), 422);
         }
 
+        // Security fix: neue Sitzungskennung; andere Sitzungen dieses Kontos enden.
+        $this->app->auth()->refreshCredential();
         $this->app->logger()->info('Kennwort geändert', ['benutzer' => $user->username]);
         SessionManager::flash('success', 'Das Kennwort wurde geändert.');
         return Response::redirect('/');

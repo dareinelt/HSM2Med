@@ -67,6 +67,14 @@ final class SecurityTest extends TestCase
         $this->assertSame('/', Response::redirect('https://evil.example')->headers['Location']);
         $this->assertSame('/', Response::redirect('//evil.example')->headers['Location']);
         $this->assertSame('/reports/1', Response::redirect('/reports/1')->headers['Location']);
+        // Browser lesen "\\" als "/" und ignorieren Tab/Zeilenumbruch: alles Umleitungen nach aussen.
+        $this->assertSame('/', Response::redirect('/\\evil.example')->headers['Location']);
+        $this->assertSame('/', Response::redirect("/\t/evil.example")->headers['Location']);
+        $this->assertSame('/', Response::redirect("/a\r\nSet-Cookie: x=1")->headers['Location']);
+        $this->assertSame('/', Response::redirect('reports/1')->headers['Location']);
+        $this->assertSame('/', Response::redirect('')->headers['Location']);
+        $this->assertTrue(Response::isLocalPath('/patients?q=a%20b'));
+        $this->assertFalse(Response::isLocalPath('/\\evil.example'));
     }
 
     public function testPendingUploadStore(): void
