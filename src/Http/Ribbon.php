@@ -52,7 +52,7 @@ final class Ribbon
     ];
 
     /**
-     * @return array<string, array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>}>}>}>
+     * @return array<string, array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>,target?:string}>}>}>
      */
     private static function definition(): array
     {
@@ -230,6 +230,12 @@ final class Ribbon
                         ],
                     ],
                     [
+                        'label' => 'Vorlagen',
+                        'items' => [
+                            ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => [], 'target' => '_blank'],
+                        ],
+                    ],
+                    [
                         'label' => 'Daten und Datenschutz',
                         'items' => [
                             ['label' => 'Datenschutz', 'icon' => 'shield', 'href' => '/system#datenschutz', 'title' => 'Wo die Daten gespeichert werden und wie sie geschützt sind', 'match' => []],
@@ -244,7 +250,7 @@ final class Ribbon
     /**
      * Alle Reiter des Funktionsbandes.
      *
-     * @return list<array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>}>}>}>
+     * @return list<array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>,target?:string}>}>}>
      */
     public static function tabs(): array
     {
@@ -252,7 +258,7 @@ final class Ribbon
     }
 
     /**
-     * @return array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>}>}>}
+     * @return array{id:string,label:string,icon:string,href:string,sections:list<string>,groups:list<array{label:string,items:list<array{label:string,icon:string,href:string,title:string,match:list<string>,target?:string}>}>}
      */
     public static function tab(string $id): array
     {

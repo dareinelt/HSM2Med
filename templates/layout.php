@@ -111,7 +111,7 @@ $gated = static fn (string $href): bool => $activePatient === null && Ribbon::re
                                 </span>
                             <?php else: ?>
                                 <a class="rbtn<?= in_array($active, $item['match'], true) ? ' is-current' : '' ?>"
-                                   href="<?= $e($item['href']) ?>" title="<?= $e($item['title']) ?>">
+                                   href="<?= $e($item['href']) ?>" title="<?= $e($item['title']) ?>"<?= ($item['target'] ?? '') === '_blank' ? ' target="_blank" rel="noopener"' : '' ?>>
                                     <?= $icon($item['icon'], 'app-icon app-icon--lg') ?>
                                     <span class="rbtn__label"><?= $e($item['label']) ?></span>
                                 </a>

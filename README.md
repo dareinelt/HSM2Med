@@ -68,7 +68,13 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   vollständige Tabelle der Schrittmacher-/ICD-Abfrage samt MRT-Tauglichkeit aus dem
   Patientenausweis. Assistent in fünf Schritten, zwei ausdrückliche Bestätigungen,
   unveränderlicher Snapshot mit SHA-256-geprüftem PDF. Der Brief darf mehrseitig sein –
-  die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis.
+  die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis. Briefe folgen
+  **DIN 5008 (Form B)**.
+- **Vorlageneditor für Briefe** (System → *Briefvorlage bearbeiten*, öffnet in neuem Tab):
+  alle festen Texte bearbeiten, Bausteine per Drag and Drop anordnen, Live-Vorschau und
+  PDF-Vorschau. Vorlagen werden **versioniert**; jeder Brief kann mit seiner ursprünglichen
+  Vorlage reproduziert oder – auf ausdrücklichen Wunsch – mit der aktuellen Vorlage neu
+  ausgefertigt werden.
 - CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
 - Keine externen Abhängigkeiten zur Laufzeit: kein CDN, keine Webfonts, keine Composer-Pakete.
 
@@ -570,7 +576,18 @@ Der Brief erscheint sowohl in der Briefübersicht als auch in der Akte des Patie
 
 ![Akte mit Brief](docs/screenshots/45-akte-mit-brief.png)
 
-### Aufbau des Briefes
+### Aufbau des Briefes (DIN 5008)
+
+Briefe ab Fassung 2 werden nach **DIN 5008, Form B** gesetzt: Briefkopf 45 mm, Anschriftfeld
+85 × 45 mm ab 45 mm von oben (Schrift ab 25 mm links) mit Rücksendeangabe in der Zusatz- und
+Vermerkzone, Informationsblock ab 125 mm links und 50 mm oben (Unser Zeichen, Patient, Geburtsdatum, Patienten-ID,
+Brief-Nr., Stammdatenfassung, Datum), Betreff fett ohne das Wort „Betreff", Anrede, Brieftext,
+Grußformel; Falzmarken bei 105 mm und 210 mm sowie Lochmarke bei 148,5 mm; linker Rand
+25 mm, rechter Rand 20 mm; Folgeseiten mit Kurzkopf und Seitenangabe. Inhalt, Reihenfolge und
+alle festen Texte bestimmt die [Briefvorlage](#briefvorlage-und-vorlageneditor), deren
+Fassung im Snapshot des Briefes eingefroren wird.
+
+Briefe der Fassung 1 (vor Einführung der Vorlagen) behalten ihren damaligen Aufbau:
 
 Seite 1: Kopfbereich mit Logo und Nachsorgezentrum, Titel „Brief zur Schrittmacher-/ICD-Abfrage",
 Dokumentnummer, Briefdatum und Stammdatenfassung, Patientendaten (Name, Geburtsdatum,
@@ -608,6 +625,42 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 | GET | `/letters/patients/{patient}` | Alle Briefe eines Patienten |
 | GET | `/letters/{id}` | Briefdetail mit Snapshot |
 | GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
+| GET | `/letters/{id}/reproduce` | PDF erneut aus dem Snapshot mit der damaligen Vorlage erzeugen (nichts wird gespeichert) |
+| POST | `/letters/{id}/regenerate` | Neuausfertigung als neuer Brief: `template=original` oder `template=current` (nur mit `confirm_current_template=1`) |
+| GET | `/system/letter-templates` | Vorlageneditor (eigener Tab) |
+| POST | `/system/letter-templates` | Vorlage als neue Fassung speichern (JSON-Antwort, CSRF) |
+| POST | `/system/letter-templates/preview` | PDF-Vorschau einer ungespeicherten Vorlage mit Beispieldaten |
+| GET | `/system/letter-templates/versions/{id}` | Gespeicherte Fassung als JSON (zum Laden in den Editor) |
+
+### Briefvorlage und Vorlageneditor
+
+Der Editor öffnet sich über **System → Briefvorlage bearbeiten** in einem neuen Tab und folgt
+der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
+
+- **Aufbau** (links): Name der Vorlage, feste Bereiche nach DIN 5008 (Briefkopf,
+  Rücksendeangabe, Anschriftfeld, Informationsblock, Fußzeile und Seitenränder, Anhang) und die
+  Bausteine des Brieftextes. Bausteine werden **per Drag and Drop** (am Griff, in der Liste oder
+  direkt auf der Seitenvorschau), mit den Pfeil-Schaltflächen oder mit `Alt`+`↑`/`↓`
+  verschoben und per Häkchen ein- oder ausgeblendet. Eigene Textbausteine (Überschrift + Text)
+  lassen sich hinzufügen und löschen.
+- **Seitenvorschau** (Mitte): maßstabsgetreue A4-Seite mit Beispieldaten; ein Klick wählt den
+  Bereich bzw. Baustein.
+- **Eigenschaften** (rechts): alle festen Texte des gewählten Bereichs bzw. Bausteins,
+  Optionen (z. B. Falzmarken, Empfänger fester Text oder Patientenanschrift) und Platzhalter wie
+  `{patient_name}`, `{date_of_birth}`, `{document_number}`, `{letter_date}`; `{page}` und
+  `{pages}` nur in der Seitenangabe. „Standard" setzt einen Text zurück.
+
+**Versionierung:** *Als neue Fassung speichern* legt eine neue, unveränderliche Fassung an
+(optional mit Änderungsnotiz); neue Briefe verwenden ab dann diese Fassung. Unter *Fassungen*
+lassen sich frühere Fassungen laden und als neue Fassung wiederherstellen. Gleichzeitige
+Bearbeitung wird erkannt (Speichern auf veralteter Grundlage wird abgelehnt).
+
+**Historische Briefe:** Jeder Brief speichert die vollständige Vorlage im Snapshot. In der
+Briefdetailansicht kann das PDF jederzeit **mit der damaligen Vorlage reproduziert** werden
+(identisch zum gespeicherten PDF). Eine **Neuausfertigung** erzeugt einen neuen Brief aus
+derselben Datengrundlage – standardmäßig mit der ursprünglichen Vorlage, nur nach
+ausdrücklicher Bestätigung (Opt-in) mit der aktuellen Vorlage. Der Ausgangsbrief bleibt
+unverändert; die Neuausfertigung verweist im Informationsblock auf ihn.
 
 ## Kommandozeile (CLI)
 

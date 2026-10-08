@@ -9,6 +9,7 @@ use App\Http\Controller\DashboardController;
 use App\Http\Controller\ImportController;
 use App\Http\Controller\ImportLogController;
 use App\Http\Controller\LetterController;
+use App\Http\Controller\LetterTemplateController;
 use App\Http\Controller\PatientCardController;
 use App\Http\Controller\PatientCardSettingsController;
 use App\Http\Controller\PatientController;
@@ -82,6 +83,7 @@ final class Kernel
         $cardSettings = new PatientCardSettingsController($this->app, $this->view);
         $patients = new PatientController($this->app, $this->view);
         $letters = new LetterController($this->app, $this->view);
+        $letterTemplates = new LetterTemplateController($this->app, $this->view);
 
         $router = new Router();
         $router->get('/', $dashboard->index(...));
@@ -119,12 +121,18 @@ final class Kernel
         $router->get('/patient-cards/{id}', $cards->show(...));
         $router->get('/patient-cards/{id}/pdf', $cards->pdf(...));
         $router->get('/system/logs', $system->logs(...));
+        $router->get('/system/letter-templates', $letterTemplates->editor(...));
+        $router->post('/system/letter-templates', $letterTemplates->save(...));
+        $router->post('/system/letter-templates/preview', $letterTemplates->preview(...));
+        $router->get('/system/letter-templates/versions/{id}', $letterTemplates->version(...));
         $router->get('/letters', $letters->index(...));
         $router->get('/letters/new', $letters->newLetter(...), true);
         $router->post('/letters', $letters->create(...), true);
         $router->get('/letters/patients/{patient}', $letters->patient(...), true);
         $router->get('/letters/{id}', $letters->show(...));
         $router->get('/letters/{id}/pdf', $letters->pdf(...));
+        $router->get('/letters/{id}/reproduce', $letters->reproduce(...));
+        $router->post('/letters/{id}/regenerate', $letters->regenerate(...));
         $router->get('/system', $system->index(...));
         return $router;
     }

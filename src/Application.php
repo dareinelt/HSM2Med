@@ -16,6 +16,8 @@ use App\Letter\DeviceCheckAppendix;
 use App\Letter\LetterPdfGenerator;
 use App\Letter\LetterRepository;
 use App\Letter\LetterService;
+use App\Letter\LetterTemplateRepository;
+use App\Letter\LetterTemplateService;
 use App\Mapping\ParameterMapping;
 use App\Patient\ActivePatient;
 use App\Patient\DeviceCheckPrefill;
@@ -226,7 +228,13 @@ final class Application
             new DeviceCheckAppendix($this->deviceCheckTemplate()),
             new LetterPdfGenerator(),
             $this->clock,
+            $this->letterTemplateService(),
         );
+    }
+
+    public function letterTemplateService(): LetterTemplateService
+    {
+        return new LetterTemplateService(new LetterTemplateRepository($this->pdo()), $this->clock);
     }
 
     public function pendingUploads(): PendingUploadStore

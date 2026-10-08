@@ -46,6 +46,11 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
    mehreren Treffern entscheidet der Benutzer.
 10. **Ausweise und Stammdatenfassungen sind unveränderlich.** Bestehende Ausweis-PDFs werden nie
     neu berechnet; jede Änderung erzeugt eine neue `card_version` bzw. Stammdatenfassung.
+11. **Briefe betten ihre Vorlage ein.** Der Snapshot eines Briefes (`letter_version` 2) enthält die
+    vollständige Vorlagenfassung (`template.content`); gerendert wird nur daraus, nie aus der
+    aktuellen Vorlage. Vorlagenfassungen (`letter_template_versions`) werden nie geändert –
+    Speichern legt immer eine neue Fassung an. Briefe der Fassung 1 laufen über
+    `LegacyLetterPdfGenerator` und behalten ihren Aufbau.
 
 ---
 
@@ -202,15 +207,20 @@ config/              parameter_mapping.php (Kategorien, Feld-/Sondenzuordnung, V
 database/            migrations/ (maßgeblich) + schema.sql (generiert)
 docker/              Apache-/PHP-Konfiguration, entrypoint.sh
 docs/screenshots/    Screenshots + Erzeugungsskript (Playwright/Chromium)
-public/              Webroot: index.php, assets/css/app.css, assets/js/app.js
+public/              Webroot: index.php, assets/css/app.css, assets/js/app.js,
+                     assets/{js,css}/template-editor.* (Vorlageneditor)
 src/                 Anwendungscode (Namespace App\)
   Config/            Config.php (nur Umgebungsvariablen)
   Database/          Database.php (PDO), Migrator.php
   Http/              Kernel, Router, Request, Response, View, HttpException
     Controller/      Dashboard-, Import-, ImportLog-, Report-, System-,
-                     PatientCard-, PatientCardSettingsController
+                     PatientCard-, PatientCardSettingsController,
+                     Letter-, LetterTemplateController
   Import/            MerlinParser, ImportValidator, ImportService, ImportArchive,
                      PendingUploadStore, ImportAnalysis/Outcome, ImportIssue(n)
+  Letter/            LetterService, LetterRepository, LetterPdfGenerator (DIN 5008),
+                     LegacyLetterPdfGenerator (Fassung 1), LetterTemplate,
+                     LetterTemplateRepository, LetterTemplateService, LetterSample
   Mapping/           ParameterMapping, CategoryAssignment
   PatientCard/       PatientCardService, PatientCardInput, PatientCardRepository,
                      PatientCardSettingsService, PatientCardPdfGenerator,
@@ -277,6 +287,21 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `PatientCardException` | Validierungs-/Fachfehler mit Feldmeldungen (HTTP 422) |
 | `PatientName` | Zerlegen/Anzeigen von `LASTNAME, FIRSTNAME`, `identityKey()` |
 
+### `src/Letter/` (Briefe und Briefvorlage)
+
+| Klasse | Verantwortung |
+| --- | --- |
+| `LetterService` | Assistent, Erzeugen (eine Transaktion, Snapshot mit eingebetteter Vorlage), `reproducePdf()` (damalige Vorlage, nichts speichern), `regenerate()` (Neuausfertigung `original`/`current`, `current` nur mit Bestätigung), `previewPdf()` (Editor-Vorschau mit Beispieldaten) |
+| `LetterTemplate` | Vorlagenschema: Zonen, Bausteintypen, Platzhalter, `default()`, `normalize()` (Prüfung mit Feldpfaden wie `blocks.3.texts.text`), `fill()`, `editorDefinition()` für den JS-Editor |
+| `LetterTemplateService` / `LetterTemplateRepository` | Versionierung: `current()`, `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
+| `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter |
+| `LetterSample` | Beispieldaten für Editor-Vorschau |
+
+Der Editor (`templates/letter_templates/editor.php`, eigenständige Seite ohne Layout, CSP-konform
+ohne Inline-Skript) liest seine Daten aus dem JSON-Block `#template-editor-data`; die Logik liegt
+vollständig in `public/assets/js/template-editor.js` (Drag and Drop, Live-Vorschau,
+Speichern per `fetch`).
+
 ### `src/Security/`
 
 `Csrf` (Token je Session), `SessionManager` (Start, ID-Erneuerung, Flash-Nachrichten,
@@ -321,7 +346,13 @@ und keine Rollen – der Zugriffsschutz erfolgt über Netzwerk/Reverse-Proxy.
 | POST | `/patient-cards/reports/{id}` | `PatientCardController::generate` | Ausweis erzeugen |
 | GET | `/patient-cards/{id}` | `PatientCardController::show` | Ausweisdetail + Verlauf |
 | GET | `/patient-cards/{id}/pdf` | `PatientCardController::pdf` | Ausweis-PDF (`?download=1`) |
-| GET | `/system` | `SystemController::index` | Systeminformationen |
+| GET | `/system` | `SystemController::index` | Systeminformationen (Link zum Vorlageneditor, neuer Tab) |
+| GET | `/system/letter-templates` | `LetterTemplateController::editor` | Vorlageneditor |
+| POST | `/system/letter-templates` | `LetterTemplateController::save` | Neue Vorlagenfassung (JSON, 422 mit `errors`) |
+| POST | `/system/letter-templates/preview` | `LetterTemplateController::preview` | PDF-Vorschau einer ungespeicherten Vorlage |
+| GET | `/system/letter-templates/versions/{id}` | `LetterTemplateController::version` | Fassung als JSON |
+| GET | `/letters/{id}/reproduce` | `LetterController::reproduce` | PDF mit damaliger Vorlage neu erzeugen |
+| POST | `/letters/{id}/regenerate` | `LetterController::regenerate` | Neuausfertigung (`template=original\|current`) |
 
 **Reihenfolge beachten:** Die festen Pfade (`/patient-cards/new`, `/patient-cards/settings`,
 `/patient-cards/reports/{id}`, `/patient-cards/patients/{patient}`) sind in `Kernel::router()`
@@ -594,6 +625,8 @@ eingesetzt.
 | PDF-Layout ändern | `PdfGenerator` anpassen; bei strukturellen Snapshot-Änderungen `REPORT_VERSION` und `SUPPORTED_REPORT_VERSION` erhöhen und Versionszweig ergänzen |
 | Ausweis-Layout ändern | `PatientCardPdfGenerator` anpassen (Vorlage `.reference/idcard_ann.png` beachten); bei strukturellen Snapshot-Änderungen `PatientCardService::CARD_VERSION` und `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` erhöhen; bestehende Ausweise bleiben unverändert |
 | Messzeile auf Ausweis-Seite 2 ergänzen | `config/patient_card_measurements.php` (`sections` → `groups` → `rows` mit `label`, `chamber`, `sources.ids`/`sources.names`, `glue`) anpassen, `version` erhöhen; Generator und Tests bleiben unberührt, bestehende Ausweise unverändert |
+| Briefvorlage erweitern (neuer Baustein/Text/Platzhalter) | `LetterTemplate` (Definition + `default()`), Darstellung in `LetterPdfGenerator`, Editor-Vorschau in `template-editor.js`; bestehende Vorlagenfassungen müssen weiterhin `normalize()` bestehen; Tests in `tests/Unit/LetterTemplateTest.php` |
+| Brief-Layout strukturell ändern | `LetterService::LETTER_VERSION` und `LetterPdfGenerator::SUPPORTED_LETTER_VERSION` erhöhen, alten Zweig erhalten (wie `LegacyLetterPdfGenerator`) |
 | Template ändern | Rendering im Browser **und** über `tests/Integration/PatientCardViewTest.php` (echter Controller + `View`) prüfen – `php -l` erkennt Template-Fehler nicht |
 | Neues CLI-Werkzeug | `bin/<name>.php` mit `require __DIR__ . '/../src/bootstrap.php'`, `PHP_SAPI !== 'cli'`-Guard, definierte Exit-Codes, README-Abschnitt aktualisieren |
 | Konfigurationsvariable | `Config` (+ Validierung), `docker-compose.yml`, `.env.example` und README-Tabelle ergänzen |

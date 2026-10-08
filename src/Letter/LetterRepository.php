@@ -8,7 +8,7 @@ use App\Patient\PatientRepository;
 use PDO;
 
 /**
- * Datenzugriff der Briefe (Migration 006). Ausschliesslich Prepared Statements.
+ * Datenzugriff der Briefe (Migrationen 006 und 007). Ausschliesslich Prepared Statements.
  *
  * Grundsaetze:
  *  * Ein Brief wird nie ueberschrieben: Snapshot (JSON) und PDF (MEDIUMBLOB + SHA-256) werden
@@ -23,7 +23,7 @@ final class LetterRepository extends PatientRepository
 {
     private const string LETTER_COLUMNS = 'l.id, l.patient_id, l.report_id, l.settings_version_id, l.sequence_no,'
         . ' l.letter_version, l.last_name, l.first_name, l.date_of_birth, l.patient_name, l.letter_date,'
-        . ' l.pdf_filename, l.pdf_sha256, l.pdf_size, l.created_at,'
+        . ' l.pdf_filename, l.pdf_sha256, l.pdf_size, l.created_at, l.template_version_id, l.source_letter_id,'
         . " COALESCE(JSON_LENGTH(JSON_EXTRACT(l.snapshot, '$.appendix.sections')), 0) AS appendix_sections";
 
     public function insertLetter(array $letter): int
@@ -31,8 +31,8 @@ final class LetterRepository extends PatientRepository
         $stmt = $this->pdo->prepare(
             'INSERT INTO patient_letters (patient_id, report_id, settings_version_id, sequence_no, letter_version,'
             . ' last_name, first_name, date_of_birth, patient_name, letter_date, snapshot, pdf_filename, pdf_sha256,'
-            . ' pdf_size, pdf_content, created_at)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            . ' pdf_size, pdf_content, created_at, template_version_id, source_letter_id)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $letter['patient_id'],
@@ -51,6 +51,8 @@ final class LetterRepository extends PatientRepository
             $letter['pdf_size'],
             $letter['pdf_content'],
             $letter['created_at'],
+            $letter['template_version_id'] ?? null,
+            $letter['source_letter_id'] ?? null,
         ]);
         return (int) $this->pdo->lastInsertId();
     }

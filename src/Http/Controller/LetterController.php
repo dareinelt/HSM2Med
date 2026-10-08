@@ -130,7 +130,55 @@ final class LetterController extends Controller
             'letter' => $letter,
             'snapshot' => $snapshot,
             'previous' => $this->app->letterService()->lettersForPatient((int) $letter['patient_id']),
+            'currentTemplate' => $this->app->letterTemplateService()->current(),
         ], 'letters'));
+    }
+
+    /**
+     * PDF erneut aus dem Snapshot erzeugen – mit der damals verwendeten Vorlage. Es wird nichts
+     * gespeichert; der Inhalt entspricht dem gespeicherten PDF.
+     *
+     * @param array<string, string> $params
+     */
+    public function reproduce(Request $request, array $params): Response
+    {
+        $result = $this->app->letterService()->reproducePdf(self::id($params))
+            ?? throw HttpException::notFound('Der Brief wurde nicht gefunden.');
+
+        return Response::pdf($result['content'], $result['filename'], $request->query('download') === '1');
+    }
+
+    /**
+     * Neuausfertigung als neuer Brief aus derselben Datengrundlage: mit der Vorlage des
+     * Ausgangsbriefes oder – nur mit ausdruecklicher Bestaetigung – mit der aktuellen Vorlage.
+     *
+     * @param array<string, string> $params
+     */
+    public function regenerate(Request $request, array $params): Response
+    {
+        $letterId = self::id($params);
+        $this->loadLetter($letterId);
+        $mode = (string) ($request->post['template'] ?? '');
+        try {
+            $result = $this->app->letterService()->regenerate(
+                $letterId,
+                $mode,
+                ($request->post['confirm_current_template'] ?? '') === '1',
+            );
+        } catch (LetterException $e) {
+            $errors = $e->fieldErrors();
+            SessionManager::flash('error', $errors === [] ? $e->getMessage() : implode(' ', $errors));
+            return Response::redirect('/letters/' . $letterId . '#neuausfertigung');
+        }
+
+        SessionManager::flash('success', sprintf(
+            'Brief Nr. %d wurde als Neuausfertigung von Brief Nr. %d %s erstellt und unveränderlich gespeichert.',
+            $result['letter_id'],
+            $letterId,
+            $mode === 'current' ? 'mit der aktuellen Vorlage' : 'mit der ursprünglichen Vorlage',
+        ));
+
+        return Response::redirect('/letters/' . $result['letter_id']);
     }
 
     /**
