@@ -345,6 +345,11 @@ button, .button { display: inline-flex; align-items: center; gap: .4rem; }
     background: var(--office-bar);
     color: var(--office-muted);
     font-size: .76rem;
+    /* Wie die Titelleiste bleibt die Statusleiste am unteren Bildschirmrand stehen
+       und wird nicht erst am Ende der Seite sichtbar. */
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
 }
 .statusbar__item { display: inline-flex; align-items: center; gap: .35rem; }
 .statusbar__grow { flex: 1 1 auto; }
