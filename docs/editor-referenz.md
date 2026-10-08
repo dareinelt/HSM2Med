@@ -15,6 +15,7 @@ Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender s
 | Aufruf | System → *Briefvorlage bearbeiten* (Kopf der Systemseite und Funktionsband), öffnet `target="_blank"` |
 | Technik | Eigenständige Seite, Vanilla JS ohne Bibliotheken, CSP-konform (keine Inline-Skripte/-Styles) |
 | Speicherung | Jede Speicherung = neue, unveränderliche **Fassung** (`letter_template_versions`) |
+| Vorlagen | Getrennt je Empfängerart (`patient`, `family_doctor`, `referring_physician`), je Art ein eigener Fassungsverlauf |
 | Wirkung | Nur auf **neu** erstellte Briefe; bestehende Briefe tragen ihre Vorlage eingefroren im Snapshot |
 | Prüfung | Verbindlich serverseitig in `LetterTemplate::normalize()`; der Editor prüft nur zur Bedienhilfe |
 
@@ -23,9 +24,10 @@ Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender s
 | Datei | Rolle |
 | --- | --- |
 | `src/Letter/LetterTemplate.php` | **Single Source of Truth**: Zonen, Bausteine, Platzhalter, Grenzen, Standardvorlage, `normalize()`, `encode()`, `fill()` |
-| `src/Letter/LetterTemplateService.php` | Aktuelle Fassung (legt bei Bedarf Fassung 1 an), Fassungsliste, `save()` mit Konfliktprüfung |
+| `src/Letter/LetterSalutation.php` | Anredetexte je Empfängerart und Zuordnung zum Feld der Stammdaten |
+| `src/Letter/LetterTemplateService.php` | Aktuelle Fassung je Empfängerart (legt bei Bedarf Fassung 1 an), Fassungsliste, `save()` mit Konfliktprüfung |
 | `src/Letter/LetterTemplateRepository.php` | SQL; Fassungen werden nur eingefügt, nie geändert |
-| `src/Http/Controller/LetterTemplateController.php` | Editor-Seite, Speichern (JSON), PDF-Vorschau, Fassung laden (JSON) |
+| `src/Http/Controller/LetterTemplateController.php` | Editor-Seite, Speichern (JSON), PDF-Vorschau, Fassung laden (JSON), Bausteine einer anderen Art (`/source`) |
 | `templates/letter_templates/editor.php` | Markup (Titelleiste, Funktionsband, drei Bereiche, Statusleiste, Dialoge), JSON-Datenblock |
 | `public/assets/js/template-editor.js` | Gesamte Bedienung: Zustand, Darstellung, Drag and Drop, Server-Zugriffe |
 | `public/assets/css/template-editor.css` | Layout des Editors; nutzt `app.css` und `office.css` (Design der Hauptanwendung) |
@@ -34,8 +36,11 @@ Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender s
 | `src/Letter/LetterSample.php` | Beispieldaten für die PDF-Vorschau |
 | `src/Letter/LetterService.php` | Friert die Vorlage beim Erstellen ein; Neuausfertigung (Original-/aktuelle Vorlage) |
 | `database/migrations/007_letter_templates.sql` | Tabelle `letter_template_versions`; `patient_letters.template_version_id`, `source_letter_id` |
-| `tests/Unit/LetterTemplateTest.php` | Standardvorlage, `normalize()`, Platzhalter, PDF folgt Reihenfolge und Texten |
-| `tests/Integration/LetterViewTest.php` | `testTemplateEditorEndpoints` (Seite, Speichern, Konflikt, Vorschau, Fassung) |
+| `database/migrations/009_letter_template_types.sql` | `letter_template_versions.template_type` mit eigenem Fassungszähler; Anrede-Spalten in `patient_card_master_data`; `{salutation}` nachtragen |
+| `tests/Unit/LetterTemplateTest.php` | Standardvorlage je Empfängerart, `normalize()`, Platzhalter, PDF folgt Reihenfolge und Texten |
+| `tests/Unit/LetterSalutationTest.php` | Anredetexte, Rückfall, Feldzuordnung der Stammdaten |
+| `tests/Integration/LetterTemplateMigrationTest.php` | Bestehende Installationen erhalten getrennte Vorlagen und `{salutation}` |
+| `tests/Integration/LetterViewTest.php` | `testTemplateEditorEndpoints` (Seite, Speichern, Konflikt, Vorschau, Fassung), `testTemplateEditorSeparatesRecipientTypes` |
 | `tests/Integration/LetterTest.php` | `testRegenerateWithOriginalOrCurrentTemplate`, `testLegacyLetterIsRegeneratedWithLegacyLayout` |
 
 ## 3. Routen
@@ -44,17 +49,27 @@ Alle Routen liegen hinter der Anmeldung; POST verlangt das CSRF-Token (`_csrf`).
 
 | Methode | Pfad | Controller | Antwort |
 | --- | --- | --- | --- |
-| GET | `/system/letter-templates` | `editor()` | HTML-Seite (ohne Funktionsband der Hauptanwendung) |
+| GET | `/system/letter-templates` | `editor()` | HTML-Seite (ohne Funktionsband der Hauptanwendung); `?type=` wählt die Empfängerart |
 | POST | `/system/letter-templates` | `save()` | JSON `{ok, message, current, versions}`; Fehler: 422 `{ok:false, message, errors}` |
 | POST | `/system/letter-templates/preview` | `preview()` | PDF (inline, neuer Tab); Fehler: 422-HTML-Seite mit Feldfehlern |
+| GET | `/system/letter-templates/source` | `source()` | Aktuelle Fassung einer Art als JSON (für „Übernehmen aus Vorlage"); `?type=` |
 | GET | `/system/letter-templates/versions/{id}` | `version()` | JSON `{version}`; 404 bei unbekannter Fassung |
 | POST | `/letters/{id}/regenerate` | `LetterController::regenerate()` | Neuausfertigung, Feld `template=original|current`, für `current` zusätzlich `confirm_current_template=1` |
 
 Request-Felder für Speichern/Vorschau: `content` (Vorlage als JSON-Text, max. 512 KiB, Tiefe 32),
 `comment` (Änderungsnotiz, max. 500 Zeichen, nur Speichern), `base_version_id` (Fassung, auf der
-die Bearbeitung beruht, nur Speichern).
+die Bearbeitung beruht, nur Speichern), `type` (Empfängerart; fehlend oder unbekannt = `patient`).
 
 ## 4. Datenmodell der Vorlage (Schema 1)
+
+Eine Vorlage gilt **je Empfängerart**. Die Art steuert die Standardwerte (Name, Anrede,
+Standardtexte) und den Fassungsverlauf; das JSON selbst enthält sie nicht.
+
+| Empfängerart (`LetterRecipient::TYPES`) | Anzeige | Standardname (`LetterTemplate::defaultName()`) |
+| --- | --- | --- |
+| `patient` | Patient | `Standardvorlage` |
+| `family_doctor` | Hausarzt | `Standardvorlage Hausarzt` |
+| `referring_physician` | Überweisender Arzt | `Standardvorlage Überweisender Arzt` |
 
 ```json
 {
@@ -93,7 +108,7 @@ Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` u
 | Typ | Bezeichnung | eindeutig | Optionen | Texte |
 | --- | --- | --- | --- | --- |
 | `subject` | Betreff | ja | – | `title`, `line2` |
-| `salutation` | Anrede | ja | – | `text` |
+| `salutation` | Anrede | ja | – | `text` (Standard: `{salutation}`, siehe 4.3) |
 | `patient` | Patientendaten | ja | – | `heading`, `label_name`, `label_birth`, `label_identifier`, `label_address`, `label_phone` |
 | `anamnesis` | Anamnese | ja | `show_meta` | `heading` |
 | `premedication` | Vormedikation | ja | `show_meta` | `heading`, `col_substance`, `col_dose`, `col_schedule`, `col_reason`, `col_period` |
@@ -106,18 +121,51 @@ Standardreihenfolge: `subject, salutation, patient, anamnesis, premedication, re
 Eindeutige Bausteine lassen sich aus-, aber nicht löschen (`enabled: false`). Freie Textbausteine
 können beliebig oft ergänzt und gelöscht werden.
 
-### 4.3 Platzhalter
+### 4.3 Anrede (`{salutation}`)
 
-Erlaubt in allen Texten: `{center_name}`, `{center_address_line}`, `{patient_name}`,
-`{first_name}`, `{last_name}`, `{date_of_birth}`, `{patient_identifier}`, `{document_number}`,
-`{letter_date}`, `{sequence_no}`. Nur in `footer.page_label`: `{page}`, `{pages}`
-(Definition-Flag `page: true`).
+Die Anrede steht **nicht** fest in der Vorlage, sondern in den Stammdaten des Empfängers
+(`patient_card_master_data`); die Vorlage enthält nur den Platzhalter `{salutation}`. Damit ist
+eine Vorlage für alle Empfänger derselben Art verwendbar.
+
+| Empfängerart | Feld in den Stammdaten | Werte (`LetterSalutation::values()`) |
+| --- | --- | --- |
+| `patient` | `salutation` | `herr`, `frau`, `divers` |
+| `family_doctor` | `physician_salutation` | `kollege`, `kollegin`, `unpersoenlich` |
+| `referring_physician` | `referrer_salutation` | `kollege`, `kollegin`, `unpersoenlich` |
+
+`LetterSalutation::text()` bildet daraus die Anredezeile:
+
+| Wert | Anrede |
+| --- | --- |
+| `herr` | `Sehr geehrter Herr {Nachname},` |
+| `frau` | `Sehr geehrte Frau {Nachname},` |
+| `divers` | `Guten Tag {Nachname}, {Vorname},` (ohne Vorname: `Guten Tag {Nachname},`) |
+| `kollege` | `Sehr geehrter Herr Kollege,` |
+| `kollegin` | `Sehr geehrte Frau Kollegin,` |
+| `unpersoenlich` | `Sehr geehrte Damen und Herren,` |
+
+Ohne Angabe, bei unbekanntem Wert, bei fehlendem Nachnamen (Patient) bzw. außerhalb der
+aufgelisteten Werte (Arzt) gilt der Rückfall `LetterSalutation::FALLBACK`
+(`Sehr geehrte Damen und Herren,`). Der Brief-Assistent weist auf fehlende Anreden hin.
+
+Beim Erstellen friert `LetterRecipient::resolve()` sowohl den Text (`salutation`) als auch den
+Wert aus den Stammdaten (`salutation_value`) im Snapshot ein; `LetterPdfGenerator::salutationText()`
+verwendet den eingefrorenen Text. Ohne Empfängerauswahl gilt der Rückfall. Die Anrede einer
+bereits gespeicherten Vorlage kann jederzeit durch festen Text ersetzt werden; dann wird
+`{salutation}` nicht mehr gedruckt.
+
+### 4.4 Platzhalter
+
+Erlaubt in allen Texten: `{salutation}` (siehe 4.3), `{center_name}`, `{center_address_line}`,
+`{patient_name}`, `{first_name}`, `{last_name}`, `{date_of_birth}`, `{patient_identifier}`,
+`{document_number}`, `{letter_date}`, `{sequence_no}`. Nur in `footer.page_label`: `{page}`,
+`{pages}` (Definition-Flag `page: true`).
 
 Gefüllt werden sie ausschließlich aus dem Snapshot des Briefes
 (`LetterPdfGenerator::placeholderValues()`); `LetterTemplate::fill()` lässt unbekannte
 Platzhalter sichtbar stehen. Beim Speichern lehnt `normalize()` unbekannte Platzhalter ab.
 
-### 4.4 Grenzen und Normalisierung (`LetterTemplate::normalize()`)
+### 4.5 Grenzen und Normalisierung (`LetterTemplate::normalize()`)
 
 | Regel | Wert |
 | --- | --- |
@@ -148,10 +196,12 @@ flowchart LR
     T -- "regenerate current (opt-in)" --> R3[Neuausfertigung mit aktueller Vorlage]
 ```
 
-- **Tabelle `letter_template_versions`:** `version_no` fortlaufend und eindeutig; `content` (JSON),
-  `content_sha256`, `schema_version`, `comment`, `created_at`. Die aktuelle Vorlage ist die
-  Fassung mit der höchsten Nummer. Gibt es keine, legt `current()` die Standardvorlage als
-  Fassung 1 an.
+- **Tabelle `letter_template_versions`:** `template_type` (Empfängerart), `version_no` fortlaufend
+  und **je Art** eindeutig (`uq_letter_template_versions_type_no`); `content` (JSON),
+  `content_sha256`, `schema_version`, `comment`, `created_at`. Die aktuelle Vorlage einer Art ist
+  deren Fassung mit der höchsten Nummer. Gibt es keine, legt `current($type)` die Standardvorlage
+  dieser Art als Fassung 1 an. Alle Zugriffe (`current()`, `versions()`, `save()`,
+  `nextVersionNo()`) sind nach Art getrennt; ohne Angabe gilt `patient`.
 - **Konfliktschutz:** `save()` vergleicht `base_version_id` mit der aktuellen Fassung. Ist
   inzwischen eine neuere gespeichert, lehnt es mit dem Feldfehler `base_version` ab. Bei
   gleichzeitigem Einfügen greift der eindeutige Schlüssel (SQLSTATE 23000), ebenfalls
@@ -170,10 +220,13 @@ flowchart LR
   - `current`: die aktuelle Vorlage. Nur mit ausdrücklicher Bestätigung
     (`confirm_current_template=1`).
   - Der Empfänger des Ausgangsbriefes bleibt erhalten.
+- **Vorlagenart:** `LetterService::create()` wählt je Empfänger die Vorlage der passenden Art
+  (`LetterService::recipientType()`); `previewPdf($content, $type)` nutzt die Art für die
+  Beispiel-Anrede, `regenerate()` die Art des Empfängers des Ausgangsbriefes.
 - **PDF-Generator:** `LetterPdfGenerator::generate()` wählt anhand `letter_version` den Generator.
   Er normalisiert die eingefrorene Vorlage erneut und rendert die Zonen an fester Lage und die
   Bausteine in Listenreihenfolge (`body()`, `match` über `type`; ausgeblendete werden
-  übersprungen).
+  übersprungen). `{salutation}` kommt aus `salutationText()` (siehe 4.3).
 
 ## 6. Aufbau der Editor-Seite
 
@@ -181,26 +234,27 @@ flowchart LR
 
 | Bereich | Markup (`data-*`) | Inhalt |
 | --- | --- | --- |
-| Titelleiste | `data-te-title`, `data-te-state` | Name und Fassung; Zustand *Gespeichert* / *Ungespeicherte Änderungen* |
-| Funktionsband (Reiter *Vorlage*) | `data-te-action="…"` | Gruppen *Speichern* (`save`, `discard`), *Bausteine* (`add-text`, `reset`), *Ansicht* (`preview`, `versions`), *Editor* (`help`, `close`) |
+| Titelleiste | `data-te-title`, `data-te-state` | Art, Name und Fassung; Zustand *Gespeichert* / *Ungespeicherte Änderungen* |
+| Funktionsband (Reiter *Vorlage*) | `data-te-action="…"`, `data-te-type` | Gruppen *Speichern* (`save`, `discard`), *Bausteine* (`add-text`, `reset`), *Ansicht* (`preview`, `versions`), *Editor* (`help`, `close`); Auswahl der Empfängerart |
 | Meldungen | `data-te-message` | Erfolg, Hinweis, Fehler (schließbar) |
-| Links: *Aufbau* | `data-te-name`, `data-te-zones`, `data-te-blocks` | Vorlagenname, feste Bereiche (Klick wählt), Bausteinliste (Drag and Drop, ↑/↓, Ein-/Ausblenden, Löschen bei Textbausteinen) |
-| Mitte: *Seitenvorschau* | `data-te-paper` | Vereinfachte A4-Seite im Maßstab (mm wie im PDF) mit Beispieldaten; Klick wählt, Bausteine auch hier ziehbar |
+| Links: *Aufbau* | `data-te-name`, `data-te-zones`, `data-te-blocks` | Vorlagenname, feste Bereiche (Klick wählt), Bausteinliste (Drag and Drop, ↑/↓, Ein-/Ausblenden, Löschen bei Textbausteinen, Rechtsklick = *Übernehmen aus Vorlage*) |
+| Mitte: *Seitenvorschau* | `data-te-paper` | Vereinfachte A4-Seite im Maßstab (mm wie im PDF) mit Beispieldaten; Klick wählt, Bausteine auch hier ziehbar, Rechtsklick wie in der Liste |
 | Rechts: *Eigenschaften* | `data-te-props` | Beschreibung, Optionen, Textfelder mit Zeichenzähler und *Standard*-Link, Platzhalter-Chips |
 | Statusleiste | `data-te-status-version`, `data-te-status-blocks` | Grundlage (Fassung, Datum), Zahl der Bausteine |
 | Dialoge | `data-te-save-dialog`, `data-te-versions-dialog`, `data-te-help-dialog` | Speichern mit Änderungsnotiz, Fassungsliste mit *In Editor laden*, Kurzanleitung |
-| Vorschau-Formular | `data-te-preview-form` | Unsichtbares POST-Formular mit `target="_blank"` für die PDF-Vorschau |
+| Vorschau-Formular | `data-te-preview-form`, `data-te-preview-type` | Unsichtbares POST-Formular mit `target="_blank"` für die PDF-Vorschau (Art als verstecktes Feld) |
 | Daten | `<script type="application/json" id="template-editor-data">` | Startdaten (siehe unten) |
 
 Startdaten (`LetterTemplateController::editor()`):
 
 ```text
-definition  LetterTemplate::editorDefinition()  (zones, blocks, placeholders, pagePlaceholders,
-            maxBlocks, limits, default)
-current     aktuelle Fassung {id, version_no, name, comment, created_at, content_sha256, content}
+definition  LetterTemplate::editorDefinition($type)  (schema, type, types, zones, blocks,
+            placeholders, pagePlaceholders, maxBlocks, limits, default)
+type        Empfängerart des Editors (patient|family_doctor|referring_physician)
+current     aktuelle Fassung {id, type, version_no, name, comment, created_at, content_sha256, content}
 versions    [{id, version_no, name, comment, created_at, letter_count}]
 csrf        CSRF-Token
-urls        {save, preview, version}
+urls        {save, preview, version, editor, source}
 settings    {center_name, center_address, has_logo}  (Ausweis-Stammdaten für die Vorschau)
 ```
 
@@ -213,14 +267,16 @@ Ein IIFE ohne globale Symbole. Abschnitte im Quelltext:
 
 | Abschnitt | Wichtige Funktionen |
 | --- | --- |
-| Zustand | `state = {base, baseContent, content, versions, selected:{kind,key}, errors, lastField, busy}` |
-| Hilfen | `prepare()` (Vorlage in vollständige Definitionsform, feste Schlüsselreihenfolge), `serialize()`, `isDirty()` (Vergleich der serialisierten Form), `h()` (DOM-Erzeugung **nur über textContent**, kein `innerHTML`), `uniqueId()` |
-| Beispieldaten | `sample`, `fill()` – Platzhalter für die Seitenvorschau |
+| Zustand | `state = {type, base, baseContent, content, versions, selected:{kind,key}, errors, lastField, busy}` |
+| Hilfen | `prepare()` (Vorlage in vollständige Definitionsform, feste Schlüsselreihenfolge), `serialize()`, `isDirty()` (Vergleich der serialisierten Form), `h()` (DOM-Erzeugung **nur über textContent**, kein `innerHTML`), `uniqueId()`, `typeLabel()` |
+| Beispieldaten | `sample`, `salutationSamples` (Anrede je Art), `fill()` – Platzhalter für die Seitenvorschau |
 | Darstellung | `render()` → `renderStatus()`, `renderZones()`, `renderBlocks()`, `renderPaper()`, `renderProps()` |
 | Eigenschaften | `textField()`, `placeholderPanel()`, `insertPlaceholder()` (fügt an der Cursorposition des zuletzt fokussierten Feldes ein; Seiten-Platzhalter nur in `page`-Feldern) |
 | Änderungen | `softChanged()` (beim Tippen, Vorschau verzögert, Fokus bleibt), `changed()`, `select()`, `move()`, `moveBy()`, `addTextBlock()`, `removeBlock()`, `remapErrors()` |
+| Vorlagenart | `switchType(type)` (Rückfrage bei ungespeicherten Änderungen, lädt die Art über `urls.source`, `history.replaceState` mit `?type=`) |
+| Baustein übernehmen | `openBlockMenu()` (Rechtsklick auf einen Baustein; lädt die anderen Arten parallel), `takeBlock()`, `closeMenu()` |
 | Drag and Drop | `bindDrag()` – HTML5 DnD auf Listeneinträgen und Vorschau-Bausteinen; Einfügemarke vor/nach anhand der Mausposition (`is-drop-before/after`) |
-| Server | `postForm()` (fetch, `same-origin`, CSRF), `save()`, `preview()`, `openVersions()`, `loadVersion()` |
+| Server | `postForm()` (fetch, `same-origin`, CSRF), `fetchSource()`, `save()`, `preview()`, `openVersions()`, `loadVersion()` |
 | Aktionen | Objekt `actions` (Schlüssel = `data-te-action`), ein delegierter Klick-Handler |
 
 Verhalten im Detail:
@@ -229,6 +285,15 @@ Verhalten im Detail:
   (**Alt+↑/↓** auf dem fokussierten Listeneintrag). Verschiebungen werden über eine
   `aria-live`-Region angesagt.
 - **Neuer Textbaustein:** nach dem gewählten Baustein, sonst vor der Grußformel, sonst am Ende.
+- **Vorlagenart:** die Auswahl im Funktionsband (`data-te-type`) wechselt die gepflegte Vorlage.
+  Bei ungespeicherten Änderungen wird zuerst gefragt. Der Wechsel lädt die Vorlage der Art über
+  `urls.source`, übernimmt Name und Fassungen, setzt die URL auf `?type=…` und zeigt eine Meldung;
+  gespeichert wird die Art stets mit dem Feld `type`.
+- **Übernehmen aus Vorlage:** Rechtsklick auf einen Baustein (Liste oder Seitenvorschau) öffnet ein
+  Menü mit den Vorlagen der anderen Arten („Übernehmen aus Vorlage → …"). Ein eindeutiger Baustein
+  ersetzt den Baustein derselben Art (sonst den angeklickten); freie Textbausteine werden als
+  zusätzlicher Baustein am Ende angehängt. Die Änderung wirkt erst beim Speichern; das wird
+  angesagt. `Esc`, ein Klick außerhalb oder ein Rollvorgang schließt das Menü.
 - **Fehler:** Feldpfade beziehen sich auf Positionen beim Speichern. `rememberErrorBlocks()` und
   `remapErrors()` führen sie beim Verschieben mit.
 - **Speichern:** Strg/Cmd+S oder Schaltfläche → Dialog mit Notiz → POST.
@@ -268,6 +333,11 @@ Der Editor erzeugt das Steuerelement automatisch.
 **Neuer Platzhalter:** in `PLACEHOLDERS` aufnehmen, in `LetterPdfGenerator::placeholderValues()`
 aus dem Snapshot füllen und im JS-Objekt `sample` einen Beispielwert ergänzen.
 
+**Neue Anrede:** in `LetterSalutation::values()` (je Empfängerart) und `text()` ergänzen; das
+Formular der Stammdaten und die Auswahlliste bauen sich daraus auf. Neue Empfängerarten brauchen
+zusätzlich einen Eintrag in `LetterRecipient::TYPES`, eine Spalte in
+`patient_card_master_data` (Migration) und eine Bezeichnung in `LetterTemplate::types()`.
+
 **Unverträgliche Änderung des JSON-Aufbaus:** `SCHEMA` erhöhen und in `normalize()` alte Schemata
 überführen. Eingefrorene Briefe müssen weiter erzeugbar bleiben. Gegebenenfalls eine neue
 Brief-Fassung (`LETTER_VERSION`) mit eigenem Generator einführen, wie bei
@@ -285,6 +355,10 @@ Brief-Fassung (`LETTER_VERSION`) mit eigenem Generator einführen, wie bei
    `textContent`.
 6. Die UI folgt dem Design der Hauptanwendung (Titelleiste, Funktionsband, Statusleiste aus
    `office.css`).
+7. Vorlagen sind **je Empfängerart** getrennt (`template_type`); kein Zugriff ohne Art-Filter.
+   Der Brief verwendet die Vorlage der Art seines Empfängers.
+8. Die Anrede steht in den Stammdaten, nicht in der Vorlage; die Vorlage trägt `{salutation}`.
+   Ohne gepflegte Anrede gilt `LetterSalutation::FALLBACK`.
 
 ## 10. Tests ausführen
 

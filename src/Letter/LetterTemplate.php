@@ -22,6 +22,10 @@ namespace App\Letter;
  *
  * Feste Texte duerfen Platzhalter enthalten ({patient_name} usw.); sie werden beim Erzeugen
  * ausschliesslich aus dem Snapshot des Briefes gefuellt.
+ *
+ * Eine Vorlage gilt je Empfaengerart (Patient, Hausarzt, ueberweisender Arzt); die Arten werden
+ * getrennt gepflegt und haben je einen eigenen Fassungsverlauf. Die Anrede steht nicht in der
+ * Vorlage, sondern in den Stammdaten des Empfaengers ({salutation}, siehe LetterSalutation).
  */
 final class LetterTemplate
 {
@@ -36,6 +40,7 @@ final class LetterTemplate
     public const array PLACEHOLDERS = [
         'center_name' => 'Name des Nachsorgezentrums',
         'center_address_line' => 'Anschrift des Zentrums in einer Zeile',
+        'salutation' => 'Anrede des Empfängers (aus den Stammdaten)',
         'patient_name' => 'Patientenname (NACHNAME, VORNAME)',
         'first_name' => 'Vorname',
         'last_name' => 'Nachname',
@@ -169,11 +174,11 @@ final class LetterTemplate
             ],
             'salutation' => [
                 'label' => 'Anrede',
-                'description' => 'Anrede, gefolgt von einer Leerzeile.',
+                'description' => 'Anrede, gefolgt von einer Leerzeile. Der Platzhalter {salutation} wird aus der Anrede in den Stammdaten des Empfängers gefüllt; fehlt die Angabe, erscheint „Sehr geehrte Damen und Herren,“.',
                 'unique' => true,
                 'options' => [],
                 'texts' => [
-                    'text' => ['label' => 'Anrede', 'multiline' => false, 'default' => 'Sehr geehrte Damen und Herren,'],
+                    'text' => ['label' => 'Anrede', 'multiline' => false, 'default' => '{salutation}'],
                 ],
             ],
             'patient' => [
@@ -262,11 +267,43 @@ final class LetterTemplate
     ];
 
     /**
-     * Standardvorlage (Fassung 1 bei Inbetriebnahme, Vorlage fuer "Auf Standard zuruecksetzen").
+     * Vorlagen je Empfaengerart: Patient, Hausarzt und ueberweisender Arzt werden getrennt
+     * gepflegt. Jede Art hat einen eigenen Fassungsverlauf; die Anrede stammt in allen Arten
+     * aus den Stammdaten ({salutation}).
+     *
+     * @return array<string, string> Empfaengerart => Bezeichnung
+     */
+    public static function types(): array
+    {
+        $types = [];
+        foreach (LetterRecipient::TYPES as $type) {
+            $types[$type] = LetterRecipient::label($type);
+        }
+        return $types;
+    }
+
+    public static function isType(string $type): bool
+    {
+        return LetterRecipient::isType($type);
+    }
+
+    /**
+     * Name der Standardvorlage je Empfaengerart.
+     */
+    public static function defaultName(string $type = LetterRecipient::PATIENT): string
+    {
+        $label = LetterRecipient::label($type);
+        return $type === LetterRecipient::PATIENT || $label === '' ? 'Standardvorlage' : 'Standardvorlage ' . $label;
+    }
+
+    /**
+     * Standardvorlage je Empfaengerart (Fassung 1 bei Inbetriebnahme, Vorlage fuer
+     * "Auf Standard zuruecksetzen"). Der Aufbau ist fuer alle Arten gleich; gepflegt werden die
+     * Texte getrennt je Art.
      *
      * @return array<string, mixed>
      */
-    public static function default(): array
+    public static function default(string $type = LetterRecipient::PATIENT): array
     {
         $zones = [];
         foreach (self::zoneDefinitions() as $key => $definition) {
@@ -274,16 +311,16 @@ final class LetterTemplate
         }
         $blocks = [];
         $definitions = self::blockDefinitions();
-        foreach (self::DEFAULT_ORDER as $type) {
+        foreach (self::DEFAULT_ORDER as $blockType) {
             $blocks[] = [
-                'id' => $type,
-                'type' => $type,
+                'id' => $blockType,
+                'type' => $blockType,
                 'enabled' => true,
-                'options' => self::defaults($definitions[$type]['options']),
-                'texts' => self::defaults($definitions[$type]['texts']),
+                'options' => self::defaults($definitions[$blockType]['options']),
+                'texts' => self::defaults($definitions[$blockType]['texts']),
             ];
         }
-        return ['schema' => self::SCHEMA, 'name' => 'Standardvorlage', 'zones' => $zones, 'blocks' => $blocks];
+        return ['schema' => self::SCHEMA, 'name' => self::defaultName($type), 'zones' => $zones, 'blocks' => $blocks];
     }
 
     /**
@@ -291,17 +328,19 @@ final class LetterTemplate
      *
      * @return array<string, mixed>
      */
-    public static function editorDefinition(): array
+    public static function editorDefinition(string $type = LetterRecipient::PATIENT): array
     {
         return [
             'schema' => self::SCHEMA,
+            'type' => $type,
+            'types' => self::types(),
             'zones' => self::zoneDefinitions(),
             'blocks' => self::blockDefinitions(),
             'placeholders' => self::PLACEHOLDERS,
             'pagePlaceholders' => self::PAGE_PLACEHOLDERS,
             'maxBlocks' => self::MAX_BLOCKS,
             'limits' => ['single' => self::MAX_SINGLE, 'multi' => self::MAX_MULTI, 'name' => self::MAX_NAME],
-            'default' => self::default(),
+            'default' => self::default($type),
         ];
     }
 

@@ -545,6 +545,71 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('Die Vorschau ist nicht möglich', $badPreview->body);
     }
 
+    /** Vorlagen werden je Empfaengerart getrennt gefasst; die Anrede steht in den Stammdaten. */
+    public function testTemplateEditorSeparatesRecipientTypes(): void
+    {
+        $controller = new LetterTemplateController($this->app, new View(dirname(__DIR__, 2) . '/templates'));
+
+        $physician = $controller->editor(new Request('GET', '/system/letter-templates', ['type' => 'family_doctor']));
+        $this->assertSame(200, $physician->status);
+        $this->assertContains('Art der Vorlage', $physician->body);
+        $data = $this->editorData($physician->body);
+        $this->assertSame('family_doctor', $data['type']);
+        $this->assertSame('family_doctor', $data['definition']['type']);
+        $this->assertSame(
+            ['patient' => 'Patient', 'family_doctor' => 'Hausarzt', 'referring_physician' => 'Überweisender Arzt'],
+            $data['definition']['types'],
+        );
+        $this->assertSame('Standardvorlage Hausarzt', $data['current']['name']);
+        $this->assertSame(1, $data['current']['version_no']);
+        $this->assertSame('/system/letter-templates/source', $data['urls']['source']);
+        $this->assertSame('Anrede des Empfängers (aus den Stammdaten)', $data['definition']['placeholders']['salutation']);
+        $this->assertSame('{salutation}', $data['current']['content']['blocks'][1]['texts']['text']);
+
+        // Unbekannte Art faellt auf die Patientenvorlage zurueck.
+        $fallback = $controller->editor(new Request('GET', '/system/letter-templates', ['type' => 'praxis']));
+        $this->assertSame('patient', $this->editorData($fallback->body)['type']);
+
+        // Fassungen laufen je Empfaengerart eigenstaendig.
+        $content = $data['current']['content'];
+        $content['blocks'][7]['texts']['text'] = 'Mit kollegialen Grüßen, wir berichten über {patient_name}.';
+        $saved = $controller->save(new Request('POST', '/system/letter-templates', [], [
+            'content' => json_encode($content),
+            'comment' => 'Hausarzt angepasst',
+            'type' => 'family_doctor',
+            'base_version_id' => (string) $data['current']['id'],
+        ]));
+        $this->assertSame(200, $saved->status, $saved->body);
+        $payload = json_decode($saved->body, true);
+        $this->assertTrue($payload['ok']);
+        $this->assertSame(2, $payload['current']['version_no']);
+        $this->assertSame('family_doctor', $payload['current']['type']);
+        $this->assertContains('Hausarzt', $payload['message']);
+
+        $patient = $controller->editor(new Request('GET', '/system/letter-templates'));
+        $this->assertSame(1, $this->editorData($patient->body)['current']['version_no'], 'Die Patientenvorlage bleibt unberuehrt.');
+
+        // Die andere Art wird fuer "Uebernehmen aus Vorlage" als JSON geliefert.
+        $source = $controller->source(new Request('GET', '/system/letter-templates/source', ['type' => 'family_doctor']));
+        $this->assertSame(200, $source->status);
+        $this->assertContains('application/json', $source->headers['Content-Type'] ?? '');
+        $sourcePayload = json_decode($source->body, true);
+        $this->assertSame('family_doctor', $sourcePayload['type']);
+        $this->assertSame('Hausarzt', $sourcePayload['label']);
+        $this->assertSame('Standardvorlage Hausarzt', $sourcePayload['default_name']);
+        $this->assertSame(2, $sourcePayload['template']['version_no']);
+        $this->assertCount(2, $sourcePayload['versions']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function editorData(string $body): array
+    {
+        preg_match('#<script type="application/json" id="template-editor-data">(.*?)</script>#s', $body, $match);
+        return (array) json_decode($match[1] ?? '', true);
+    }
+
     /** Die Patientenseite listet die Briefe eines Patienten und lehnt unbekannte ab. */
     public function testPatientPageRendersLetters(): void
     {

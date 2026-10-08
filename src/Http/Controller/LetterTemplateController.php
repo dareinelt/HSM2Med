@@ -9,6 +9,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Letter\LetterException;
+use App\Letter\LetterRecipient;
 use App\Letter\LetterTemplate;
 use App\Security\Csrf;
 
@@ -21,24 +22,31 @@ use App\Security\Csrf;
  *
  * Jede Speicherung erzeugt eine neue, unveraenderliche Fassung. Bereits erstellte Briefe
  * behalten ihre eingefrorene Vorlage.
+ *
+ * Vorlagen werden je Empfaengerart getrennt gepflegt (Patient, Hausarzt, ueberweisender
+ * Arzt). Die Art steht als Parameter "type" in Query bzw. Formular; ohne Angabe gilt der
+ * Patientenbrief.
  */
 final class LetterTemplateController extends Controller
 {
     public function editor(Request $request): Response
     {
+        $type = self::type($request->query('type'));
         $service = $this->app->letterTemplateService();
-        $current = $service->current();
-        $versions = $service->versions();
+        $current = $service->current($type);
 
         $data = [
-            'definition' => LetterTemplate::editorDefinition(),
+            'type' => $type,
+            'definition' => LetterTemplate::editorDefinition($type),
             'current' => $current,
-            'versions' => array_map(self::versionSummary(...), $versions),
+            'versions' => array_map(self::versionSummary(...), $service->versions($type)),
             'csrf' => Csrf::token(),
             'urls' => [
                 'save' => '/system/letter-templates',
                 'preview' => '/system/letter-templates/preview',
                 'version' => '/system/letter-templates/versions/',
+                'editor' => '/system/letter-templates',
+                'source' => '/system/letter-templates/source',
             ],
             'settings' => $this->centerSettings(),
         ];
@@ -48,12 +56,35 @@ final class LetterTemplateController extends Controller
             'appName' => Config::APP_NAME,
             'appVersion' => Config::APP_VERSION,
             'current' => $current,
+            'type' => $type,
+            'types' => LetterTemplate::types(),
             'data' => json_encode(
                 $data,
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
                     | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT,
             ),
         ]));
+    }
+
+    /**
+     * Aktuelle Fassung einer Empfaengerart als JSON.
+     *
+     * Der Editor nutzt dies fuer den Wechsel der Vorlagenart und fuer "Uebernehmen aus
+     * Vorlage": einzelne Bausteine lassen sich aus der Vorlage einer anderen Empfaengerart
+     * uebernehmen.
+     */
+    public function source(Request $request): Response
+    {
+        $type = self::type($request->query('type'));
+        $service = $this->app->letterTemplateService();
+
+        return Response::json([
+            'type' => $type,
+            'label' => LetterRecipient::label($type),
+            'default_name' => LetterTemplate::defaultName($type),
+            'template' => $service->current($type),
+            'versions' => array_map(self::versionSummary(...), $service->versions($type)),
+        ]);
     }
 
     /**
@@ -80,12 +111,14 @@ final class LetterTemplateController extends Controller
             return Response::json(['ok' => false, 'message' => 'Die Vorlage konnte nicht gelesen werden.', 'errors' => ['template' => 'Ungültige Daten.']], 422);
         }
         $base = (string) ($request->post['base_version_id'] ?? '');
+        $type = self::type($request->post('type'));
         $service = $this->app->letterTemplateService();
         try {
             $saved = $service->save(
                 $content,
                 (string) ($request->post['comment'] ?? ''),
                 ctype_digit($base) ? (int) $base : null,
+                $type,
             );
         } catch (LetterException $e) {
             return Response::json(['ok' => false, 'message' => $e->getMessage(), 'errors' => $e->fieldErrors()], 422);
@@ -93,9 +126,9 @@ final class LetterTemplateController extends Controller
 
         return Response::json([
             'ok' => true,
-            'message' => sprintf('Fassung %d der Briefvorlage wurde gespeichert. Neue Briefe verwenden ab sofort diese Fassung.', $saved['version_no']),
+            'message' => sprintf('Fassung %d der Briefvorlage wurde gespeichert (%s). Neue Briefe verwenden ab sofort diese Fassung.', $saved['version_no'], LetterRecipient::label($type)),
             'current' => $saved,
-            'versions' => array_map(self::versionSummary(...), $service->versions()),
+            'versions' => array_map(self::versionSummary(...), $service->versions($type)),
         ]);
     }
 
@@ -106,7 +139,7 @@ final class LetterTemplateController extends Controller
     {
         $content = self::decodeContent($request);
         try {
-            $pdf = $this->app->letterService()->previewPdf($content);
+            $pdf = $this->app->letterService()->previewPdf($content, self::type($request->post('type')));
         } catch (LetterException $e) {
             $lines = [];
             foreach ($e->fieldErrors() as $field => $message) {
@@ -122,6 +155,15 @@ final class LetterTemplateController extends Controller
             );
         }
         return Response::pdf($pdf, 'Briefvorlage-Vorschau.pdf', false);
+    }
+
+    /**
+     * Empfaengerart aus dem Parameter; unbekannte oder fehlende Angaben ergeben den
+     * Patientenbrief.
+     */
+    private static function type(string $type): string
+    {
+        return LetterTemplate::isType($type) ? $type : LetterRecipient::PATIENT;
     }
 
     private static function decodeContent(Request $request): mixed

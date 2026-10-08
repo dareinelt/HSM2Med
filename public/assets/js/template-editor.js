@@ -24,6 +24,7 @@
         title: $('[data-te-title]'),
         state: $('[data-te-state]'),
         message: $('[data-te-message]'),
+        type: $('[data-te-type]'),
         name: $('[data-te-name]'),
         nameError: $('[data-te-error="name"]'),
         blocksError: $('[data-te-error="blocks"]'),
@@ -40,10 +41,12 @@
         helpDialog: $('[data-te-help-dialog]'),
         previewForm: $('[data-te-preview-form]'),
         previewContent: $('[data-te-preview-content]'),
+        previewType: $('[data-te-preview-type]'),
         icons: $('[data-te-icons]'),
     };
 
     const state = {
+        type: String(data.type || 'patient'),
         base: data.current,
         baseContent: prepare(data.current.content),
         content: prepare(data.current.content),
@@ -202,8 +205,20 @@
         pages: '2',
     };
 
+    /** Beispiel-Anreden je Empfaengerart, damit die Vorschau die Vorlagenart widerspiegelt. */
+    const salutationSamples = {
+        patient: 'Sehr geehrte Frau MUSTERMANN,',
+        family_doctor: 'Sehr geehrter Herr Kollege,',
+        referring_physician: 'Sehr geehrter Herr Kollege,',
+    };
+
     function fill(text) {
-        return String(text).replace(/\{([a-z_]+)\}/g, (match, key) => (key in sample ? sample[key] : match));
+        return String(text).replace(/\{([a-z_]+)\}/g, (match, key) => {
+            if (key === 'salutation') {
+                return salutationSamples[state.type] || 'Sehr geehrte Damen und Herren,';
+            }
+            return key in sample ? sample[key] : match;
+        });
     }
 
     /** Text mit Zeilenumbruechen; leere Texte werden als Hinweis dargestellt. */
@@ -232,8 +247,8 @@
         const dirty = isDirty();
         el.state.classList.toggle('is-dirty', dirty);
         el.state.replaceChildren(icon(dirty ? 'warning' : 'check'), h('span', { text: dirty ? 'Ungespeicherte Änderungen' : 'Gespeichert' }));
-        el.title.textContent = state.content.name + ' – Fassung ' + state.base.version_no + (dirty ? ' (geändert)' : '');
-        document.title = (dirty ? '● ' : '') + 'Briefvorlage bearbeiten – HSM2Med';
+        el.title.textContent = typeLabel(state.type) + ': ' + state.content.name + ' – Fassung ' + state.base.version_no + (dirty ? ' (geändert)' : '');
+        document.title = (dirty ? '● ' : '') + 'Briefvorlage ' + typeLabel(state.type) + ' – HSM2Med';
         el.statusVersion.textContent = 'Grundlage: Fassung ' + state.base.version_no + ' vom ' + formatDate(state.base.created_at);
         const visible = state.content.blocks.filter((block) => block.enabled).length;
         el.statusBlocks.textContent = state.content.blocks.length + ' Bausteine, davon ' + visible + ' eingeblendet';
@@ -266,6 +281,11 @@
             return summary ? blockDef.label + ': ' + (summary.length > 32 ? summary.slice(0, 31) + '…' : summary) : blockDef.label;
         }
         return blockDef.label;
+    }
+
+    /** Bezeichnung der Vorlagenart laut Server (Fallback: Schluessel). */
+    function typeLabel(type) {
+        return (def.types && def.types[type]) || type;
     }
 
     function renderZones() {
@@ -953,6 +973,7 @@
             const { status, payload } = await postForm(data.urls.save, {
                 content: serialize(state.content),
                 comment,
+                type: state.type,
                 base_version_id: String(state.base.id),
             });
             if (payload && payload.ok) {
@@ -998,6 +1019,9 @@
 
     function preview() {
         el.previewContent.value = serialize(state.content);
+        if (el.previewType) {
+            el.previewType.value = state.type;
+        }
         el.previewForm.submit();
     }
 
@@ -1038,6 +1062,146 @@
         } catch (error) {
             showMessage('error', 'Die Fassung konnte nicht geladen werden.');
         }
+    }
+
+    // -------------------------------------------- Vorlagenarten und Bausteine
+
+    /** Aktuelle Vorlage einer Empfaengerart (fuer den Wechsel und "Uebernehmen aus Vorlage"). */
+    async function fetchSource(type) {
+        const response = await fetch(data.urls.source + '?type=' + encodeURIComponent(type), {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) {
+            throw new Error(String(response.status));
+        }
+        return response.json();
+    }
+
+    /** Wechselt die Vorlagenart: laedt die aktuelle Fassung der anderen Art in den Editor. */
+    async function switchType(type) {
+        if (type === state.type) {
+            return;
+        }
+        const label = typeLabel(type);
+        if (isDirty() && !window.confirm('Ungespeicherte Änderungen gehen verloren. Vorlage „' + label + '“ trotzdem laden?')) {
+            el.type.value = state.type;
+            return;
+        }
+        try {
+            const payload = await fetchSource(type);
+            state.type = String(payload.type);
+            def.type = state.type;
+            def.default.name = String(payload.default_name || def.default.name);
+            state.base = payload.template;
+            state.baseContent = prepare(payload.template.content);
+            state.content = prepare(payload.template.content);
+            state.versions = payload.versions || [];
+            state.errors = {};
+            state.selected = { kind: 'block', key: state.content.blocks.length > 0 ? state.content.blocks[0].id : null };
+            el.type.value = state.type;
+            window.history.replaceState(null, '', data.urls.editor + '?type=' + encodeURIComponent(state.type));
+            render();
+            showMessage('info', 'Vorlage „' + state.content.name + '“ (' + typeLabel(state.type) + ') geladen – Fassung ' + state.base.version_no + '.');
+        } catch (error) {
+            el.type.value = state.type;
+            showMessage('error', 'Die Vorlage der gewählten Art konnte nicht geladen werden.');
+        }
+    }
+
+    let menuNode = null;
+
+    function closeMenu() {
+        if (menuNode) {
+            menuNode.remove();
+            menuNode = null;
+        }
+    }
+
+    /**
+     * Rechtsklick auf einen Baustein: Uebernahme desselben Bausteins aus der Vorlage einer
+     * anderen Empfaengerart.
+     */
+    async function openBlockMenu(blockId, x, y) {
+        closeMenu();
+        const block = state.content.blocks.find((candidate) => candidate.id === blockId);
+        if (!block) {
+            return;
+        }
+        const others = Object.keys(def.types || {}).filter((type) => type !== state.type);
+        if (others.length === 0) {
+            return;
+        }
+        select('block', blockId);
+        let sources = [];
+        try {
+            sources = await Promise.all(others.map((type) => fetchSource(type)));
+        } catch (error) {
+            showMessage('error', 'Die Vorlagen der anderen Arten konnten nicht geladen werden.');
+            return;
+        }
+        const menu = h('div', { class: 'te-menu', role: 'menu', 'aria-label': 'Baustein übernehmen' },
+            h('p', { class: 'te-menu__title', text: 'Übernehmen aus Vorlage' }),
+            ...sources.map((source) => h('button', {
+                type: 'button',
+                class: 'te-menu__item',
+                role: 'menuitem',
+                title: '„' + blockTitle(block) + '“ aus „' + source.template.name + '“ übernehmen',
+                onclick: () => {
+                    closeMenu();
+                    takeBlock(blockId, source);
+                },
+            },
+            h('span', { class: 'te-menu__name', text: source.template.name }),
+            h('small', { class: 'te-menu__hint', text: source.label + ' · Fassung ' + source.template.version_no }),
+            )));
+        menu.style.left = Math.max(4, Math.min(x, window.innerWidth - 320)) + 'px';
+        menu.style.top = Math.max(4, y) + 'px';
+        document.body.append(menu);
+        menuNode = menu;
+        const first = menu.querySelector('button');
+        if (first) {
+            first.focus();
+        }
+    }
+
+    /**
+     * Uebernimmt einen Baustein aus einer anderen Vorlage: feste Bausteine ersetzen den
+     * gleichartigen Baustein an dessen Stelle, freie Textbausteine werden am Ende angehaengt.
+     */
+    function takeBlock(blockId, source) {
+        const target = state.content.blocks.find((candidate) => candidate.id === blockId);
+        if (!target) {
+            return;
+        }
+        const sourceBlocks = Array.isArray(source.template.content.blocks) ? source.template.content.blocks : [];
+        const origin = sourceBlocks.find((candidate) => candidate.id === target.id)
+            || sourceBlocks.find((candidate) => candidate.type === target.type);
+        if (!origin || !def.blocks[origin.type]) {
+            showMessage('info', 'In „' + source.template.name + '“ gibt es keinen Baustein „' + blockTitle(target) + '“.');
+            return;
+        }
+        const blockDef = def.blocks[origin.type];
+        if (!blockDef.unique && state.content.blocks.length >= def.maxBlocks) {
+            showMessage('error', 'Eine Vorlage darf höchstens ' + def.maxBlocks + ' Bausteine enthalten.');
+            return;
+        }
+        const index = blockDef.unique ? state.content.blocks.findIndex((candidate) => candidate.type === origin.type) : -1;
+        const copy = {
+            id: index >= 0 ? state.content.blocks[index].id : (blockDef.unique ? target.id : uniqueId(state.content.blocks, origin.type)),
+            type: origin.type,
+            enabled: origin.enabled !== false,
+            options: fillOptions(blockDef, origin.options),
+            texts: fillTexts(blockDef, origin.texts),
+        };
+        if (index >= 0) {
+            state.content.blocks[index] = copy;
+        } else {
+            state.content.blocks.push(copy);
+        }
+        state.selected = { kind: 'block', key: copy.id };
+        changed();
+        showMessage('info', 'Baustein „' + blockTitle(copy) + '“ aus „' + source.template.name + '“ übernommen – wirksam erst beim Speichern.');
     }
 
     // ------------------------------------------------------------ Aktionen
@@ -1085,12 +1249,29 @@
     };
 
     document.addEventListener('click', (event) => {
+        if (menuNode && !menuNode.contains(event.target)) {
+            closeMenu();
+        }
         const trigger = event.target.closest('[data-te-action]');
         if (trigger && actions[trigger.dataset.teAction] && !trigger.disabled) {
             event.preventDefault();
             actions[trigger.dataset.teAction]();
         }
     });
+
+    // Rechtsklick auf einen Baustein in der Bausteinliste oder auf dem Briefblatt.
+    document.addEventListener('contextmenu', (event) => {
+        const node = event.target.closest('[data-block-id]');
+        if (!node || (!el.blocks.contains(node) && !el.paper.contains(node))) {
+            return;
+        }
+        event.preventDefault();
+        openBlockMenu(node.dataset.blockId, event.clientX, event.clientY);
+    });
+
+    if (el.type) {
+        el.type.addEventListener('change', () => { switchType(el.type.value); });
+    }
 
     el.saveDialog.addEventListener('close', () => {
         if (el.saveDialog.returnValue === 'save') {
@@ -1106,6 +1287,10 @@
     });
 
     document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && menuNode) {
+            closeMenu();
+            return;
+        }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
             event.preventDefault();
             if (!document.querySelector('dialog[open]')) {

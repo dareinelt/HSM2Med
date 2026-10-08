@@ -192,6 +192,7 @@ final class LetterPdfGenerator
         return [
             'center_name' => trim((string) ($master['center_name'] ?? '')),
             'center_address_line' => implode(' · ', $addressLines),
+            'salutation' => self::salutationText($letter),
             'patient_name' => trim((string) ($patient['patient_name'] ?? '')),
             'first_name' => trim((string) ($patient['first_name'] ?? '')),
             'last_name' => trim((string) ($patient['last_name'] ?? '')),
@@ -201,6 +202,32 @@ final class LetterPdfGenerator
             'letter_date' => $date((string) ($letter['document']['letter_date'] ?? '')),
             'sequence_no' => (string) ($letter['sequence_no'] ?? ''),
         ];
+    }
+
+    /**
+     * Anrede des Briefes aus dem Snapshot (Empfaenger). Briefe ohne Empfaenger – vor Migration
+     * 008 oder ohne Auswahl im Assistenten – erhalten die unpersoenliche Anrede.
+     *
+     * @param array<string, mixed> $letter
+     */
+    private static function salutationText(array $letter): string
+    {
+        $recipient = $letter['recipient'] ?? null;
+        if (!is_array($recipient)) {
+            return LetterSalutation::FALLBACK;
+        }
+        $frozen = trim((string) ($recipient['salutation'] ?? ''));
+        if ($frozen !== '') {
+            return $frozen;
+        }
+        $patient = (array) ($letter['patient'] ?? []);
+        $type = (string) ($recipient['type'] ?? '');
+        return LetterSalutation::text(
+            LetterRecipient::isType($type) ? $type : LetterRecipient::PATIENT,
+            (string) ($recipient['salutation_value'] ?? ''),
+            (string) ($patient['last_name'] ?? ''),
+            (string) ($patient['first_name'] ?? ''),
+        );
     }
 
     // --------------------------------------------------------------------- Feste Zonen (Seite 1)

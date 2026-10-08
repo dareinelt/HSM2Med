@@ -106,4 +106,34 @@ final class LetterSample
             'source' => ['patient_id' => 0, 'report_id' => null, 'settings_version_id' => 0, 'card_id' => null, 'record_versions' => []],
         ];
     }
+
+    /**
+     * Beispiel-Empfaenger einer Empfaengerart mit Anschrift und Anrede aus erfundenen
+     * Stammdaten; zeigt im Editor, wie Anschriftfeld und Anrede im Brief erscheinen.
+     *
+     * @return array<string, mixed> Snapshot-Teil „recipient"
+     */
+    public static function recipient(string $type): array
+    {
+        $patient = ['last_name' => 'MUSTERMANN', 'first_name' => 'ERIKA', 'patient_name' => 'MUSTERMANN, ERIKA'];
+        $master = [
+            'street' => 'Musterstraße 1',
+            'postal_code' => '12345',
+            'city' => 'Beispielstadt',
+            'salutation' => LetterSalutation::FRAU,
+            'physician_name' => 'Dr. med. Beispieldoktor',
+            'physician_practice' => 'Praxis am Markt',
+            'physician_street' => 'Marktplatz 2',
+            'physician_postal_code' => '12345',
+            'physician_city' => 'Beispielstadt',
+            'physician_salutation' => LetterSalutation::KOLLEGE,
+            'referrer_name' => 'Dr. med. Beispieldoktorin',
+            'referrer_practice' => 'Klinik für Beispielmedizin',
+            'referrer_street' => 'Klinikstraße 3',
+            'referrer_postal_code' => '12345',
+            'referrer_city' => 'Beispielstadt',
+            'referrer_salutation' => LetterSalutation::KOLLEGIN,
+        ];
+        return LetterRecipient::snapshotPart(LetterRecipient::resolve($type, $patient, $master));
+    }
 }

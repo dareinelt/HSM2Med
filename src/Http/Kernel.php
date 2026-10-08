@@ -124,6 +124,7 @@ final class Kernel
         $router->get('/system/letter-templates', $letterTemplates->editor(...));
         $router->post('/system/letter-templates', $letterTemplates->save(...));
         $router->post('/system/letter-templates/preview', $letterTemplates->preview(...));
+        $router->get('/system/letter-templates/source', $letterTemplates->source(...));
         $router->get('/system/letter-templates/versions/{id}', $letterTemplates->version(...));
         $router->get('/letters', $letters->index(...));
         $router->get('/letters/new', $letters->newLetter(...), true);
