@@ -250,7 +250,8 @@ wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklic
 - Für jeden Bericht können mehrere Ausweisfassungen existieren (`card_version`); jede Fassung
   bleibt erhalten. Die Berichtsansicht listet alle Fassungen mit PDF-Link und Verlauf, die
   Patientensicht zusätzlich alle Nachsorgeuntersuchungen des Patienten (Seite 2 des Ausweises,
-  gespeist aus den unveränderlichen Bericht-Snapshots).
+  gespeist aus den unveränderlichen Bericht-Snapshots; die aktuelle Untersuchung ist immer
+  enthalten).
 - Dateiname: `Patientenausweis_<Nachname>_<Vorname>_<Datum>[_Nr<laufende Nummer>].pdf`.
 
 ### Routen
@@ -281,11 +282,12 @@ Patient-ID. Aufbau, Reihenfolge und Beschriftungen folgen der Vorlage `.referenc
 
 ![Ausweis Seite 2](docs/screenshots/22-ausweis-pdf-seite-2.png)
 
-Seite 2: medizinisch-technische Angaben aus dem Bericht sowie „Vergangene
-Nachsorgeuntersuchungen" mit Datum und – soweit ableitbar – Bericht, Arzt und Zentrum aus den
-gespeicherten Snapshots. Reicht der Platz nicht, bricht die Erzeugung mit einer klaren Meldung
-ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt ausschließlich über den eigenen,
-abhängigkeitsfreien PDF-Writer.
+Seite 2: medizinisch-technische Angaben aus dem Bericht sowie „Nachsorgeuntersuchungen" mit
+Datum und – soweit ableitbar – Bericht, Arzt und Zentrum aus den gespeicherten Snapshots. Die
+aktuelle Untersuchung (der Bericht, auf dem der Ausweis beruht) steht immer an erster Stelle,
+danach folgen die früheren Untersuchungen des Patienten. Reicht der Platz nicht, bricht die
+Erzeugung mit einer klaren Meldung ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt
+ausschließlich über den eigenen, abhängigkeitsfreien PDF-Writer.
 
 ## Kommandozeile (CLI)
 

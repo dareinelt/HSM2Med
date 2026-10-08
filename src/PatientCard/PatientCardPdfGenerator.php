@@ -501,11 +501,11 @@ final class PatientCardPdfGenerator
         $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.7);
         $y += 12.0;
 
-        $y = $this->sectionTitle($x, $y, $width, 'Vergangene Nachsorgeuntersuchungen');
+        $y = $this->sectionTitle($x, $y, $width, 'Nachsorgeuntersuchungen');
         $this->pdf->text(
             $x,
             $y + 0.72 * self::SIZE_NOTICE,
-            'Previous follow-up examinations',
+            'Follow-up examinations',
             'italic',
             self::SIZE_NOTICE,
             self::MUTED,
@@ -518,7 +518,7 @@ final class PatientCardPdfGenerator
                 $x,
                 $y,
                 $width,
-                'Es sind keine früheren Nachsorgeuntersuchungen dieses Patienten gespeichert.',
+                'Es sind keine Nachsorgeuntersuchungen dieses Patienten gespeichert.',
             );
         } else {
             $rows = [];
@@ -552,9 +552,9 @@ final class PatientCardPdfGenerator
             $x,
             $y,
             $width,
-            'Diese Seite dokumentiert die im System vorhandenen Nachsorgeuntersuchungen zum '
-            . 'Zeitpunkt der Erstellung des Ausweises. Änderungen an Stammdaten oder später '
-            . 'importierte Berichte verändern diesen Ausweis nicht.',
+            'Diese Seite dokumentiert die im System vorhandenen Nachsorgeuntersuchungen einschließlich '
+            . 'der aktuellen Untersuchung zum Zeitpunkt der Erstellung des Ausweises. Änderungen an '
+            . 'Stammdaten oder später importierte Berichte verändern diesen Ausweis nicht.',
             'regular',
             self::SIZE_NOTICE,
         );

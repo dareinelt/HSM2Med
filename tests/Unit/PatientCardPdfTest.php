@@ -107,8 +107,9 @@ final class PatientCardPdfTest extends TestCase
         $pageTwo = PdfText::pages($pdf)[1];
 
         foreach ([
-            'Vergangene Nachsorgeuntersuchungen',
-            'Previous follow-up examinations',
+            'Nachsorgeuntersuchungen',
+            'Follow-up examinations',
+            '07.10.2026', 'Bericht Nr. 2 (aktuelle Untersuchung)',
             '07.04.2026', 'Bericht Nr. 1',
             '15.01.2026', 'Bericht Nr. 3',
             'Nachsorgezentrum Beispielstadt',
@@ -125,7 +126,7 @@ final class PatientCardPdfTest extends TestCase
         $card = PatientCardFactory::snapshot(['history' => []]);
         $pdf = (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt());
         $this->assertSame(2, PdfText::pageCount($pdf));
-        $this->assertContains('keine früheren Nachsorgeuntersuchungen', PdfText::pages($pdf)[1]);
+        $this->assertContains('keine Nachsorgeuntersuchungen', PdfText::pages($pdf)[1]);
     }
 
     public function testMissingOptionalDataIsMarked(): void
