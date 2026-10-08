@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\PatientCard\MeasurementTemplate;
 use App\PatientCard\PatientCardPdfGenerator;
 use App\Report\Pdf\ImageData;
 use App\Report\Pdf\PdfDocument;
@@ -101,32 +102,87 @@ final class PatientCardPdfTest extends TestCase
         $this->assertContains('Logo nicht hinterlegt', $pageOne);
     }
 
-    public function testPageTwoContainsHistory(): void
+    public function testPageTwoContainsMeasurementTable(): void
     {
         $pdf = (new PatientCardPdfGenerator())->generate(PatientCardFactory::snapshot(), null, $this->generatedAt());
         $pageTwo = PdfText::pages($pdf)[1];
 
         foreach ([
-            'Nachsorgeuntersuchungen',
-            'Follow-up examinations',
-            '07.10.2026', 'Bericht Nr. 2 (aktuelle Untersuchung)',
-            '07.04.2026', 'Bericht Nr. 1',
-            '15.01.2026', 'Bericht Nr. 3',
-            'Nachsorgezentrum Beispielstadt',
-            'Die Angaben stammen aus den importierten Nachsorgeberichten',
+            // Spaltenkoepfe: Datum der jeweiligen Untersuchung
+            '07.10.2026', '(aktuelle Untersuchung)', '07.04.2026', '15.01.2026',
+            // Abschnitte und Gruppen der Vorlage
+            'Messungen', 'Programmierung',
+            'Batterie', 'Elektroden', 'Bradykardie', 'AV',
+            // Zeilen der Vorlage
+            'Status', 'Spannung [V]', 'Strom [µA]', 'Magnetfreq. [1/min]', 'Verbl. Laufzeit',
+            'Impedanz [Ohm]', 'Wahrnehmung [mV]', 'Reizschwelle [V/ms]', 'Sonstige Messungen',
+            'Betriebsart', 'Untere Grenzfrequenz [1/min]', 'VV-Zeit', 'Empfindlichkeit [mV]',
+            'Stim. AV-Intervall [ms]',
+            // Kammerangaben der Elektrodenzeilen
+            'RA', 'RV',
+            // Werte der jeweiligen Untersuchung
+            '2.79', '3.20', 'OK', '612', '0.5/0.4', 'DDD', '60', 'On',
+            '2.82', '648', '701', 'VVI',
+            // Hinweis und Fusszeile
+            'Hinweise zur Messwerttabelle',
             'Seite 2 von 2',
         ] as $expected) {
             $this->assertContains($expected, $pageTwo);
         }
+        // Die bisherige Nachsorgetabelle ist durch die Messwerttabelle ersetzt.
+        $this->assertNotContains('Nachsorgeuntersuchungen', $pageTwo);
         $this->assertNotContains('Patientendaten:', $pageTwo);
     }
 
-    public function testEmptyHistoryIsAnnounced(): void
+    public function testPageTwoWithoutMeasurementsIsAnnounced(): void
     {
-        $card = PatientCardFactory::snapshot(['history' => []]);
+        $card = PatientCardFactory::snapshot(['measurements' => ['columns' => [], 'sections' => []]]);
         $pdf = (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt());
         $this->assertSame(2, PdfText::pageCount($pdf));
-        $this->assertContains('keine Nachsorgeuntersuchungen', PdfText::pages($pdf)[1]);
+        $this->assertContains('keine Messwerte dieses Patienten gespeichert', PdfText::pages($pdf)[1]);
+    }
+
+    public function testPageTwoFitsWithSevenExaminationsAndLongValues(): void
+    {
+        $template = MeasurementTemplate::default(dirname(__DIR__, 2));
+        $columns = [];
+        foreach (range(0, 6) as $index) {
+            $columns[] = [
+                'report_id' => $index + 1,
+                'date' => sprintf('2026-01-%02d', $index + 1),
+                'date_display' => sprintf('%02d.01.2026', $index + 1),
+                'current' => $index === 0,
+            ];
+        }
+        $ids = [];
+        foreach ($template->parameterIds() as $id) {
+            $ids[$id] = '12345678901234567890';
+        }
+        $names = [];
+        foreach ($template->parameterNames() as $name) {
+            $names[$name] = 'Wert mit sehr langer Bezeichnung';
+        }
+        $values = [];
+        foreach ($columns as $column) {
+            $values[(int) $column['report_id']] = ['ids' => $ids, 'names' => $names];
+        }
+        $card = PatientCardFactory::snapshot([
+            'measurements' => [
+                'template_version' => $template->version(),
+                'column_count' => $template->columnCount(),
+                'columns' => $columns,
+                'sections' => $template->resolve($columns, $values),
+            ],
+        ]);
+
+        $pdf = (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt());
+        $this->assertSame(2, PdfText::pageCount($pdf));
+        $pageTwo = PdfText::pages($pdf)[1];
+        $this->assertContains('Programmierung', $pageTwo);
+        $this->assertContains('01.01.2026', $pageTwo);
+        $this->assertContains('07.01.2026', $pageTwo);
+        // Zu lange Werte werden auf zwei Zeilen begrenzt und gekuerzt.
+        $this->assertContains('...', $pageTwo);
     }
 
     public function testMissingOptionalDataIsMarked(): void
@@ -193,7 +249,7 @@ final class PatientCardPdfTest extends TestCase
 
     public function testRejectsUnsupportedCardVersion(): void
     {
-        $card = PatientCardFactory::snapshot(['card_version' => 2]);
+        $card = PatientCardFactory::snapshot(['card_version' => 3]);
         $this->assertThrows(
             \RuntimeException::class,
             fn () => (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt()),

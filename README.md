@@ -49,7 +49,9 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   Rohdatenanhang, jederzeit reproduzierbar aus der Datenbank.
 - **Patientenausweis** (zwei Seiten DIN A4) aus einem importierten Bericht: Assistent in sechs
   Schritten, Identitätsprüfung über Nachname + Vorname + Geburtsdatum, Konfliktentscheidung je
-  Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie.
+  Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie. Seite 2
+  zeigt die Messwerte der aktuellen und der letzten sechs Untersuchungen anhand der Vorlage
+  `config/patient_card_measurements.php`.
 - Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
   Flugsicherheitstexte) mit eigener Fassung je Ausweis.
 - CLI für Import, PDF-Export, Migrationen und Schema-Erzeugung.
@@ -249,9 +251,8 @@ wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklic
   bestehende Ausweise nicht.
 - Für jeden Bericht können mehrere Ausweisfassungen existieren (`card_version`); jede Fassung
   bleibt erhalten. Die Berichtsansicht listet alle Fassungen mit PDF-Link und Verlauf, die
-  Patientensicht zusätzlich alle Nachsorgeuntersuchungen des Patienten (Seite 2 des Ausweises,
-  gespeist aus den unveränderlichen Bericht-Snapshots; die aktuelle Untersuchung ist immer
-  enthalten).
+  Patientensicht zusätzlich alle Nachsorgeuntersuchungen des Patienten (gespeist aus den
+  unveränderlichen Bericht-Snapshots).
 - Dateiname: `Patientenausweis_<Nachname>_<Vorname>_<Datum>[_Nr<laufende Nummer>].pdf`.
 
 ### Routen
@@ -282,12 +283,16 @@ Patient-ID. Aufbau, Reihenfolge und Beschriftungen folgen der Vorlage `.referenc
 
 ![Ausweis Seite 2](docs/screenshots/22-ausweis-pdf-seite-2.png)
 
-Seite 2: medizinisch-technische Angaben aus dem Bericht sowie „Nachsorgeuntersuchungen" mit
-Datum und – soweit ableitbar – Bericht, Arzt und Zentrum aus den gespeicherten Snapshots. Die
-aktuelle Untersuchung (der Bericht, auf dem der Ausweis beruht) steht immer an erster Stelle,
-danach folgen die früheren Untersuchungen des Patienten. Reicht der Platz nicht, bricht die
-Erzeugung mit einer klaren Meldung ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt
-ausschließlich über den eigenen, abhängigkeitsfreien PDF-Writer.
+Seite 2: Messwerttabelle der aktuellen Untersuchung und der bis zu sechs letzten früheren
+Untersuchungen desselben Patienten. Aufbau, Reihenfolge und Beschriftungen der Zeilen folgen
+1:1 der Vorlage `config/patient_card_measurements.php`; jede Wertspalte ist mit dem Datum der
+zugehörigen Untersuchung überschrieben, die aktuelle Untersuchung steht immer in der ersten
+Spalte und ist als solche gekennzeichnet. Die Werte stammen aus den unveränderlichen
+Bericht-Snapshots der jeweiligen Untersuchung; Zellen ohne Wert bleiben leer. Die Zuordnung
+von Merlin-Parametern (IDs und Bezeichnungen) zu den Zeilen der Vorlage ist zentral in dieser
+Konfigurationsdatei hinterlegt. Reicht der Platz nicht, bricht die Erzeugung mit einer klaren
+Meldung ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt ausschließlich über den eigenen,
+abhängigkeitsfreien PDF-Writer.
 
 ## Kommandozeile (CLI)
 
@@ -396,6 +401,9 @@ erDiagram
 - Schemaänderungen erfolgen ausschließlich über neue Dateien in `database/migrations/`
   (eine Prüfsumme verhindert nachträgliche Änderungen angewendeter Migrationen); danach
   `php bin/build-schema.php` ausführen.
+- Ausweise speichern ihre Layoutfassung als `card_version` im Snapshot (aktuell 2). Die
+  Messwerttabelle wird beim Erzeugen aus den Bericht-Snapshots aufgelöst und mitgespeichert;
+  spätere Änderungen an `config/patient_card_measurements.php` betreffen nur neue Ausweise.
 
 ## PDF-Berichte
 
@@ -426,6 +434,27 @@ Die Zuordnung steht in `config/parameter_mapping.php`:
 
 Nach jeder inhaltlichen Änderung `version` erhöhen und den Web-Container neu bauen
 (`docker compose up -d --build`). Bestehende Berichte bleiben unverändert.
+
+## Messwerttabelle des Patientenausweises erweitern
+
+Seite 2 des Ausweises zeigt die Messwerte der aktuellen Untersuchung und der bis zu sechs
+letzten früheren Untersuchungen desselben Patienten. Aufbau, Reihenfolge und Beschriftungen
+der Zeilen stehen 1:1 in `config/patient_card_measurements.php`:
+
+- `version` – Fassung der Vorlage; bei inhaltlichen Änderungen erhöhen.
+- `columns` – Anzahl der Spalten (7 = aktuelle Untersuchung + sechs frühere).
+- `sections` → `groups` → `rows` – Abschnitte, Gruppen und Zeilen der Tabelle.
+- `label` – Beschriftung der Zeile (Einheit in der Beschriftung, z. B. `Spannung [V]`).
+- `chamber` – optionale Kammerangabe (`RA`, `RV`) in der Spalte vor der Beschriftung.
+- `sources` – woher der Wert kommt: `ids` (Merlin-Parameter-IDs, haben Vorrang) und/oder
+  `names` (Parameterbezeichnungen, exakt, Groß-/Kleinschreibung egal). Mehrere Quellen
+  werden mit `glue` verbunden, z. B. Amplitude und Pulsbreite zu `0.5/0.4`.
+
+Zeilen ohne Quelle und Zellen ohne Wert bleiben leer – es werden keine Werte erfunden.
+Bereits erzeugte Ausweise bleiben unverändert, weil die aufgelöste Tabelle im Snapshot des
+Ausweises gespeichert ist. Eine bestehende Zeile ohne Treffer im Bericht kann unverändert
+bleiben; fehlt der Parameter im Merlin-Export, bleibt die Zelle leer, bis ein Bericht den
+Wert enthält.
 
 ## Sicherheitskonzept
 

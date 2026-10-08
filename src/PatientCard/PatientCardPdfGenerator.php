@@ -20,17 +20,18 @@ use RuntimeException;
  *                und "Elektroden" (Modell / Lokalisation / Impl.Datum), darunter "Hinweise:",
  *                "Achtung Flugsicherheit:" und "Attention Airline Security:";
  *   unten:       "Sonstiges", "Bemerkung", "Arzt", "Naechste Kontrolle in" und der Barcode.
- * Seite 2: vergangene Nachsorgeuntersuchungen.
+ * Seite 2: Messwerttabelle der aktuellen Untersuchung und der letzten sechs frueheren
+ *          Untersuchungen (Vorlage: config/patient_card_measurements.php).
  *
  * Spaltenraster, Schriftgroessen und Zeilenabstaende sind aus der Vorlage abgeleitet.
  * Der Generator arbeitet ausschliesslich mit dem uebergebenen Snapshot und dem uebergebenen
  * Logo. Stammdatenaenderungen koennen ein bereits erzeugtes PDF daher nicht veraendern.
- * Es werden keine medizinischen Bewertungen erzeugt; fehlende Angaben erscheinen als
- * "nicht angegeben".
+ * Es werden keine medizinischen Bewertungen erzeugt; fehlende Stammdaten erscheinen als
+ * "nicht angegeben", Zellen der Messwerttabelle bleiben leer.
  */
 final class PatientCardPdfGenerator
 {
-    public const int SUPPORTED_CARD_VERSION = 1;
+    public const int SUPPORTED_CARD_VERSION = 2;
 
     /** Der Ausweis besteht aus genau zwei Seiten. */
     public const int PAGES = 2;
@@ -73,11 +74,21 @@ final class PatientCardPdfGenerator
     private const float SIZE_TABLE = 7.5;
     private const float SIZE_BARCODE = 6.0;
 
+    /** Schriftgroessen der Messwerttabelle auf Seite 2. */
+    private const float SIZE_GRID = 7.0;
+    private const float SIZE_GRID_SECTION = 9.0;
+    private const float SIZE_GRID_GROUP = 7.2;
+
     // Zeilenhoehen (Vielfaches der Schriftgroesse)
     private const float LINE_SECTION = 1.40;
     private const float LINE_FIELD = 1.49;
     private const float LINE_TEXT = 1.37;
     private const float LINE_SUMMARY = 1.55;
+    private const float LINE_GRID = 1.30;
+
+    /** Spaltenraster der Messwerttabelle: Kammerangabe, Beschriftung, danach je Untersuchung eine Spalte. */
+    private const float GRID_CHAMBER_WIDTH = 17.0;
+    private const float GRID_LABEL_WIDTH = 113.0;
 
     /** Ueberschrift "Betreuendes Nachsorgezentrum:" rueckt enger an den folgenden Adressblock (Vorlage). */
     private const float LINE_CENTER_TITLE = 1.16;
@@ -468,6 +479,13 @@ final class PatientCardPdfGenerator
 
     // --------------------------------------------------------------------- Seite 2
 
+    /**
+     * Seite 2: Messwerttabelle der aktuellen und der letzten frueheren Untersuchungen.
+     *
+     * Die Tabelle wird ausschliesslich aus dem Snapshot gelesen (PatientCardService::snapshot()
+     * Schluessel "measurements"); das Layout kennt die Vorlage selbst nicht. Zellen ohne Wert
+     * bleiben leer, es werden keine Werte erfunden.
+     */
     private function pageTwo(): void
     {
         $this->pdf->addPage();
@@ -501,66 +519,260 @@ final class PatientCardPdfGenerator
         $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.7);
         $y += 12.0;
 
-        $y = $this->sectionTitle($x, $y, $width, 'Nachsorgeuntersuchungen');
-        $this->pdf->text(
-            $x,
-            $y + 0.72 * self::SIZE_NOTICE,
-            'Follow-up examinations',
-            'italic',
-            self::SIZE_NOTICE,
-            self::MUTED,
-        );
-        $y += 12.0;
+        $notes = 'Dargestellt sind die Messwerte der aktuellen Untersuchung und der bis zu sechs letzten '
+            . 'früheren Untersuchungen dieses Patienten, jeweils mit dem Datum der Untersuchung als '
+            . 'Spaltenkopf. Leere Zellen bedeuten, dass der jeweilige Bericht keinen Wert enthält. '
+            . 'Änderungen an Stammdaten oder später importierte Berichte verändern diesen Ausweis nicht.';
+        $notesHeading = 'Hinweise zur Messwerttabelle / Notes on the measurements';
+        $notesHeight = count($this->wrap($notes, $width, 'regular', self::SIZE_NOTICE)) * self::SIZE_NOTICE * self::LINE_TEXT
+            + self::SIZE_SECTION * self::LINE_SECTION
+            + 9.5;
+        $y = $this->measurementGrid($x, $y, $width, self::BOTTOM_LIMIT - $y - $notesHeight);
 
-        $history = $this->card['history'];
-        if ($history === []) {
-            $y = $this->noticeBox(
-                $x,
-                $y,
-                $width,
-                'Es sind keine Nachsorgeuntersuchungen dieses Patienten gespeichert.',
-            );
-        } else {
-            $rows = [];
-            foreach ($history as $entry) {
-                $rows[] = [
-                    (string) $entry['date_display'],
-                    (string) $entry['report_label'],
-                    $this->orEmpty((string) $entry['physician']),
-                    $this->orEmpty((string) $entry['center']),
-                ];
-            }
-            $y = $this->table($x, $y, $width, [
-                ['title' => 'Datum', 'width' => 74.0],
-                ['title' => 'Bericht', 'width' => 150.0],
-                ['title' => 'Arzt', 'width' => 140.0],
-                ['title' => 'Nachsorgezentrum', 'width' => $width - 74.0 - 150.0 - 140.0],
-            ], $rows);
-            $this->pdf->text(
-                $x,
-                $y + 0.72 * self::SIZE_NOTICE,
-                'Die Angaben stammen aus den importierten Nachsorgeberichten und werden unverändert dargestellt.',
-                'italic',
-                self::SIZE_NOTICE,
-                self::MUTED,
-            );
-            $y += 12.0;
-        }
-
-        $y = $this->sectionTitle($x, $y, $width, 'Hinweise zum Verlauf / Notes on the history');
-        $y = $this->paragraph(
-            $x,
-            $y,
-            $width,
-            'Diese Seite dokumentiert die im System vorhandenen Nachsorgeuntersuchungen einschließlich '
-            . 'der aktuellen Untersuchung zum Zeitpunkt der Erstellung des Ausweises. Änderungen an '
-            . 'Stammdaten oder später importierte Berichte verändern diesen Ausweis nicht.',
-            'regular',
-            self::SIZE_NOTICE,
-        );
+        $y = $this->sectionTitle($x, $y + 8.0, $width, $notesHeading);
+        $y = $this->paragraph($x, $y, $width, $notes, 'regular', self::SIZE_NOTICE);
         if ($y > self::BOTTOM_LIMIT) {
             throw new RuntimeException('Seite 2 des Patientenausweises wurde nicht vollstaendig bedruckt.');
         }
+    }
+
+    /**
+     * Messwerttabelle: Beschriftungsspalte, Kammerangabe und je eine Spalte pro Untersuchung.
+     * Die Wertespalten verteilen sich gleichmaessig auf die vorhandenen Untersuchungen.
+     *
+     * Reicht der Platz fuer zweizeilige Zellen nicht aus, werden die Zellen einzeilig gekuerzt,
+     * damit Seite 2 in jedem Fall vollstaendig bedruckt wird.
+     *
+     * @param float $available Hoehe, die der Tabelle bis zum Fuss der Seite zur Verfuegung steht
+     */
+    private function measurementGrid(float $x, float $y, float $width, float $available): float
+    {
+        $measurements = is_array($this->card['measurements'] ?? null) ? $this->card['measurements'] : [];
+        $columns = is_array($measurements['columns'] ?? null) ? array_values($measurements['columns']) : [];
+        $sections = is_array($measurements['sections'] ?? null) ? array_values($measurements['sections']) : [];
+        if ($columns === [] || $sections === []) {
+            return $this->noticeBox($x, $y, $width, 'Es sind keine Messwerte dieses Patienten gespeichert.');
+        }
+
+        $lineHeight = self::SIZE_GRID * self::LINE_GRID;
+        $labelX = $x + self::GRID_CHAMBER_WIDTH;
+        $valueX = $labelX + self::GRID_LABEL_WIDTH;
+        $valueWidth = ($x + $width - $valueX) / count($columns);
+
+        // Spaltenkoepfe: Datum der jeweiligen Untersuchung, die aktuelle Untersuchung zusaetzlich benannt.
+        $header = [];
+        foreach ($columns as $column) {
+            $lines = $this->gridCell(
+                (string) ($column['date_display'] ?? ''),
+                $valueWidth,
+                'bold',
+                self::SIZE_GRID,
+                2,
+            );
+            if (($column['current'] ?? false) === true) {
+                foreach ($this->gridCell('(aktuelle Untersuchung)', $valueWidth, 'italic', self::SIZE_GRID, 2) as $line) {
+                    $lines[] = $line;
+                }
+            }
+            $header[] = $lines;
+        }
+        $headerLines = 0;
+        foreach ($header as $lines) {
+            $headerLines = max($headerLines, count($lines));
+        }
+        $headerHeight = $headerLines * $lineHeight + 2 * self::CELL_PAD + 2.0;
+
+        $elements = [];
+        $height = 0.0;
+        foreach ([2, 1] as $maxLines) {
+            $elements = $this->gridElements($columns, $sections, $valueWidth, $maxLines);
+            $height = $this->gridHeight($elements, $lineHeight);
+            if ($headerHeight + $height <= $available) {
+                break;
+            }
+        }
+
+        $cursor = $valueX;
+        foreach ($header as $lines) {
+            foreach ($lines as $index => $line) {
+                $font = $index === 0 ? 'bold' : 'italic';
+                $this->pdf->text(
+                    $cursor + ($valueWidth - PdfDocument::textWidth($line, $font, self::SIZE_GRID)) / 2,
+                    $y + self::CELL_PAD + $index * $lineHeight + 0.72 * self::SIZE_GRID,
+                    $line,
+                    $font,
+                    self::SIZE_GRID,
+                    $index === 0 ? self::INK : self::MUTED,
+                );
+            }
+            $cursor += $valueWidth;
+        }
+        $y += $headerLines * $lineHeight + 2 * self::CELL_PAD;
+        $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.7);
+        $y += 2.0;
+
+        $first = true;
+        foreach ($elements as $element) {
+            if ($element['kind'] === 'section') {
+                $y += 2.0;
+                $y = $this->sectionTitle($x, $y, $width, (string) $element['label'], self::SIZE_GRID_SECTION);
+                continue;
+            }
+            if ($element['kind'] === 'group') {
+                $this->pdf->text(
+                    $x,
+                    $y + 0.72 * self::SIZE_GRID_GROUP,
+                    (string) $element['label'],
+                    'bold',
+                    self::SIZE_GRID_GROUP,
+                    self::MUTED,
+                );
+                $y += self::SIZE_GRID_GROUP * self::LINE_GRID;
+                continue;
+            }
+
+            if (!$first) {
+                $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.25);
+                $y += 1.5;
+            }
+            $first = false;
+
+            $chamber = (string) $element['chamber'];
+            if ($chamber !== '') {
+                $this->pdf->text(
+                    $x + self::CELL_PAD,
+                    $y + self::CELL_PAD + 0.72 * self::SIZE_GRID,
+                    $chamber,
+                    'bold',
+                    self::SIZE_GRID,
+                    self::INK,
+                );
+            }
+            foreach ($element['label'] as $index => $line) {
+                $this->pdf->text(
+                    $labelX + self::CELL_PAD,
+                    $y + self::CELL_PAD + $index * $lineHeight + 0.72 * self::SIZE_GRID,
+                    $line,
+                    'regular',
+                    self::SIZE_GRID,
+                    self::INK,
+                );
+            }
+            $cursor = $valueX;
+            foreach ($element['cells'] as $lines) {
+                foreach ($lines as $index => $line) {
+                    $this->pdf->text(
+                        $cursor + ($valueWidth - PdfDocument::textWidth($line, 'regular', self::SIZE_GRID)) / 2,
+                        $y + self::CELL_PAD + $index * $lineHeight + 0.72 * self::SIZE_GRID,
+                        $line,
+                        'regular',
+                        self::SIZE_GRID,
+                        self::INK,
+                    );
+                }
+                $cursor += $valueWidth;
+            }
+            $y += count($element['label']) * $lineHeight + 2 * self::CELL_PAD;
+        }
+        return $y + 4.0;
+    }
+
+    /**
+     * Abschnitte, Gruppen und Zeilen der Messwerttabelle mit bereits umbrochenen Zellinhalten.
+     *
+     * @param list<array<string, mixed>> $columns
+     * @param list<array<string, mixed>> $sections
+     * @return list<array{kind: string, label: mixed, chamber?: string, cells?: list<list<string>>}>
+     */
+    private function gridElements(array $columns, array $sections, float $valueWidth, int $maxLines): array
+    {
+        $elements = [];
+        foreach ($sections as $section) {
+            $elements[] = ['kind' => 'section', 'label' => (string) $section['label']];
+            foreach ((array) $section['groups'] as $group) {
+                $elements[] = ['kind' => 'group', 'label' => (string) $group['label']];
+                foreach ((array) $group['rows'] as $row) {
+                    $label = $this->gridCell(
+                        (string) $row['label'],
+                        self::GRID_LABEL_WIDTH - 2 * self::CELL_PAD,
+                        'regular',
+                        self::SIZE_GRID,
+                        $maxLines,
+                    );
+                    $cells = [];
+                    $lines = count($label);
+                    foreach ($columns as $index => $column) {
+                        $cell = $this->gridCell(
+                            (string) ($row['values'][$index] ?? ''),
+                            $valueWidth - 2 * self::CELL_PAD,
+                            'regular',
+                            self::SIZE_GRID,
+                            $maxLines,
+                        );
+                        $cells[] = $cell;
+                        $lines = max($lines, count($cell));
+                    }
+                    // Alle Zellen einer Zeile wachsen auf die Zeilenhoehe der hoechsten Zelle.
+                    $label = array_pad($label, $lines, '');
+                    foreach ($cells as $index => $cell) {
+                        $cells[$index] = array_pad($cell, $lines, '');
+                    }
+                    $elements[] = [
+                        'kind' => 'row',
+                        'label' => $label,
+                        'chamber' => (string) ($row['chamber'] ?? ''),
+                        'cells' => $cells,
+                    ];
+                }
+            }
+        }
+        return $elements;
+    }
+
+    /**
+     * @param list<array{kind: string, label: mixed, chamber?: string, cells?: list<list<string>>}> $elements
+     */
+    private function gridHeight(array $elements, float $lineHeight): float
+    {
+        $height = 0.0;
+        $first = true;
+        foreach ($elements as $element) {
+            if ($element['kind'] === 'section') {
+                $height += 2.0 + self::SIZE_GRID_SECTION * self::LINE_SECTION;
+                continue;
+            }
+            if ($element['kind'] === 'group') {
+                $height += self::SIZE_GRID_GROUP * self::LINE_GRID;
+                continue;
+            }
+            if (!$first) {
+                $height += 1.5;
+            }
+            $first = false;
+            $height += count($element['label']) * $lineHeight + 2 * self::CELL_PAD;
+        }
+        return $height;
+    }
+
+    /**
+     * Zellinhalt der Messwerttabelle: auf die Spaltenbreite umgebrochen und auf die angegebene
+     * Zeilenzahl begrenzt, damit das Raster nicht aus der Seite laeuft.
+     *
+     * @return list<string>
+     */
+    private function gridCell(string $text, float $width, string $font, float $size, int $maxLines): array
+    {
+        $lines = $this->wrap($text, max($width, 1.0), $font, $size);
+        if (count($lines) <= $maxLines) {
+            return $lines;
+        }
+        $lines = array_slice($lines, 0, $maxLines);
+        $last = array_pop($lines) ?? '';
+        while ($last !== '' && PdfDocument::textWidth($last . '...', $font, $size) > $width) {
+            $last = mb_substr($last, 0, -1);
+        }
+        $lines[] = $last . '...';
+        return $lines;
     }
 
     // --------------------------------------------------------------------- Bausteine

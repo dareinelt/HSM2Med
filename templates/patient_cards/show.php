@@ -134,7 +134,10 @@ $practice = trim((string) ($physician['practice'] ?? '') . ' '
 
 <?php if ($history !== []): ?>
 <section class="card">
-    <h2>Frühere Untersuchungen (Seite 2 des Ausweises)</h2>
+    <h2>Frühere Untersuchungen</h2>
+    <p class="hint">Seite 2 des Ausweises zeigt die Messwerte der aktuellen Untersuchung und der bis zu sechs
+        letzten früheren Untersuchungen. Diese Liste ist die vollständige Historie zum Zeitpunkt der
+        Ausweiserstellung.</p>
     <div class="table-scroll">
         <table class="table">
             <thead><tr><th>Datum</th><th>Bericht</th><th>Nachsorgearzt</th><th>Zentrum</th><th>Datei</th></tr></thead>

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\PatientCard\MeasurementTemplate;
+
 /**
  * Baut einen vollstaendigen Ausweis-Snapshot (Struktur aus PatientCardService::snapshot()),
  * damit der PDF-Generator ohne Datenbank getestet werden kann.
@@ -51,8 +53,8 @@ final class PatientCardFactory
     private static function base(): array
     {
         return [
-            'card_version' => 1,
-            'patient_card_version' => '1.0',
+            'card_version' => 2,
+            'patient_card_version' => '2.0',
             'generated_at' => '2026-10-07 08:00:00',
             'sequence_no' => 1,
             'card_no' => 1,
@@ -161,6 +163,7 @@ final class PatientCardFactory
                     'filename' => 'MERLIN__ANN_5809481_2026-01.log',
                 ],
             ],
+            'measurements' => self::measurements(),
             'source' => [
                 'report_id' => 2,
                 'import_id' => 2,
@@ -170,6 +173,49 @@ final class PatientCardFactory
                 'mapping_version' => '1.0',
                 'report_version' => 1,
             ],
+        ];
+    }
+
+    /**
+     * Messwerttabelle fuer Seite 2: die echte Vorlage (config/patient_card_measurements.php),
+     * aufgeloest mit Beispieldaten der aktuellen und zweier frueherer Untersuchungen.
+     *
+     * @return array<string, mixed>
+     */
+    private static function measurements(): array
+    {
+        $template = MeasurementTemplate::default(dirname(__DIR__, 2));
+        $columns = [
+            ['report_id' => 2, 'date' => '2026-10-07', 'date_display' => '07.10.2026', 'current' => true],
+            ['report_id' => 1, 'date' => '2026-04-07', 'date_display' => '07.04.2026', 'current' => false],
+            ['report_id' => 3, 'date' => '2026-01-15', 'date_display' => '15.01.2026', 'current' => false],
+        ];
+        $values = [
+            2 => [
+                'ids' => [
+                    '519' => '2.79', '520' => '3.20', '501' => '90', '533' => '8.4',
+                    '507' => '612', '2721' => '3.1', '2722' => '12.4', '1606' => '0.5', '1607' => '0.4',
+                    '301' => 'DDD', '302' => '60', '303' => '50', '2024' => '130', '406' => '120',
+                    '354' => '50', '2904' => 'Bipolar', '2906' => 'Bipolar', '390' => '250',
+                    '306' => '2.5', '305' => '0.4', '308' => '2.0', '307' => 'Bipolar', '2008' => 'Bipolar',
+                    '309' => '250', '370' => 'On',
+                ],
+                'names' => ['battery status' => 'OK'],
+            ],
+            1 => [
+                'ids' => ['519' => '2.82', '520' => '3.05', '507' => '648', '301' => 'DDD', '302' => '60'],
+                'names' => [],
+            ],
+            3 => [
+                'ids' => [],
+                'names' => ['rv pacing lead impedance' => '701', 'mode' => 'VVI'],
+            ],
+        ];
+        return [
+            'template_version' => $template->version(),
+            'column_count' => $template->columnCount(),
+            'columns' => $columns,
+            'sections' => $template->resolve($columns, $values),
         ];
     }
 }

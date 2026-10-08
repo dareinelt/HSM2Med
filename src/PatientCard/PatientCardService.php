@@ -27,10 +27,10 @@ use RuntimeException;
  */
 final class PatientCardService
 {
-    public const string PATIENT_CARD_VERSION = '1.0';
-    public const int CARD_VERSION = 1;
+    public const string PATIENT_CARD_VERSION = '2.0';
+    public const int CARD_VERSION = 2;
 
-    /** Anzahl der zusaetzlich zur aktuellen Untersuchung auf Seite 2 dargestellten frueheren Untersuchungen. */
+    /** Anzahl der zusaetzlich zur aktuellen Untersuchung in der Ausweishistorie gefuehrten frueheren Untersuchungen. */
     public const int HISTORY_LIMIT = 20;
 
     /** Quellparameter des Merlin-Exports, die nicht in der Parameterzuordnung gefuehrt werden. */
@@ -53,6 +53,7 @@ final class PatientCardService
         private readonly ReportService $reportService,
         private readonly PatientCardPdfGenerator $generator,
         private readonly Clock $clock,
+        private readonly MeasurementTemplate $measurements,
     ) {
     }
 
@@ -262,9 +263,11 @@ final class PatientCardService
             $cardVersion = $this->repository->nextCardVersion($report->id());
             $settings = $this->repository->settingsVersion($settingsVersionId) ?? [];
             $settings = $this->withLogoMetadata($settings);
-            $history = $this->historyEntries($patientId, $report, $settings);
+            $pastReports = $this->repository->pastReports($patientId, $report->id(), self::HISTORY_LIMIT);
+            $history = $this->historyEntries($report, $settings, $pastReports);
+            $measurements = $this->measurementTable($report, $pastReports);
 
-            $snapshot = $this->snapshot($input, $report, $values, $settings, $settingsVersionId, $history, $sequence, $cardVersion, $now);
+            $snapshot = $this->snapshot($input, $report, $values, $settings, $settingsVersionId, $history, $measurements, $sequence, $cardVersion, $now);
             $logo = $this->logoImage($settings);
             $generatedAt = $this->clock()->now();
             $pdf = $this->generator->generate($snapshot, $logo, $generatedAt);
@@ -360,6 +363,7 @@ final class PatientCardService
 
     /**
      * @param list<array<string, mixed>> $history
+     * @param array<string, mixed> $measurements
      * @return array<string, mixed>
      */
     private function snapshot(
@@ -369,6 +373,7 @@ final class PatientCardService
         array $settings,
         int $settingsVersionId,
         array $history,
+        array $measurements,
         int $sequence,
         int $cardVersion,
         string $now,
@@ -456,6 +461,7 @@ final class PatientCardService
                 'control_physician' => $values['control_physician'],
             ],
             'history' => $history,
+            'measurements' => $measurements,
             'source' => [
                 'report_id' => $report->id(),
                 'import_id' => (int) $report->report['import_id'],
@@ -469,17 +475,17 @@ final class PatientCardService
     }
 
     /**
-     * Nachsorgeuntersuchungen fuer Seite 2 des Ausweises. Die aktuelle Untersuchung – der
+     * Nachsorgeuntersuchungen fuer die Ausweishistorie. Die aktuelle Untersuchung – der
      * Bericht, auf dem der Ausweis beruht – steht immer an erster Stelle, danach folgen die
      * bereits gespeicherten frueheren Untersuchungen.
      *
      * @param array<string, mixed> $settings
+     * @param list<array<string, mixed>> $reports
      * @return list<array<string, mixed>>
      */
-    private function historyEntries(int $patientId, ReportData $report, array $settings): array
+    private function historyEntries(ReportData $report, array $settings, array $reports): array
     {
         $currentId = $report->id();
-        $reports = $this->repository->pastReports($patientId, $currentId, self::HISTORY_LIMIT);
         $ids = [$currentId];
         foreach ($reports as $row) {
             $ids[] = (int) $row['id'];
@@ -511,6 +517,61 @@ final class PatientCardService
             ];
         }
         return $entries;
+    }
+
+    /**
+     * Messwerttabelle fuer Seite 2: die Vorlage aus config/patient_card_measurements.php mit den
+     * Werten der jeweiligen Untersuchung. Die Aufloesung wird im Snapshot festgehalten, damit ein
+     * bereits erzeugter Ausweis unveraendert bleibt.
+     *
+     * @param list<array<string, mixed>> $pastReports
+     * @return array<string, mixed>
+     */
+    private function measurementTable(ReportData $report, array $pastReports): array
+    {
+        $columns = $this->measurementColumns($report, $pastReports);
+        $values = $this->repository->measurementValues(
+            array_map(static fn (array $column): int => $column['report_id'], $columns),
+            $this->measurements->parameterIds(),
+            $this->measurements->parameterNames(),
+        );
+
+        return [
+            'template_version' => $this->measurements->version(),
+            'column_count' => $this->measurements->columnCount(),
+            'columns' => $columns,
+            'sections' => $this->measurements->resolve($columns, $values),
+        ];
+    }
+
+    /**
+     * Spalten der Messwerttabelle: die aktuelle Untersuchung zuerst, danach die letzten
+     * frueheren Untersuchungen desselben Patienten (neueste zuerst).
+     *
+     * @param list<array<string, mixed>> $pastReports
+     * @return list<array{report_id: int, date: ?string, date_display: string, current: bool}>
+     */
+    private function measurementColumns(ReportData $report, array $pastReports): array
+    {
+        $currentDate = $this->reportDate($report);
+        $columns = [[
+            'report_id' => $report->id(),
+            'date' => $currentDate,
+            'date_display' => PatientCardInput::formatDate($currentDate),
+            'current' => true,
+        ]];
+
+        foreach (array_slice($pastReports, 0, $this->measurements->previousCount()) as $row) {
+            $date = $row['session_timestamp'] ?? $row['interrogation_timestamp'] ?? $row['created_at'];
+            $date = $date === null ? null : substr((string) $date, 0, 10);
+            $columns[] = [
+                'report_id' => (int) $row['id'],
+                'date' => $date,
+                'date_display' => PatientCardInput::formatDate($date),
+                'current' => false,
+            ];
+        }
+        return $columns;
     }
 
     private function ensureSettingsVersion(string $now): int
