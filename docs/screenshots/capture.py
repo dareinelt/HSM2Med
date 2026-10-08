@@ -109,6 +109,29 @@ def logo_png(width: int = 320, height: int = 96) -> bytes:
     )
 
 
+def pdf_pages(tmp: Path, data: bytes, stem: str) -> int:
+    """Seitenzahl eines PDFs ueber pdfinfo."""
+
+    path = tmp / f"{stem}.pdf"
+    path.write_bytes(data)
+    result = subprocess.run(["pdfinfo", str(path)], check=True, capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if line.startswith("Pages:"):
+            return int(line.split(":", 1)[1].strip())
+    raise RuntimeError("pdfinfo liefert keine Seitenzahl")
+
+
+def pdf_text(tmp: Path, data: bytes, stem: str) -> str:
+    """Textebene eines PDFs ueber pdftotext."""
+
+    path = tmp / f"{stem}.pdf"
+    path.write_bytes(data)
+    result = subprocess.run(
+        ["pdftotext", "-layout", str(path), "-"], check=True, capture_output=True, text=True
+    )
+    return result.stdout
+
+
 def render_pdf(tmp: Path, data: bytes, names: list[str]) -> None:
     """Rendert die ersten len(names) Seiten eines PDFs als PNG-Screenshots."""
 
@@ -259,6 +282,8 @@ def main() -> int:
         page.fill("input[name=city]", "Musterstadt")
         page.fill("input[name=phone]", "01234 567890")
         page.fill("input[name=device_implant_location]", "links pectoral")
+        page.select_option("select[name=mrt_compatibility]", "MRT-bedingt tauglich")
+        page.fill("input[name=mrt_compatibility_note]", "Kontrolle der Sonde jährlich")
         shot(page, "16-ausweis-assistent-schritt2")
 
         page.click("[data-wizard-next]")
@@ -325,6 +350,17 @@ def main() -> int:
         directory = Path(tmp)
         render_pdf(directory, pdf_bytes, ["12-pdf-seite-1", "12-pdf-seite-2", "12-pdf-seite-3"])
         render_pdf(directory, card_pdf_bytes, ["22-ausweis-pdf-seite-1", "22-ausweis-pdf-seite-2"])
+
+        # Harte Anforderung: Der Ausweis umfasst genau zwei Seiten, Seite 1 nennt die MRT-Tauglichkeit.
+        pages = pdf_pages(directory, card_pdf_bytes, "22-ausweis-pruefung")
+        if pages != 2:
+            print(f"Ausweis-PDF hat {pages} Seiten statt 2.", file=sys.stderr)
+            return 1
+        text = pdf_text(directory, card_pdf_bytes, "22-ausweis-pruefung")
+        for needle in ("MRT-Tauglichkeit:", "MRT-bedingt tauglich"):
+            if needle not in text:
+                print(f"Angabe fehlt im Ausweis-PDF: {needle}", file=sys.stderr)
+                return 1
 
     return 0
 

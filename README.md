@@ -53,7 +53,8 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   analog zu Berichten aus dem Import oder Patientenausweisen.
 - **Patientenausweis** (zwei Seiten DIN A4) aus einem importierten Bericht: Assistent in sechs
   Schritten, Identitätsprüfung über Nachname + Vorname + Geburtsdatum, Konfliktentscheidung je
-  Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie. Seite 2
+  Feld, zwei ausdrückliche Bestätigungen, unveränderliche PDF-Snapshots und Historie. Seite 1
+  nennt unter anderem die MRT-Tauglichkeit (Auswahlwert mit optionaler Zusatzangabe). Seite 2
   zeigt die Messwerte der aktuellen und der letzten sechs Untersuchungen anhand der Vorlage
   `config/patient_card_measurements.php`.
 - Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
@@ -280,7 +281,10 @@ der Berichtsansicht):
 
 **3. Assistent in sechs Schritten** (`/patient-cards/reports/{id}`) – Schritt 1 Patient
 identifizieren, 2 Patientendaten ergänzen, 3 Notfallkontakt, 4 Hausarzt, 5 Nachsorge und
-Kontrolle, 6 Zusammenfassung und Bestätigung:
+Kontrolle, 6 Zusammenfassung und Bestätigung. In Schritt 2 stehen neben Adresse, Telefon und
+Implantationsort auch die **MRT-Tauglichkeit** (Auswahl aus *MRT-tauglich*, *MRT-bedingt
+tauglich*, *nicht MRT-tauglich*, *unbekannt* oder „nicht angegeben") und eine optionale
+Zusatzangabe (max. 120 Zeichen) bereit; beide Angaben erscheinen auf Seite 1 des Ausweises:
 
 ![Assistent Schritt 1](docs/screenshots/15-ausweis-assistent-schritt1.png)
 
@@ -357,10 +361,13 @@ wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklic
 
 Seite 1: Kopfbereich mit Logo, Ausweistitel, Patientendaten (Identitätsangaben), Notfallkontakt,
 Hausarzt, betreuendem Nachsorgezentrum, Implantate-/Elektroden-Tabellen (Modell, Impl.Ort bzw.
-Lokalisation, Impl.Datum), Hinweis- und Flugsicherheitstexten (deutsch/englisch) sowie dem
+Lokalisation, Impl.Datum), **MRT-Tauglichkeit** (Auswahlwert, optional mit Zusatzangabe),
+Hinweis- und Flugsicherheitstexten (deutsch/englisch) sowie dem
 Abschlussblock „Sonstiges/Bemerkung/Arzt/Nächste Kontrolle in“ mit Code-39-Barcode der
 Patient-ID. Aufbau, Reihenfolge und Beschriftungen folgen der Vorlage `.reference/idcard_ann.png`
-(Schwarz auf Weiß, ohne rotes Achtung-Feld).
+(Schwarz auf Weiß, ohne rotes Achtung-Feld). Der Ausweis ist dauerhaft auf **zwei Seiten**
+begrenzt: Seite 1 wird beim Erzeugen gegen die Seitengrenze geprüft, die MRT-Zusatzangabe wird
+dafür bei Bedarf gekürzt; eine dritte Seite wird nie erzeugt.
 
 ![Ausweis Seite 2](docs/screenshots/22-ausweis-pdf-seite-2.png)
 

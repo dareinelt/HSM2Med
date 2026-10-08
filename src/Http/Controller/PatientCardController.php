@@ -303,7 +303,8 @@ final class PatientCardController extends Controller
         foreach (array_keys($errors) as $field) {
             return match ($field) {
                 'last_name', 'first_name', 'date_of_birth', 'patient_id' => 1,
-                'street', 'postal_code', 'city', 'phone', 'indication', 'device_implant_location' => 2,
+                'street', 'postal_code', 'city', 'phone', 'indication', 'device_implant_location',
+                'mrt_compatibility', 'mrt_compatibility_note' => 2,
                 'emergency_contact_name', 'emergency_contact_phone' => 3,
                 'physician_name', 'physician_practice', 'physician_postal_code', 'physician_city', 'physician_phone' => 4,
                 'control_physician', 'next_control_date' => 5,

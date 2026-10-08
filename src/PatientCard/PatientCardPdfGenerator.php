@@ -40,6 +40,9 @@ final class PatientCardPdfGenerator
     public const int MAX_NOTICE_CHARS = 500;
     public const int MAX_FLIGHT_NOTICE_CHARS = 300;
 
+    /** Maximale Laenge des Anzeigetextes der MRT-Tauglichkeit auf Seite 1 (Auswahlwert plus Zusatzangabe). */
+    public const int MAX_MRT_CHARS = 160;
+
     private const float MARGIN_X = 42.0;
     private const float CONTENT_WIDTH = PdfDocument::PAGE_WIDTH - 2 * self::MARGIN_X;
     private const float BOTTOM_LIMIT = PdfDocument::PAGE_HEIGHT - 60.0;
@@ -319,6 +322,10 @@ final class PatientCardPdfGenerator
             }
             $y = $this->table($x, $y, $width, self::leadColumns($width), $rows);
         }
+
+        $y += self::SECTION_GAP;
+        $y = $this->sectionTitle($x, $y, $width, 'MRT-Tauglichkeit:');
+        $y = $this->paragraph($x, $y, $width, $this->mrtText($device), 'bold', self::SIZE_FIELD, self::INK, self::LINE_FIELD);
 
         $y += self::SECTION_GAP;
         $y = $this->sectionTitle($x, $y, $width, 'Hinweise:', self::SIZE_NOTICE_TITLE);
@@ -899,6 +906,32 @@ final class PatientCardPdfGenerator
             $y += max(count($labelLines), count($valueLines)) * $lineHeight;
         }
         return $y;
+    }
+
+    /**
+     * Anzeigetext der MRT-Tauglichkeit: Auswahlwert und optionale Zusatzangabe in Klammern.
+     * Der Text wird begrenzt, damit Seite 1 nicht ueberlaeuft (Ausweis bleibt bei zwei Seiten).
+     *
+     * @param array<string, mixed> $device
+     */
+    private function mrtText(array $device): string
+    {
+        $value = trim((string) ($device['mrt_compatibility'] ?? ''));
+        $note = trim((string) ($device['mrt_compatibility_note'] ?? ''));
+        if ($value === '' && $note === '') {
+            return self::EMPTY;
+        }
+        if ($note === '') {
+            $text = $value;
+        } elseif ($value === '') {
+            $text = $note;
+        } else {
+            $text = sprintf('%s (%s)', $value, $note);
+        }
+        if (mb_strlen($text) > self::MAX_MRT_CHARS) {
+            $text = rtrim(mb_substr($text, 0, self::MAX_MRT_CHARS - 3)) . '...';
+        }
+        return $text;
     }
 
     /**

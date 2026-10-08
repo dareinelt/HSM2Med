@@ -191,6 +191,60 @@ final class PatientCardViewTest extends DatabaseTestCase
         $this->assertContains('value="LASTNAME"', $response->body);
         $this->assertContains('Nachsorgezentrum Beispielstadt', $response->body);
         $this->assertContains('Ja, dies ist der richtige Patient.', $response->body);
+        // MRT-Tauglichkeit: Auswahlfeld mit allen Werten plus Zusatzangabe
+        $this->assertContains('name="mrt_compatibility"', $response->body);
+        $this->assertContains('MRT-Tauglichkeit: Zusatzangabe', $response->body);
+        foreach (PatientCardInput::MRT_VALUES as $mrtValue) {
+            $this->assertContains('>' . $mrtValue . '</option>', $response->body);
+        }
+    }
+
+    /** MRT-Tauglichkeit wird gespeichert und in Assistent, Zusammenfassung und Detailansicht angezeigt. */
+    public function testWizardAndDetailShowMrtCompatibility(): void
+    {
+        $this->configureSettings();
+        $outcome = $this->importSample();
+        $service = $this->service();
+        $wizard = $service->wizard($outcome->reportId);
+        $result = $service->create(
+            PatientCardInput::fromPost($this->post([
+                'mrt_compatibility' => 'MRT-bedingt tauglich',
+                'mrt_compatibility_note' => 'Nur mit Auflagen.',
+            ])),
+            $wizard['report'],
+            $wizard['masterData'],
+        );
+
+        // Zusammenfassung des Assistenten (Schritt 6) zeigt den Wert
+        $summary = $this->cards()->wizard(
+            new Request('GET', '/patient-cards/reports/' . $outcome->reportId, ['step' => '6']),
+            ['id' => (string) $outcome->reportId],
+        );
+        $this->assertContains('MRT-bedingt tauglich (Nur mit Auflagen.)', $summary->body);
+
+        // Detailansicht zeigt die Angabe aus dem Snapshot
+        $detail = $this->cards()->show(
+            new Request('GET', '/patient-cards/' . $result['card_id']),
+            ['id' => (string) $result['card_id']],
+        );
+        $this->assertContains('MRT-Tauglichkeit', $detail->body);
+        $this->assertContains('MRT-bedingt tauglich (Nur mit Auflagen.)', $detail->body);
+    }
+
+    /** Unbekannter Auswahlwert: 422 und kein Ausweis. */
+    public function testWizardRejectsUnknownMrtValue(): void
+    {
+        $this->configureSettings();
+        $outcome = $this->importSample();
+
+        $response = $this->cards()->generate(
+            new Request('POST', '/patient-cards/reports/' . $outcome->reportId, [], $this->post(['mrt_compatibility' => 'irgendwie tauglich'])),
+            ['id' => (string) $outcome->reportId],
+        );
+
+        $this->assertSame(422, $response->status);
+        $this->assertContains('MRT-Tauglichkeit', $response->body);
+        $this->assertSame(0, $this->rowCount('patient_cards'));
     }
 
     /** Konflikt zwischen Eingabe und bestaetigten Angaben: 422 mit Entscheidungstabelle. */

@@ -77,6 +77,8 @@ final class PatientCardTest extends DatabaseTestCase
             'phone' => '01234/56789',
             'indication' => 'Bradykardie',
             'device_implant_location' => 'links pektoral',
+            'mrt_compatibility' => 'MRT-bedingt tauglich',
+            'mrt_compatibility_note' => 'Nur mit Auflagen, jährliche Kontrolle der Sonde.',
             'emergency_contact_name' => 'Angehörige Beispielperson',
             'emergency_contact_phone' => '0170/1234567',
             'physician_name' => 'Dr. med. Hausarzt',
@@ -160,6 +162,7 @@ final class PatientCardTest extends DatabaseTestCase
             'Schrittmacher - Patientenausweis', 'Patient Identification Card',
             'LASTNAME, FIRSTNAME', '21.10.1938', 'Musterstraße 12', '12345 Beispielstadt',
             'Bradykardie', 'Endurity Core', '5809481', 'links pektoral',
+            'MRT-Tauglichkeit:',
             'EEM126412', 'EEL193668',
             'Nachsorgezentrum Beispielstadt', 'Dr. med. Kontrolle', 'Dr. med. Hausarzt',
             'Angehörige Beispielperson', '07.04.2027',
@@ -172,6 +175,16 @@ final class PatientCardTest extends DatabaseTestCase
             $this->assertContains($expected, $text);
         }
 
+        // MRT-Tauglichkeit: Auswahlwert und Zusatzangabe stehen auf Seite 1 und in den Stammdaten.
+        $this->assertContains(
+            'MRT-Tauglichkeit: MRT-bedingt tauglich (Nur mit Auflagen, jährliche Kontrolle der Sonde.)',
+            str_replace("\n", ' ', $text),
+        );
+        $master = $this->pdo->query('SELECT mrt_compatibility, mrt_compatibility_note FROM patient_card_master_data')
+            ->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('MRT-bedingt tauglich', $master['mrt_compatibility']);
+        $this->assertSame('Nur mit Auflagen, jährliche Kontrolle der Sonde.', $master['mrt_compatibility_note']);
+
         // Snapshot
         $snapshot = $this->snapshot($result['card_id']);
         $this->assertSame('2.0', $snapshot['patient_card_version']);
@@ -179,6 +192,8 @@ final class PatientCardTest extends DatabaseTestCase
         $this->assertSame('Musterstraße 12', $snapshot['patient']['street']);
         $this->assertSame('10358141', $snapshot['patient']['patient_identifier']);
         $this->assertSame('Endurity Core', $snapshot['device']['model_name']);
+        $this->assertSame('MRT-bedingt tauglich', $snapshot['device']['mrt_compatibility']);
+        $this->assertSame('Nur mit Auflagen, jährliche Kontrolle der Sonde.', $snapshot['device']['mrt_compatibility_note']);
         $this->assertCount(2, $snapshot['leads']);
         $this->assertSame('Dr. med. Hausarzt', $snapshot['physician']['name']);
         $this->assertSame('2027-04-07', $snapshot['follow_up']['next_control_date']);

@@ -126,6 +126,41 @@ final class PatientCardInputTest extends TestCase
         $this->assertContains('2000', $exception->fieldErrors()['indication']);
     }
 
+    public function testAcceptsOnlyKnownMrtValues(): void
+    {
+        foreach (PatientCardInput::MRT_VALUES as $value) {
+            $input = PatientCardInput::fromPost($this->post([
+                'mrt_compatibility' => $value,
+                'mrt_compatibility_note' => 'Nur mit Auflagen, siehe Ausweis.',
+            ]));
+            $this->assertSame($value, $input->value('mrt_compatibility'));
+            $this->assertSame('Nur mit Auflagen, siehe Ausweis.', $input->value('mrt_compatibility_note'));
+        }
+
+        // Leer bedeutet "nicht angegeben" und ist erlaubt.
+        $input = PatientCardInput::fromPost($this->post(['mrt_compatibility' => '   ']));
+        $this->assertSame('', $input->value('mrt_compatibility'));
+
+        // Unbekannte Werte aus manipulierten Formularen werden abgewiesen.
+        $exception = $this->assertThrows(
+            PatientCardException::class,
+            fn () => PatientCardInput::fromPost($this->post(['mrt_compatibility' => 'MRT-tauglich (selbst gebaut)'])),
+        );
+        $this->assertContains('MRT-Tauglichkeit', $exception->fieldErrors()['mrt_compatibility']);
+    }
+
+    public function testRejectsOverlongMrtNote(): void
+    {
+        $exception = $this->assertThrows(
+            PatientCardException::class,
+            fn () => PatientCardInput::fromPost($this->post([
+                'mrt_compatibility' => 'MRT-bedingt tauglich',
+                'mrt_compatibility_note' => str_repeat('a', PatientCardInput::MAX_MRT_NOTE_CHARS + 1),
+            ])),
+        );
+        $this->assertContains((string) PatientCardInput::MAX_MRT_NOTE_CHARS, $exception->fieldErrors()['mrt_compatibility_note']);
+    }
+
     public function testRejectsInvalidPhoneAndPostalCode(): void
     {
         $exception = $this->assertThrows(

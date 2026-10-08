@@ -57,6 +57,7 @@ final class PatientCardPdfTest extends TestCase
             'Implantate:',
             'Schrittmacher:',
             'Elektroden:',
+            'MRT-Tauglichkeit:',
             'Hinweise:',
             'Achtung Flugsicherheit:',
             'Attention Airline Security:',
@@ -220,11 +221,72 @@ final class PatientCardPdfTest extends TestCase
             'physician' => ['name' => 'Dr. med. Sehrlangerhausarztname', 'practice' => 'Gemeinschaftspraxis für Innere Medizin und Kardiologie am Marktplatz 12'],
             'emergency_contact' => ['name' => 'Sehrlangerangehoerigenname', 'phone' => '+49 30 123456789'],
             'follow_up' => ['control_physician' => 'Dr. med. Sehrlangerkontrollarztname'],
+            // Laengste erlaubte MRT-Angabe: Auswahlwert plus Zusatzangabe am Limit.
+            'device' => [
+                'mrt_compatibility' => 'MRT-bedingt tauglich',
+                'mrt_compatibility_note' => str_repeat('Nur mit Auflagen. ', 6),
+            ],
         ]);
 
         $pdf = (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt());
         $this->assertSame(2, PdfText::pageCount($pdf));
         $this->assertContains('Bradykardie, Vorhofflimmern', str_replace("\n", ' ', PdfText::text($pdf)));
+        $this->assertContains('MRT-Tauglichkeit: MRT-bedingt tauglich (Nur mit Auflagen.', str_replace("\n", ' ', PdfText::text($pdf)));
+    }
+
+    public function testPrintsMrtCompatibilityOnPageOne(): void
+    {
+        $pdf = (new PatientCardPdfGenerator())->generate(PatientCardFactory::snapshot(), null, $this->generatedAt());
+        $pageOne = str_replace("\n", ' ', PdfText::pages($pdf)[0]);
+
+        $this->assertContains(
+            'MRT-Tauglichkeit: MRT-bedingt tauglich (Nur mit Auflagen, jährliche Kontrolle der Sonde.)',
+            $pageOne,
+        );
+        // Die Angabe gehoert auf Seite 1; Seite 2 bleibt die Messwerttabelle.
+        $this->assertSame(2, PdfText::pageCount($pdf));
+        $this->assertNotContains('MRT-Tauglichkeit', PdfText::pages($pdf)[1]);
+    }
+
+    public function testMarksMissingMrtCompatibilityAsNotSpecified(): void
+    {
+        $card = PatientCardFactory::snapshot([
+            'device' => ['mrt_compatibility' => '', 'mrt_compatibility_note' => ''],
+        ]);
+        $pageOne = str_replace("\n", ' ', PdfText::pages(
+            (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt()),
+        )[0]);
+
+        $this->assertContains('MRT-Tauglichkeit: nicht angegeben', $pageOne);
+    }
+
+    public function testPrintsMrtNoteWithoutSelection(): void
+    {
+        $card = PatientCardFactory::snapshot([
+            'device' => ['mrt_compatibility' => '', 'mrt_compatibility_note' => 'Herstellerangaben fehlen.'],
+        ]);
+        $pageOne = str_replace("\n", ' ', PdfText::pages(
+            (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt()),
+        )[0]);
+
+        $this->assertContains('MRT-Tauglichkeit: Herstellerangaben fehlen.', $pageOne);
+    }
+
+    public function testTruncatesOverlongMrtTextInsteadOfAddingAPage(): void
+    {
+        $card = PatientCardFactory::snapshot([
+            'device' => [
+                'mrt_compatibility' => 'MRT-bedingt tauglich',
+                'mrt_compatibility_note' => str_repeat('Sehr lange Zusatzangabe. ', 40),
+            ],
+        ]);
+        $pdf = (new PatientCardPdfGenerator())->generate($card, null, $this->generatedAt());
+        $pageOne = str_replace("\n", ' ', PdfText::pages($pdf)[0]);
+
+        $this->assertSame(2, PdfText::pageCount($pdf), 'Der Ausweis bleibt bei zwei Seiten');
+        $this->assertContains('MRT-Tauglichkeit: MRT-bedingt tauglich (Sehr lange Zusatzangabe.', $pageOne);
+        $this->assertContains('...', $pageOne, 'Zu langer Text wird gekuerzt statt auf Seite 3 zu laufen');
+        $this->assertNotContains(str_repeat('Sehr lange Zusatzangabe. ', 40), $pageOne);
     }
 
     public function testEmbedsLogoAsImage(): void

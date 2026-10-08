@@ -15,7 +15,7 @@ use App\Support\DateInput;
  */
 final class PatientCardInput
 {
-    /** Erlaubte Laengen der Freitextfelder des Assistenten. */
+    /** Freitextfelder des Assistenten: Feld => Maximallaenge. */
     public const array TEXT_FIELDS = [
         'street' => 255,
         'postal_code' => 32,
@@ -23,6 +23,8 @@ final class PatientCardInput
         'phone' => 64,
         'indication' => 2000,
         'device_implant_location' => 255,
+        'mrt_compatibility' => 64,
+        'mrt_compatibility_note' => self::MAX_MRT_NOTE_CHARS,
         'emergency_contact_name' => 255,
         'emergency_contact_phone' => 64,
         'physician_name' => 255,
@@ -33,6 +35,23 @@ final class PatientCardInput
         'control_physician' => 255,
     ];
 
+    /**
+     * Auswahlwerte der MRT-Tauglichkeit (Ausweis Seite 1, Abschnitt "Implantate").
+     *
+     * Die Angabe steht im Merlin-Export nicht zur Verfuegung und wird ausschliesslich hier
+     * gepflegt. Gespeichert wird die Beschriftung selbst, damit der Snapshot des Ausweises
+     * ohne Nachschlagetabelle reproduzierbar bleibt.
+     */
+    public const array MRT_VALUES = [
+        'MRT-tauglich',
+        'MRT-bedingt tauglich',
+        'nicht MRT-tauglich',
+        'unbekannt',
+    ];
+
+    /** Maximallaenge der Zusatzangabe; begrenzt, damit Seite 1 des Ausweises sicher passt. */
+    public const int MAX_MRT_NOTE_CHARS = 120;
+
     /** Felder, die im Vergleich "bisheriger Wert / neuer Wert" erscheinen koennen. */
     public const array MERGE_FIELDS = [
         'street',
@@ -41,6 +60,8 @@ final class PatientCardInput
         'phone',
         'indication',
         'device_implant_location',
+        'mrt_compatibility',
+        'mrt_compatibility_note',
         'emergency_contact_name',
         'emergency_contact_phone',
         'physician_name',
@@ -123,6 +144,10 @@ final class PatientCardInput
             if (str_ends_with($field, 'postal_code') && $value !== ''
                 && preg_match('/^[0-9A-Za-z][0-9A-Za-z\s\-]{0,31}$/u', $value) !== 1) {
                 $errors[$field] = 'Die Postleitzahl enthaelt ungueltige Zeichen.';
+            }
+            if ($field === 'mrt_compatibility' && $value !== '' && !in_array($value, self::MRT_VALUES, true)) {
+                $errors[$field] = 'Bitte einen der angebotenen Werte zur MRT-Tauglichkeit waehlen.';
+                $value = '';
             }
             $values[$field] = $value;
         }

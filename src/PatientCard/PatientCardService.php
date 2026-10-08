@@ -42,6 +42,7 @@ final class PatientCardService
     /** Spalten der bestaetigten Patientenstammdaten (Schutz gegen dynamische SQL-Felder). */
     private const array MASTER_COLUMNS = [
         'street', 'postal_code', 'city', 'phone', 'indication', 'device_implant_location',
+        'mrt_compatibility', 'mrt_compatibility_note',
         'emergency_contact_name', 'emergency_contact_phone',
         'physician_name', 'physician_practice', 'physician_postal_code', 'physician_city', 'physician_phone',
         'control_physician', 'next_control_date', 'next_control_raw',
@@ -206,6 +207,8 @@ final class PatientCardService
             'phone' => 'Telefon',
             'indication' => 'Indikation',
             'device_implant_location' => 'Implantationsort des Geräts',
+            'mrt_compatibility' => 'MRT-Tauglichkeit',
+            'mrt_compatibility_note' => 'MRT-Tauglichkeit: Zusatzangabe',
             'emergency_contact_name' => 'Notfallkontakt: Name',
             'emergency_contact_phone' => 'Notfallkontakt: Telefon',
             'physician_name' => 'Hausarzt: Name',
@@ -435,6 +438,8 @@ final class PatientCardService
                 'implant_date' => (string) ($summaryDevice['Implantation'] ?? ''),
                 'implant_date_display' => (string) ($summaryDevice['Implantation'] ?? ''),
                 'implant_location' => $values['device_implant_location'],
+                'mrt_compatibility' => $values['mrt_compatibility'],
+                'mrt_compatibility_note' => $values['mrt_compatibility_note'],
                 'mode' => (string) ($summaryDevice['Modus'] ?? ''),
                 'base_rate' => (string) ($summaryDevice['Grundfrequenz'] ?? ''),
             ],
