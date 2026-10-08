@@ -328,31 +328,35 @@ final class LetterPdfGenerator
     }
 
     /**
-     * Informationsblock rechts neben dem Anschriftfeld. Zeilen mit leerer Beschriftung entfallen.
+     * Informationsblock rechts neben dem Anschriftfeld. Zeilen mit leerer Beschriftung oder
+     * ohne Häkchen in den Vorlagenoptionen entfallen.
      */
     private function infoBlock(): float
     {
         $master = (array) ($this->letter['master'] ?? []);
         $rows = [
-            ['label_reference', $this->values['document_number']],
-            ['label_patient', $this->values['patient_name']],
-            ['label_birth', $this->values['date_of_birth']],
-            ['label_identifier', $this->values['patient_identifier']],
-            ['label_sequence', $this->values['sequence_no']],
-            ['label_settings', (string) (int) ($master['settings_version'] ?? 1)],
+            ['label_reference', 'show_reference', $this->values['document_number']],
+            ['label_patient', 'show_patient', $this->values['patient_name']],
+            ['label_birth', 'show_birth', $this->values['date_of_birth']],
+            ['label_identifier', 'show_identifier', $this->values['patient_identifier']],
+            ['label_sequence', 'show_sequence', $this->values['sequence_no']],
+            ['label_settings', 'show_settings', (string) (int) ($master['settings_version'] ?? 1)],
         ];
         $reissue = $this->letter['reissue'] ?? null;
         if (is_array($reissue)) {
             $source = trim((string) ($reissue['source_document_number'] ?? ''));
             $sourceDate = trim((string) ($reissue['source_letter_date'] ?? ''));
-            $rows[] = ['label_reissue', $source . ($sourceDate === '' ? '' : ' vom ' . DateInput::format(substr($sourceDate, 0, 10)))];
+            $rows[] = ['label_reissue', 'show_reissue', $source . ($sourceDate === '' ? '' : ' vom ' . DateInput::format(substr($sourceDate, 0, 10)))];
         }
-        $rows[] = ['label_date', $this->values['letter_date']];
+        $rows[] = ['label_date', 'show_date', $this->values['letter_date']];
 
         $y = self::INFO_TOP;
         $lineHeight = self::SIZE_SMALL * 1.45;
         $valueWidth = self::INFO_WIDTH - self::INFO_LABEL_WIDTH;
-        foreach ($rows as [$key, $value]) {
+        foreach ($rows as [$key, $option, $value]) {
+            if (!$this->zoneOption('info_block', $option, true)) {
+                continue;
+            }
             $label = $this->zoneText('info_block', $key);
             if ($label === '') {
                 continue;
@@ -988,9 +992,9 @@ final class LetterPdfGenerator
         return self::clean(LetterTemplate::fill((string) ($this->template['zones'][$zone]['texts'][$key] ?? ''), $this->values));
     }
 
-    private function zoneOption(string $zone, string $key): bool
+    private function zoneOption(string $zone, string $key, bool $default = false): bool
     {
-        return ($this->template['zones'][$zone]['options'][$key] ?? false) === true;
+        return ($this->template['zones'][$zone]['options'][$key] ?? $default) === true;
     }
 
     /**

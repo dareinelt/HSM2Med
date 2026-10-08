@@ -103,8 +103,17 @@ final class LetterTemplate
             ],
             'info_block' => [
                 'label' => 'Informationsblock',
-                'description' => 'Bezugszeichen rechts neben dem Anschriftfeld (ab 125 mm). Leere Beschriftung blendet die Zeile aus.',
-                'options' => [],
+                'description' => 'Bezugszeichen rechts neben dem Anschriftfeld (ab 125 mm). Häkchen blendet die Zeile ein oder aus; eine leere Beschriftung blendet sie ebenfalls aus.',
+                'options' => [
+                    'show_reference' => ['label' => 'Dokumentnummer anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_patient' => ['label' => 'Patient anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_birth' => ['label' => 'Geburtsdatum anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_identifier' => ['label' => 'Patienten-ID anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_sequence' => ['label' => 'Briefnummer anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_settings' => ['label' => 'Stammdatenfassung anzeigen', 'type' => 'bool', 'default' => true],
+                    'show_reissue' => ['label' => 'Neuausfertigung anzeigen (wenn vorhanden)', 'type' => 'bool', 'default' => true],
+                    'show_date' => ['label' => 'Datum anzeigen', 'type' => 'bool', 'default' => true],
+                ],
                 'texts' => [
                     'label_reference' => ['label' => 'Beschriftung Dokumentnummer', 'multiline' => false, 'default' => 'Unser Zeichen'],
                     'label_patient' => ['label' => 'Beschriftung Patient', 'multiline' => false, 'default' => 'Patient'],

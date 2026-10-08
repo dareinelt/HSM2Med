@@ -93,7 +93,7 @@ Standardtexte) und den Fassungsverlauf; das JSON selbst enthält sie nicht.
 | `letterhead` | Briefkopf | `show_logo` | `extra` (mehrzeilig) |
 | `return_address` | Rücksendeangabe | `show` | `text` |
 | `recipient` | Anschriftfeld (Empfänger) | `source` (`text` \| `patient`) | `remark`, `text` (mehrzeilig) |
-| `info_block` | Informationsblock | – | `label_reference`, `label_patient`, `label_birth`, `label_identifier`, `label_sequence`, `label_settings`, `label_reissue`, `label_date` (leer = Zeile ausgeblendet) |
+| `info_block` | Informationsblock | `show_reference`, `show_patient`, `show_birth`, `show_identifier`, `show_sequence`, `show_settings`, `show_reissue`, `show_date` (Häkchen je Zeile) | `label_reference`, `label_patient`, `label_birth`, `label_identifier`, `label_sequence`, `label_settings`, `label_reissue`, `label_date` (leer = Zeile ausgeblendet) |
 | `footer` | Fußzeile und Seitenränder | `fold_marks` | `disclaimer` (mehrzeilig), `page_label` (erlaubt `{page}`, `{pages}`), `continuation` |
 | `appendix` | Anhang | `show` | `heading`, `intro`, `column_parameter`, `column_value`, `notes_heading` |
 | `general` | Allgemein | – | `empty` (Ersatztext für fehlende Angaben) |
