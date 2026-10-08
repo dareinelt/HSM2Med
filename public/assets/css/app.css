@@ -79,6 +79,9 @@ pre.raw, pre.raw-block { white-space: pre-wrap; word-break: break-all; backgroun
 .status-completed { background: var(--ok-bg); color: var(--ok); }
 .status-completed_with_warnings { background: var(--warning-bg); color: var(--warning); }
 .status-completed_with_errors, .status-failed { background: var(--error-bg); color: var(--error); }
+.level-error { background: var(--error-bg); color: var(--error); }
+.level-warning { background: var(--warning-bg); color: var(--warning); }
+.log-entry td { vertical-align: top; }
 .alert { padding: .7rem 1rem; border-radius: 6px; margin: 1rem 0; border: 1px solid transparent; }
 .alert ul { margin: .4rem 0; }
 .alert-success { background: var(--ok-bg); border-color: #b9dcc2; }

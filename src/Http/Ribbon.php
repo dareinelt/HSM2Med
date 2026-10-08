@@ -34,6 +34,7 @@ final class Ribbon
         'letters' => 'Briefe',
         'imports' => 'Importprotokoll',
         'system' => 'Systeminformationen',
+        'logs' => 'Fehlerprotokoll',
     ];
 
     /**
@@ -86,6 +87,7 @@ final class Ribbon
                         'items' => [
                             ['label' => 'Importprotokoll', 'icon' => 'log', 'href' => '/imports', 'title' => 'Alle Importe mit Status und Fehlern', 'match' => []],
                             ['label' => 'Systeminformationen', 'icon' => 'system', 'href' => '/system', 'title' => 'Version, Datenbank und Speicherorte', 'match' => []],
+                            ['label' => 'Fehlerprotokoll', 'icon' => 'warning', 'href' => '/system/logs', 'title' => 'Technische Fehlermeldungen, Suche nach Referenz', 'match' => []],
                         ],
                     ],
                 ],
@@ -217,12 +219,13 @@ final class Ribbon
                 'label' => 'System',
                 'icon' => 'system',
                 'href' => '/system',
-                'sections' => ['system'],
+                'sections' => ['system', 'logs'],
                 'groups' => [
                     [
                         'label' => 'Betrieb',
                         'items' => [
                             ['label' => 'Systeminformationen', 'icon' => 'system', 'href' => '/system', 'title' => 'Version, Datenbank und Speicherorte', 'match' => ['system']],
+                            ['label' => 'Fehlerprotokoll', 'icon' => 'warning', 'href' => '/system/logs', 'title' => 'Technische Fehlermeldungen, Suche nach Referenz', 'match' => ['logs']],
                             ['label' => 'Importprotokoll', 'icon' => 'log', 'href' => '/imports', 'title' => 'Alle Importe mit Status und Fehlern', 'match' => []],
                         ],
                     ],

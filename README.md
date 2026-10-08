@@ -254,6 +254,12 @@ ausdrücklicher Bestätigung erneut importiert werden; Dateien ohne Merlin-Forma
 
 ![Systemstatus](docs/screenshots/08-systemstatus.png)
 
+**5. Fehlerprotokoll** (`/system/logs`, Reiter „System"): zeigt die Einträge des
+Anwendungsprotokolls (`storage/logs/app.log`), neueste zuerst, mit Suche nach Referenz (auch
+Anfang der Referenz), Stufe und Text. Die Fehlerseite verlinkt direkt auf den Eintrag zu ihrer
+Referenz; Ausnahme, Ort und Stacktrace stehen in den technischen Details. Durchsucht werden die
+neuesten 8 MiB des Protokolls.
+
 ## Patientenakte
 
 Patienten können **unabhängig von einem Import** angelegt werden. Damit sind Anamnese,
@@ -826,7 +832,8 @@ bleiben unverändert, weil jede Fassung ihren Inhalt als Snapshot speichert.
 - **Daten:** ausschließlich vorbereitete Statements, strikter SQL-Modus, Ausgabe-Escaping
   aller Werte, nur lokale Weiterleitungen.
 - **Fehler:** in `production` keine technischen Details im Browser, nur eine Referenz-ID;
-  Details stehen im Anwendungsprotokoll (`/var/www/storage/logs/app.log`).
+  Details stehen im Anwendungsprotokoll (`/var/www/storage/logs/app.log`) und sind unter
+  `/system/logs` (Fehlerprotokoll) nach Referenz durchsuchbar.
 
 ## Datenschutz
 
@@ -971,7 +978,7 @@ sämtliche Daten.
 | Upload abgelehnt (Größe) | `UPLOAD_MAX_SIZE` erhöhen, Container neu starten |
 | Upload abgelehnt (Format) | Datei muss 0x1C-Trenner enthalten und auf `.txt`/`.log` enden |
 | „Ungültiges Sicherheitstoken“ | Seite neu laden (Session abgelaufen) |
-| Fehlerseite mit Referenz | Referenz in `docker compose exec web cat /var/www/storage/logs/app.log` suchen |
+| Fehlerseite mit Referenz | „Im Fehlerprotokoll anzeigen" oder Referenz unter `/system/logs` suchen; alternativ `docker compose exec web cat /var/www/storage/logs/app.log` |
 | Port belegt | `WEB_PORT` in `.env` ändern |
 
 ## Projektstruktur
