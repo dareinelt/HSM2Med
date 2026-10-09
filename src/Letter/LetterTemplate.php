@@ -368,6 +368,8 @@ final class LetterTemplate
     {
         return [
             'schema' => self::SCHEMA,
+            'kind' => 'letter',
+            'label' => 'Briefvorlage',
             'type' => $type,
             'types' => self::types(),
             'zones' => self::zoneDefinitions(),

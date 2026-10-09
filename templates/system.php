@@ -24,6 +24,10 @@
             <a class="button" href="/system/letter-templates" target="_blank" rel="noopener"
                title="Feste Texte und Aufbau der Briefe bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Briefvorlage bearbeiten</span></a>
         <?php endif; ?>
+        <?php if ($permitted('/system/patient-card-templates')): ?>
+            <a class="button" href="/system/patient-card-templates" target="_blank" rel="noopener"
+               title="Feste Texte und Aufbau der Patientenausweise bearbeiten – öffnet in einem neuen Tab"><?= $icon('edit') ?><span>Ausweisvorlage bearbeiten</span></a>
+        <?php endif; ?>
         <a class="button" href="#datenschutz"><?= $icon('shield') ?><span>Datenschutz und Betrieb</span></a>
     </div>
 </div>

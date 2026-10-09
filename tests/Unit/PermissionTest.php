@@ -33,7 +33,7 @@ final class PermissionTest extends TestCase
             $this->assertTrue(Permission::description($permission) !== '', 'Beschreibung fehlt: ' . $permission);
             $this->assertTrue(Permission::isKnown($permission));
         }
-        $this->assertSame(13, count(Permission::all()));
+        $this->assertSame(14, count(Permission::all()));
         $this->assertFalse(Permission::isKnown(Permission::ACCOUNT), 'Das eigene Kennwort ist kein Recht.');
         $this->assertFalse(Permission::isKnown('unbekannt'));
         $this->assertSame('', Permission::label('unbekannt'));
@@ -60,6 +60,8 @@ final class PermissionTest extends TestCase
             '/system' => Permission::SYSTEM,
             '/system/settings' => Permission::SYSTEM_SETTINGS,
             '/system/letter-templates' => Permission::LETTER_TEMPLATES,
+            '/system/patient-card-templates' => Permission::PATIENT_CARD_TEMPLATES,
+            '/system/patient-card-templates/preview' => Permission::PATIENT_CARD_TEMPLATES,
             '/system/logs' => Permission::LOGS,
             '/system/users' => Permission::USERS,
             '/system/users/new' => Permission::USERS,
@@ -80,6 +82,7 @@ final class PermissionTest extends TestCase
         $this->assertSame(Permission::IMPORTS, Permission::forPath('/imports'));
         $this->assertSame(Permission::PATIENT_CARD_SETTINGS, Permission::forPath('/patient-cards/settings'));
         $this->assertSame(Permission::LETTER_TEMPLATES, Permission::forPath('/system/letter-templates'));
+        $this->assertSame(Permission::PATIENT_CARD_TEMPLATES, Permission::forPath('/system/patient-card-templates'));
         $this->assertSame(Permission::SYSTEM_SETTINGS, Permission::forPath('/system/settings'));
         $this->assertSame(Permission::USERS, Permission::forPath('/system/users'));
         $this->assertSame(Permission::LOGS, Permission::forPath('/system/logs'));

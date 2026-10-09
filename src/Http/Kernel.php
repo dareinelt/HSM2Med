@@ -14,6 +14,7 @@ use App\Http\Controller\LetterTemplateController;
 use App\Http\Controller\LoginController;
 use App\Http\Controller\PatientCardController;
 use App\Http\Controller\PatientCardSettingsController;
+use App\Http\Controller\PatientCardTemplateController;
 use App\Http\Controller\PatientController;
 use App\Http\Controller\ReportController;
 use App\Http\Controller\SystemController;
@@ -143,6 +144,7 @@ final class Kernel
         $patients = new PatientController($this->app, $this->view);
         $letters = new LetterController($this->app, $this->view);
         $letterTemplates = new LetterTemplateController($this->app, $this->view);
+        $cardTemplates = new PatientCardTemplateController($this->app, $this->view);
         $login = new LoginController($this->app, $this->view);
         $account = new AccountController($this->app, $this->view);
         $users = new UserController($this->app, $this->view);
@@ -198,6 +200,11 @@ final class Kernel
         $router->post('/system/letter-templates/preview', $letterTemplates->preview(...), Permission::LETTER_TEMPLATES);
         $router->get('/system/letter-templates/source', $letterTemplates->source(...), Permission::LETTER_TEMPLATES);
         $router->get('/system/letter-templates/versions/{id}', $letterTemplates->version(...), Permission::LETTER_TEMPLATES);
+        // Ausweisvorlagen: derselbe Vorlageneditor wie fuer die Briefe.
+        $router->get('/system/patient-card-templates', $cardTemplates->editor(...), Permission::PATIENT_CARD_TEMPLATES);
+        $router->post('/system/patient-card-templates', $cardTemplates->save(...), Permission::PATIENT_CARD_TEMPLATES);
+        $router->post('/system/patient-card-templates/preview', $cardTemplates->preview(...), Permission::PATIENT_CARD_TEMPLATES);
+        $router->get('/system/patient-card-templates/versions/{id}', $cardTemplates->version(...), Permission::PATIENT_CARD_TEMPLATES);
         // Benutzerverwaltung: Benutzer, Gruppen und die Rechtematrix.
         $router->get('/system/users', $users->index(...), Permission::USERS);
         $router->get('/system/users/new', $users->newForm(...), Permission::USERS);

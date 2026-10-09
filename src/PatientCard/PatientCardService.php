@@ -55,6 +55,7 @@ final class PatientCardService
         private readonly PatientCardPdfGenerator $generator,
         private readonly Clock $clock,
         private readonly MeasurementTemplate $measurements,
+        private readonly PatientCardTemplateService $templates,
     ) {
     }
 
@@ -269,8 +270,9 @@ final class PatientCardService
             $pastReports = $this->repository->pastReports($patientId, $report->id(), self::HISTORY_LIMIT);
             $history = $this->historyEntries($report, $settings, $pastReports);
             $measurements = $this->measurementTable($report, $pastReports);
+            $template = $this->templates->current();
 
-            $snapshot = $this->snapshot($input, $report, $values, $settings, $settingsVersionId, $history, $measurements, $sequence, $cardVersion, $now);
+            $snapshot = $this->snapshot($input, $report, $values, $settings, $settingsVersionId, $template, $history, $measurements, $sequence, $cardVersion, $now);
             $logo = $this->logoImage($settings);
             $generatedAt = $this->clock()->now();
             $pdf = $this->generator->generate($snapshot, $logo, $generatedAt);
@@ -280,6 +282,7 @@ final class PatientCardService
                 'patient_id' => $patientId,
                 'report_id' => $report->id(),
                 'settings_version_id' => $settingsVersionId,
+                'template_version_id' => (int) $template['id'],
                 'sequence_no' => $sequence,
                 'card_version' => $cardVersion,
                 'last_name' => $input->lastName,
@@ -365,6 +368,24 @@ final class PatientCardService
     }
 
     /**
+     * Friert die beim Erstellen gueltige Ausweisvorlage vollstaendig im Ausweis ein. Spaetere
+     * Aenderungen an der Vorlage duerfen bereits erstellte Ausweise nicht veraendern.
+     *
+     * @param array<string, mixed> $template
+     * @return array{id: int, version_no: int, name: string, content: array<string, mixed>}
+     */
+    private static function frozenTemplate(array $template): array
+    {
+        return [
+            'id' => (int) $template['id'],
+            'version_no' => (int) $template['version_no'],
+            'name' => (string) $template['name'],
+            'content' => is_array($template['content'] ?? null) ? $template['content'] : PatientCardTemplate::default(),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $template aktuelle Fassung der Ausweisvorlage (wird eingefroren)
      * @param list<array<string, mixed>> $history
      * @param array<string, mixed> $measurements
      * @return array<string, mixed>
@@ -375,6 +396,7 @@ final class PatientCardService
         array $values,
         array $settings,
         int $settingsVersionId,
+        array $template,
         array $history,
         array $measurements,
         int $sequence,
@@ -407,6 +429,7 @@ final class PatientCardService
             'sequence_no' => $sequence,
             'card_no' => $cardVersion,
             'settings_version_id' => $settingsVersionId,
+            'template' => self::frozenTemplate($template),
             'settings' => [
                 'center_name' => (string) ($settings['center_name'] ?? ''),
                 'center_address' => (string) ($settings['center_address'] ?? ''),
@@ -577,6 +600,30 @@ final class PatientCardService
             ];
         }
         return $columns;
+    }
+
+    /**
+     * Vorschau-PDF einer (ungespeicherten) Ausweisvorlage mit Beispieldaten.
+     *
+     * Es wird nichts gespeichert und kein Patient beruehrt; die Vorlage wird wie beim
+     * Erzeugen in den Beispieldatensatz eingefroren, damit die Vorschau exakt dem spaeteren
+     * Ausweis entspricht.
+     *
+     * @throws PatientCardException wenn die Vorlage ungueltig ist
+     */
+    public function previewPdf(mixed $templateContent): string
+    {
+        $content = PatientCardTemplate::normalize($templateContent);
+        $settings = $this->withLogoMetadata($this->repository->settings() ?? []);
+        $generatedAt = $this->clock()->now();
+        $snapshot = PatientCardSample::snapshot($settings, $generatedAt, [
+            'id' => 0,
+            'version_no' => 0,
+            'name' => (string) $content['name'],
+            'content' => $content,
+        ]);
+
+        return $this->generator->generate($snapshot, $this->logoImage($settings), $generatedAt);
     }
 
     private function ensureSettingsVersion(string $now): int

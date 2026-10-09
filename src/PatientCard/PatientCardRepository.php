@@ -159,14 +159,15 @@ final class PatientCardRepository extends PatientRepository
     public function insertCard(array $card): int
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO patient_cards (patient_id, report_id, settings_version_id, sequence_no, card_version, last_name, first_name,'
+            'INSERT INTO patient_cards (patient_id, report_id, settings_version_id, template_version_id, sequence_no, card_version, last_name, first_name,'
             . ' date_of_birth, patient_name, follow_up_date, snapshot, pdf_filename, pdf_sha256, pdf_size, pdf_content, created_at)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $card['patient_id'],
             $card['report_id'],
             $card['settings_version_id'],
+            $card['template_version_id'] ?? null,
             $card['sequence_no'],
             $card['card_version'],
             $card['last_name'],
@@ -184,7 +185,7 @@ final class PatientCardRepository extends PatientRepository
         return (int) $this->pdo->lastInsertId();
     }
 
-    private const string CARD_COLUMNS = 'c.id, c.patient_id, c.report_id, c.settings_version_id, c.sequence_no, c.card_version,'
+    private const string CARD_COLUMNS = 'c.id, c.patient_id, c.report_id, c.settings_version_id, c.template_version_id, c.sequence_no, c.card_version,'
         . ' c.last_name, c.first_name, c.date_of_birth, c.patient_name, c.follow_up_date, c.pdf_filename, c.pdf_sha256,'
         . ' c.pdf_size, c.created_at';
 

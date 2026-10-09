@@ -570,6 +570,24 @@ def main() -> int:
         shot(editor, "53-vorlageneditor-fassungen", full_page=False)
         editor.close()
 
+        # Ausweiseditor (System -> Ausweisvorlage bearbeiten, eigener Tab).
+        page.goto(f"{BASE_URL}/system")
+        with context.expect_page() as card_editor_info:
+            page.locator(
+                "a[href='/system/patient-card-templates']", has_text="Ausweisvorlage bearbeiten"
+            ).click()
+        card_editor = card_editor_info.value
+        card_editor.set_viewport_size({"width": 1600, "height": 1000})
+        card_editor.wait_for_load_state()
+        card_editor.wait_for_selector(".te-block")
+        shot(card_editor, "60-ausweiseditor", full_page=False)
+        card_editor.locator(".te-zone--card-page2").first.click()
+        shot(card_editor, "61-ausweiseditor-seite2", full_page=False)
+        card_editor.click("[data-te-action=versions]")
+        card_editor.wait_for_selector("[data-te-versions-dialog][open]")
+        shot(card_editor, "62-ausweiseditor-fassungen", full_page=False)
+        card_editor.close()
+
         # --- Benutzerverwaltung: Konten, Gruppen und Berechtigungsmatrix --------
         page.goto(f"{BASE_URL}/system/users")
         if "Benutzerverwaltung" not in page.content():

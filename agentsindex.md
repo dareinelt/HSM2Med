@@ -60,6 +60,11 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
     `View::permitted()` ab, damit Sperre und Anzeige nie auseinanderlaufen. Kennwörter liegen
     **nur** als `password_hash()` in der Datenbank; der Administrator kommt ausschließlich aus
     `ADMIN_USERNAME`/`ADMIN_PASSWORD` (`.env`), nie aus dem Quelltext.
+13. **Ausweise betten ihre Vorlage ein.** Der Snapshot eines Ausweises enthält die vollständige
+    Ausweisvorlagenfassung (`snapshot.template.content`) und `patient_cards.template_version_id`;
+    `PatientCardPdfGenerator` rendert nur daraus, nie aus der aktuellen Vorlage. Fassungen
+    (`patient_card_template_versions`) werden nie geändert – Speichern legt immer eine neue an.
+    Ausweise ohne Vorlage (vor Migration 014) behalten ihren festen Aufbau.
 
 ---
 
@@ -235,6 +240,7 @@ src/                 Anwendungscode (Namespace App\)
   Http/              Kernel, Router, Request, Response, View, HttpException
     Controller/      Dashboard-, Import-, ImportLog-, Report-, System-,
                      PatientCard-, PatientCardSettingsController,
+                     PatientCardTemplateController,
                      Letter-, LetterTemplateController,
                      Login-, Account-, UserController
   Import/            MerlinParser, ImportValidator, ImportService, ImportArchive,
@@ -246,6 +252,8 @@ src/                 Anwendungscode (Namespace App\)
   Mapping/           ParameterMapping, CategoryAssignment
   PatientCard/       PatientCardService, PatientCardInput, PatientCardRepository,
                      PatientCardSettingsService, PatientCardPdfGenerator,
+                     PatientCardTemplate, PatientCardTemplateService,
+                     PatientCardTemplateRepository, PatientCardSample,
                      PatientCardException, PatientName
   Report/            ReportService, ReportData, ReportSummary(Builder), PdfGenerator
     Pdf/             PdfDocument, ImageData, PngDecoder, font_metrics.php
@@ -307,7 +315,10 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `PatientCardInput` | Serverseitige Prüfung der Assistenteneingaben (`TEXT_FIELDS`, `MERGE_FIELDS`, Bestätigungen, Konfliktentscheidungen, Datums-/Telefon-/PLZ-Format) |
 | `PatientCardRepository` | Alle Statements für Ausweise, Stammdaten, Fassungen und Logos |
 | `PatientCardSettingsService` | Stammdaten laden/speichern (jede Speicherung = neue Fassung, Logo-Deduplizierung per SHA-256) |
-| `PatientCardPdfGenerator` | Zweiseitiges DIN-A4-Layout, prüft `SUPPORTED_CARD_VERSION`, bricht bei Platzmangel ab |
+| `PatientCardPdfGenerator` | Zweiseitiges DIN-A4-Layout aus `template.content` (Rückfall: Standardvorlage), prüft `SUPPORTED_CARD_VERSION`, bricht bei Platzmangel ab |
+| `PatientCardTemplate` | Vorlagenschema des Ausweises: Zonen (`header`, `footer`, `general`), Bausteintypen mit fester Lage (`AREAS`), Platzhalter, `default()`, `normalize()`, `fill()`, `editorDefinition()` (`kind = patient_card`) |
+| `PatientCardTemplateService` / `PatientCardTemplateRepository` | Versionierung: `current()` (legt bei Bedarf Fassung 1 an), `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
+| `PatientCardSample` | Beispieldaten für die PDF-Vorschau der Ausweisvorlage |
 | `PatientCardException` | Validierungs-/Fachfehler mit Feldmeldungen (HTTP 422) |
 | `PatientName` | Zerlegen/Anzeigen von `LASTNAME, FIRSTNAME`, `identityKey()` |
 
@@ -322,11 +333,14 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `LetterSample` | Beispieldaten für Editor-Vorschau |
 | `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`, `generic`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben; der generische Arztbrief hat eine feste Anschrift und ist nur ohne Arztanschrift wählbar |
 
-Der Editor (`templates/letter_templates/editor.php`, eigenständige Seite ohne Layout, CSP-konform
-ohne Inline-Skript) liest seine Daten aus dem JSON-Block `#template-editor-data`; die Logik liegt
-vollständig in `public/assets/js/template-editor.js` (Drag and Drop, Live-Vorschau,
-Speichern per `fetch`). Genaue Referenz zu Aufbau, Datenmodell, Invarianten und
-Erweiterung: **`docs/editor-referenz.md`** – vor Änderungen am Editor oder Vorlagenschema lesen.
+Der Editor wird von zwei Vorlagenarten genutzt: `templates/letter_templates/editor.php` (Briefe)
+und `templates/patient_card_templates/editor.php` (Patientenausweise). Beide sind eigenständige
+Seiten ohne Layout, CSP-konform ohne Inline-Skript, und lesen ihre Daten aus dem JSON-Block
+`#template-editor-data`; die Logik liegt vollständig in `public/assets/js/template-editor.js`
+(Drag and Drop, Live-Vorschau, Speichern per `fetch`). Die Art unterscheidet das Skript an
+`definition.kind` (`letter` oder `patient_card`). Genaue Referenz zu Aufbau, Datenmodell,
+Invarianten und Erweiterung: **`docs/editor-referenz.md`** – vor Änderungen am Editor oder
+Vorlagenschema lesen.
 
 ### `src/Security/`
 
@@ -342,7 +356,7 @@ PNG/JPEG, max. 1 MiB, max. 2000 px, prüft `is_uploaded_file()`),
 
 | Klasse | Verantwortung |
 | --- | --- |
-| `Permission` | Rechtematrix: `CATALOG` (13 Bereiche = Kennungen des Funktionsbandes + `letter_templates` + `users`), `DESCRIPTIONS`, `forPath()` (bindende Reihenfolge: spezielle Pfade vor Präfixen, `/account*` → `null`), `normalize()` |
+| `Permission` | Rechtematrix: `CATALOG` (14 Bereiche = Kennungen des Funktionsbandes + `letter_templates` + `patient_card_templates` + `users`), `DESCRIPTIONS`, `forPath()` (bindende Reihenfolge: spezielle Pfade vor Präfixen, `/account*` → `null`), `normalize()` |
 | `User` | Angemeldete Person: Kennung, Anzeigename, Gruppen, Rechte; `hasPermission()`, `mayManageUsers()`, `groupText()` |
 | `UserInput` | Serverseitige Prüfung (Benutzername kleingeschrieben, Kennwortlänge, Anzeigename, Gruppen, Aktiv-Kennzeichen) |
 | `UserService` | Anmelden (`authenticate()` mit Sperre nach `MAX_FAILED_ATTEMPTS = 5` für `LOCK_MINUTES = 15`), Benutzer anlegen/ändern/`setPassword()`, eigenes Kennwort, Gruppen und Rechte-Matrix, `seedAdmin()`; Regel „der letzte Benutzerverwalter kann sich nicht aussperren“ |
@@ -421,6 +435,10 @@ angemeldete Anfrage mit Hinweis zurück auf `/`.
 | POST | `/system/letter-templates/preview` | `LetterTemplateController::preview` | PDF-Vorschau einer ungespeicherten Vorlage | `letter_templates` |
 | GET | `/system/letter-templates/source` | `LetterTemplateController::source` | Vorlagenquellen als JSON | `letter_templates` |
 | GET | `/system/letter-templates/versions/{id}` | `LetterTemplateController::version` | Fassung als JSON | `letter_templates` |
+| GET | `/system/patient-card-templates` | `PatientCardTemplateController::editor` | Vorlageneditor des Patientenausweises | `patient_card_templates` |
+| POST | `/system/patient-card-templates` | `PatientCardTemplateController::save` | Neue Ausweisvorlagenfassung (JSON, 422 mit `errors`) | `patient_card_templates` |
+| POST | `/system/patient-card-templates/preview` | `PatientCardTemplateController::preview` | PDF-Vorschau einer ungespeicherten Ausweisvorlage | `patient_card_templates` |
+| GET | `/system/patient-card-templates/versions/{id}` | `PatientCardTemplateController::version` | Fassung als JSON | `patient_card_templates` |
 | GET | `/system/users` | `UserController::index` | Benutzerverwaltung (Konten und Gruppen) | `users` |
 | GET | `/system/users/new` | `UserController::newForm` | Benutzer anlegen | `users` |
 | POST | `/system/users` | `UserController::create` | Benutzer speichern | `users` |
@@ -470,7 +488,8 @@ dass beide identisch sind.
 | `patient_card_settings` | Aktuelle Stammdaten (genau eine Zeile `id=1`): Zentrum, Anschrift, drei Texte, `logo_id` |
 | `patient_card_settings_versions` | Unveränderliche Fassung je Speicherung; jeder Ausweis verweist auf seine Fassung |
 | `patient_card_master_data` | Zusammengeführte Angaben je Patient (Adresse, Notfallkontakt, Hausarzt, Kontrolle), eindeutig je Patient |
-| `patient_cards` | Erzeugter Ausweis: Patient/Bericht, `sequence_no`, `card_version`, Snapshot (JSON), PDF als Blob mit SHA-256 und Größe, Dateiname |
+| `patient_card_template_versions` | Unveränderliche Fassung der Ausweisvorlage (`version_no`, `name`, `comment`, `schema_version`, `content` als JSON, `content_sha256`); die höchste Nummer ist die aktuelle Vorlage |
+| `patient_cards` | Erzeugter Ausweis: Patient/Bericht, `sequence_no`, `card_version`, `settings_version_id`, `template_version_id`, Snapshot (JSON, inkl. eingefrorener Vorlage), PDF als Blob mit SHA-256 und Größe, Dateiname |
 | `users` | Benutzerkonten: `username` (ascii_bin, eindeutig), Anzeigename, `password_hash` (niemals Klartext), `is_active`, `failed_attempts`, `locked_until`, `last_login_at`, `password_changed_at` |
 | `user_groups` | Gruppen (Rollen) mit `code`, `label`, `is_system` (nicht löschbar), `sort_order`; vorgegeben: `admin` (10), `mfa` (20), `arzt` (30) |
 | `user_group_members` | Zuordnung Benutzer ↔ Gruppe (`ON DELETE CASCADE`, trägt keine fachlichen Daten) |
@@ -707,7 +726,7 @@ eingesetzt.
 (`db-docs`, `web-docs`) und ruft `docs/screenshots/capture.py` (Playwright/Chromium,
 `pdftoppm`) auf. Produktivdaten werden nicht berührt. Das Skript legt selbst Beispieldaten an
 (Import der Testdatei, Stammdaten inkl. Beispiel-Logo, Patientenausweis) und erzeugt die Bilder
-`01`–`59`. Es meldet sich zuerst über das Anmeldefenster an (Zugangsdaten der
+`01`–`62`. Es meldet sich zuerst über das Anmeldefenster an (Zugangsdaten der
 Dokumentationsinstanz: `ADMIN_USERNAME=docs-admin`, `ADMIN_PASSWORD=docs-screenshot-kennwort`,
 siehe `docker-compose.yml`) und bricht ab, wenn die Oberfläche ohne Anmeldung erreichbar wäre.
 Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht.
@@ -750,6 +769,7 @@ Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht
 | Messzeile auf Ausweis-Seite 2 ergänzen | `config/patient_card_measurements.php` (`sections` → `groups` → `rows` mit `label`, `chamber`, `sources.ids`/`sources.names`, `glue`) anpassen, `version` erhöhen; Generator und Tests bleiben unberührt, bestehende Ausweise unverändert |
 | Briefvorlage erweitern (neuer Baustein/Text/Platzhalter) | `LetterTemplate` (Definition + `default()`), Darstellung in `LetterPdfGenerator`, Editor-Vorschau in `template-editor.js`; bestehende Vorlagenfassungen müssen weiterhin `normalize()` bestehen; Tests in `tests/Unit/LetterTemplateTest.php` |
 | Brief-Layout strukturell ändern | `LetterService::LETTER_VERSION` und `LetterPdfGenerator::SUPPORTED_LETTER_VERSION` erhöhen, alten Zweig erhalten (wie `LegacyLetterPdfGenerator`) |
+| Ausweisvorlage erweitern (neuer Baustein/Text/Platzhalter) | `PatientCardTemplate` (Definition + `default()`), Darstellung in `PatientCardPdfGenerator`, Editor-Vorschau in `template-editor.js`; bestehende Vorlagenfassungen müssen weiterhin `normalize()` bestehen; Tests in `tests/Unit/PatientCardTemplateTest.php` |
 | Template ändern | Rendering im Browser **und** über `tests/Integration/PatientCardViewTest.php` (echter Controller + `View`) prüfen – `php -l` erkennt Template-Fehler nicht |
 | Neues CLI-Werkzeug | `bin/<name>.php` mit `require __DIR__ . '/../src/bootstrap.php'`, `PHP_SAPI !== 'cli'`-Guard, definierte Exit-Codes, README-Abschnitt aktualisieren |
 | Neuer Bereich/Recht | Konstante + `CATALOG` + `DESCRIPTIONS` in `src/User/Permission.php` (Schlüssel **muss** dem Funktionsband entsprechen), `forPath()` ergänzen, Routen in `Kernel::router()` mit dem Recht registrieren, Links mit `$permitted(...)` schützen, Rechte in Migration/`seed-admin`-Startgruppen bedenken, `tests/Unit/PermissionTest.php` |
@@ -771,6 +791,7 @@ Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht
 | `database/migrations/001_initial.sql` | Maßgebliches Schema inkl. Kommentaren zu Snapshot-Grundsätzen |
 | `database/migrations/002_patient_card.sql` | Schema des Patientenausweises (Identitätsschlüssel, Stammdaten und -fassungen, Logos, Ausweise mit PDF-Blob) |
 | `database/migrations/013_users_and_groups.sql` | Schema der Benutzerverwaltung (Benutzer, Gruppen, Mitgliedschaften, Rechtematrix) inkl. der vorgegebenen Gruppen *Admin*, *MFA* und *Arzt* |
+| `database/migrations/014_patient_card_templates.sql` | Versionierte Ausweisvorlagen (`patient_card_template_versions`), `patient_cards.template_version_id`, Recht `patient_card_templates` |
 | `database/schema.sql` | Generiertes Gesamtschema (muss zu den Migrationen passen) |
 | `config/parameter_mapping.php` | Kategorien und Zuordnungsregeln inkl. `version` |
 | `docker-compose.yml` | Dienste, Profile (`test`, `docs`), Netze, Volumes |

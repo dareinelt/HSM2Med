@@ -12,6 +12,8 @@ use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
 use App\PatientCard\PatientCardService;
 use App\PatientCard\PatientCardSettingsService;
+use App\PatientCard\PatientCardTemplateRepository;
+use App\PatientCard\PatientCardTemplateService;
 use App\Security\ImageUploadValidator;
 use Tests\Support\Fixtures;
 use Tests\Support\Images;
@@ -37,6 +39,7 @@ final class PatientCardTest extends DatabaseTestCase
             new PatientCardPdfGenerator(),
             $this->clock,
             MeasurementTemplate::default(dirname(__DIR__, 2)),
+            new PatientCardTemplateService(new PatientCardTemplateRepository($this->pdo), $this->clock),
         );
     }
 

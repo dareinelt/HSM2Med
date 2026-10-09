@@ -36,6 +36,7 @@ final class Ribbon
         'system' => 'Systeminformationen',
         'system_settings' => 'Praxis-Informationen',
         'letter_templates' => 'Briefvorlagen',
+        'patient_card_templates' => 'Ausweisvorlagen',
         'users' => 'Benutzerverwaltung',
         'logs' => 'Fehlerprotokoll',
     ];
@@ -229,7 +230,7 @@ final class Ribbon
                 'label' => 'System',
                 'icon' => 'system',
                 'href' => '/system',
-                'sections' => ['system', 'system_settings', 'logs', 'letter_templates', 'users'],
+                'sections' => ['system', 'system_settings', 'logs', 'letter_templates', 'patient_card_templates', 'users'],
                 'groups' => [
                     [
                         'label' => 'Praxis',
@@ -256,6 +257,7 @@ final class Ribbon
                         'label' => 'Vorlagen',
                         'items' => [
                             ['label' => 'Briefvorlage', 'icon' => 'edit', 'href' => '/system/letter-templates', 'title' => 'Feste Texte und Aufbau der Briefe (DIN 5008) bearbeiten – öffnet in einem neuen Tab', 'match' => ['letter_templates'], 'target' => '_blank'],
+                            ['label' => 'Ausweisvorlage', 'icon' => 'edit', 'href' => '/system/patient-card-templates', 'title' => 'Feste Texte und Aufbau der Patientenausweise bearbeiten – öffnet in einem neuen Tab', 'match' => ['patient_card_templates'], 'target' => '_blank'],
                         ],
                     ],
                     [
