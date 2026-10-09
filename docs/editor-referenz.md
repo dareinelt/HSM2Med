@@ -1,8 +1,13 @@
-# Referenz: Vorlageneditor für Briefe (DIN 5008)
+# Referenz: Vorlageneditor für Briefe (DIN 5008) und Ausweise
 
 Technische Referenz für Entwickler und Agenten. Sie beschreibt Aufbau, Datenmodell, Datenfluss,
 Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender steht im
-[README](../README.md) (Abschnitt Briefe).
+[README](../README.md) (Abschnitte Briefe und Patientenausweise).
+
+Der Editor ist für zwei Vorlagenarten im Einsatz. Abschnitte 1–10 beschreiben die **Briefvorlage**
+(`kind = letter`); Abschnitt 11 die **Ausweisvorlage** (`kind = patient_card`), die dasselbe
+Markup, dasselbe Stylesheet und dasselbe Skript nutzt und nur andere Zonen, Bausteine und
+Platzhalter mitbringt.
 
 ![Vorlageneditor](screenshots/51-vorlageneditor.png)
 
@@ -43,6 +48,16 @@ Regeln und Erweiterungspunkte des Vorlageneditors. Die Bedienung für Anwender s
 | `tests/Integration/LetterTemplateMigrationTest.php` | Bestehende Installationen erhalten getrennte Vorlagen und `{salutation}` |
 | `tests/Integration/LetterViewTest.php` | `testTemplateEditorEndpoints` (Seite, Speichern, Konflikt, Vorschau, Fassung), `testTemplateEditorSeparatesRecipientTypes` |
 | `tests/Integration/LetterTest.php` | `testRegenerateWithOriginalOrCurrentTemplate`, `testLegacyLetterIsRegeneratedWithLegacyLayout` |
+| `src/PatientCard/PatientCardTemplate.php` | **Single Source of Truth** der Ausweisvorlage (Abschnitt 11) |
+| `src/PatientCard/PatientCardTemplateService.php` | Aktuelle Fassung der Ausweisvorlage (legt bei Bedarf Fassung 1 an), `save()` mit Konfliktprüfung |
+| `src/PatientCard/PatientCardTemplateRepository.php` | SQL der Ausweisfassungen; nur INSERT |
+| `src/Http/Controller/PatientCardTemplateController.php` | Editor-Seite, Speichern (JSON), PDF-Vorschau, Fassung laden (JSON) |
+| `templates/patient_card_templates/editor.php` | Markup der Ausweisvorlagen-Seite; gleiche `data-te-*`-Verträge wie die Briefvorlage |
+| `src/PatientCard/PatientCardSample.php` | Beispieldaten für die PDF-Vorschau des Ausweises |
+| `src/PatientCard/PatientCardPdfGenerator.php` | Setzt die Vorlage in das Ausweis-PDF um |
+| `database/migrations/014_patient_card_templates.sql` | Tabelle `patient_card_template_versions`; `patient_cards.template_version_id`; Recht `patient_card_templates` |
+| `tests/Unit/PatientCardTemplateTest.php` | Standardvorlage, `normalize()`, Platzhalter, PDF folgt Reihenfolge und Texten |
+| `tests/Integration/PatientCardTemplateViewTest.php` | Editor-Seite, Speichern, Konflikt, Vorschau, eingefrorene Vorlage im Ausweis |
 
 ## 3. Routen
 
@@ -56,6 +71,16 @@ Alle Routen liegen hinter der Anmeldung; POST verlangt das CSRF-Token (`_csrf`).
 | GET | `/system/letter-templates/source` | `source()` | Aktuelle Fassung einer Art als JSON (für „Übernehmen aus Vorlage"); `?type=` |
 | GET | `/system/letter-templates/versions/{id}` | `version()` | JSON `{version}`; 404 bei unbekannter Fassung |
 | POST | `/letters/{id}/regenerate` | `LetterController::regenerate()` | Neuausfertigung, Feld `template=original|current`, für `current` zusätzlich `confirm_current_template=1` |
+
+Die Ausweisvorlagen liegen unter dem eigenen Recht `patient_card_templates` (Abschnitt 11); sie
+kennen keine Empfängerart, das Feld `type` entfällt.
+
+| Methode | Pfad | Controller | Antwort |
+| --- | --- | --- | --- |
+| GET | `/system/patient-card-templates` | `PatientCardTemplateController::editor()` | HTML-Seite (ohne Funktionsband der Hauptanwendung) |
+| POST | `/system/patient-card-templates` | `save()` | JSON `{ok, message, current, versions}`; Fehler: 422 `{ok:false, message, errors}` |
+| POST | `/system/patient-card-templates/preview` | `preview()` | PDF (inline, neuer Tab); Fehler: 422-HTML-Seite mit Feldfehlern |
+| GET | `/system/patient-card-templates/versions/{id}` | `version()` | JSON `{version}`; 404 bei unbekannter Fassung |
 
 Request-Felder für Speichern/Vorschau: `content` (Vorlage als JSON-Text, max. 512 KiB, Tiefe 32),
 `comment` (Änderungsnotiz, max. 500 Zeichen, nur Speichern), `base_version_id` (Fassung, auf der
@@ -395,3 +420,114 @@ docker compose -p hsm2med-test --profile test down -v
 docker compose -p hsm2med-docs --profile docs run --rm screenshots  # Screenshots 51–53 (Editor)
 docker compose -p hsm2med-docs --profile docs down -v
 ```
+
+## 11. Zweiter Editor: Ausweisvorlagen (`kind = patient_card`)
+
+Die Vorlagen des Patientenausweises nutzen **denselben** Editor: gleiches Markup
+(`templates/patient_card_templates/editor.php` mit denselben `data-te-*`-Verträgen), gleiches
+Stylesheet (`template-editor.css`, zusätzlich `te-body--card` für die Ausweis-Vorschau) und
+dasselbe Skript (`template-editor.js`). Das Skript unterscheidet die Art an `definition.kind`
+(`'letter'` oder `'patient_card'`); bei `patient_card` entfallen die Empfängerarten
+(`types = []`, kein `data-te-type`, kein Menü *Übernehmen aus Vorlage*) und die Seitenvorschau
+stellt zwei A4-Seiten mit Spalten, Fußblock und Messwerttabelle dar.
+
+![Ausweiseditor](screenshots/60-ausweiseditor.png)
+
+![Bereich auf Seite 2 im Ausweiseditor](screenshots/61-ausweiseditor-seite2.png)
+
+![Fassungen der Ausweisvorlage](screenshots/62-ausweiseditor-fassungen.png)
+
+| Aspekt | Briefvorlage | Ausweisvorlage |
+| --- | --- | --- |
+| Speichertabelle | `letter_template_versions` | `patient_card_template_versions` |
+| Fassung je | Empfängerart (`template_type`) | – (genau ein Verlauf) |
+| Recht | `letter_templates` | `patient_card_templates` |
+| Routen | `/system/letter-templates…` | `/system/patient-card-templates…` |
+| Vorschau-Daten | `LetterSample` | `PatientCardSample` |
+| PDF | `LetterPdfGenerator` | `PatientCardPdfGenerator` |
+
+### 11.1 Dateien und Klassen
+
+| Datei | Rolle |
+| --- | --- |
+| `src/PatientCard/PatientCardTemplate.php` | Zonen, Bausteine, Bereiche (`AREAS`), Platzhalter, Grenzen, Standardvorlage, `normalize()`, `encode()`, `fill()`, `editorDefinition()` |
+| `src/PatientCard/PatientCardTemplateService.php` | `current()` (legt bei Bedarf Fassung 1 an), `versions()`, `save($content, $comment, $baseVersionId)`, `present()` |
+| `src/PatientCard/PatientCardTemplateRepository.php` | SQL; Fassungen werden nur eingefügt, nie geändert |
+| `src/Http/Controller/PatientCardTemplateController.php` | `editor()`, `save()`, `preview()`, `version()`; `editorData()` baut den JSON-Datenblock |
+| `src/PatientCard/PatientCardSample.php` | Beispieldaten für die Vorschau (`placeholderValues()`, `snapshot()`) |
+| `src/PatientCard/PatientCardPdfGenerator.php` | `template()` liest die eingefrorene Vorlage aus dem Snapshot (Rückfall: Standardvorlage) |
+| `src/PatientCard/PatientCardService.php` | `create()` friert die Vorlage ein (`frozenTemplate()`), `previewPdf()` für die Vorschau |
+| `templates/patient_card_templates/editor.php` | Seite des Ausweis-Editors |
+| `tests/Unit/PatientCardTemplateTest.php` | `normalize()`, Platzhalter, Bereiche, PDF folgt Reihenfolge und Texten |
+| `tests/Integration/PatientCardTemplateViewTest.php` | Seite, Speichern (Fassung, Konflikt, unverändert), Vorschau, eingefrorene Vorlage |
+
+### 11.2 Datenmodell (Schema 1)
+
+```json
+{
+  "schema": 1,
+  "name": "Standardvorlage",
+  "zones": {
+    "header": { "options": { "show_logo": true, "show_title": true }, "texts": { "title": "…", "subtitle": "…", "continuation": "…" } },
+    "footer": { "options": { "show_disclaimer": true, "show_meta": true }, "texts": { "disclaimer": "…", "meta": "…", "page_label": "Seite {page} von {pages}" } },
+    "general": { "options": {}, "texts": { "empty": "nicht angegeben" } }
+  },
+  "blocks": [
+    { "id": "patient_data", "type": "patient_data", "enabled": true, "options": { "show_indication": true }, "texts": { "title": "Patientendaten:", "…": "…" } },
+    { "id": "text-2", "type": "text", "enabled": true, "options": {}, "texts": { "heading": "", "text": "…" } }
+  ]
+}
+```
+
+### 11.3 Zonen (feste Lage auf beiden Seiten)
+
+| Schlüssel | Bezeichnung | Optionen | Texte |
+| --- | --- | --- | --- |
+| `header` | Kopfbereich | `show_logo`, `show_title` | `title`, `subtitle`, `continuation` (Kopfzeile ab Seite 2) |
+| `footer` | Fußzeile | `show_disclaimer`, `show_meta` | `disclaimer`, `meta`, `page_label` (erlaubt `{page}`, `{pages}`) |
+| `general` | Allgemein | – | `empty` (Ersatztext für fehlende Angaben) |
+
+### 11.4 Bausteine und Bereiche
+
+Die **Reihenfolge** in der Vorlage steuert die Ausgabe innerhalb eines Bereichs; die **Lage**
+(`AREAS`) ist fest und wird nicht von der Vorlage bestimmt.
+
+| Typ | Bezeichnung | Bereich | eindeutig | Optionen |
+| --- | --- | --- | --- | --- |
+| `patient_data` | Patientendaten | `left` | ja | `show_indication` |
+| `emergency_contact` | Notfallkontakt | `left` | ja | – |
+| `physician` | Hausarzt | `left` | ja | – |
+| `center` | Betreuendes Nachsorgezentrum | `left` | ja | – |
+| `implants` | Implantate | `right` | ja | `show_leads` |
+| `mrt` | MRT-Tauglichkeit | `right` | ja | – |
+| `notice` | Hinweise | `right` | ja | `show_flight` |
+| `summary` | Abschlussblock | `bottom` | ja | `show_barcode` |
+| `measurements` | Messwerttabelle | `page2` | ja | `show_notes` |
+| `text` | Freier Textbaustein | `page2` | **nein** | – |
+
+Bereiche: `left` und `right` sind die Spalten auf Seite 1, `bottom` der Abschlussblock am Fuß von
+Seite 1, `page2` die Blöcke untereinander auf Seite 2. Die Standardreihenfolge
+(`DEFAULT_ORDER`) ist `patient_data, emergency_contact, physician, center, implants, mrt, notice,
+summary, measurements`.
+
+### 11.5 Platzhalter
+
+`{center_name}`, `{center_address}`, `{patient_name}`, `{first_name}`, `{last_name}`,
+`{date_of_birth}`, `{patient_identifier}`, `{device_model}`, `{serial_number}`, `{report_date}`,
+`{next_control}`, `{sequence_no}`, `{card_version}`, `{created_at}` – die Beschreibungen stehen in
+`PatientCardTemplate::PLACEHOLDERS`. `{page}` und `{pages}` sind **nur** in `footer.texts.page_label`
+zulässig (`PAGE_PLACEHOLDERS`); jede andere Verwendung lehnt `normalize()` ab. Neue Platzhalter
+brauchen einen Eintrag in `PLACEHOLDERS`, einen Wert in `PatientCardTemplate::values()` (aus dem
+Snapshot) und einen Beispielwert in `PatientCardSample::placeholderValues()`.
+
+### 11.6 Versionierung und Ausweise
+
+- Jede Speicherung erzeugt eine neue, unveränderliche Fassung (`version_no` fortlaufend);
+  `base_version_id` erkennt Konflikte, byte-identischer Inhalt wird als „unverändert" abgelehnt.
+- `PatientCardService::create()` schreibt die verwendete Fassung vollständig in den Snapshot
+  (`snapshot.template = {id, version_no, name, content}`) und setzt `patient_cards.template_version_id`.
+- `PatientCardPdfGenerator::template()` rendert ausschließlich aus dem Snapshot. Ausweise aus der
+  Zeit vor Migration 014 haben keine Vorlage und werden mit der Standardvorlage reproduziert.
+- Vorlagenänderungen wirken daher **nur auf neu erstellte Ausweise**.
+- `normalize()` ist maßgeblich (Grenzen: 30 Bausteine, 300 Zeichen je einzeiliger Text,
+  4000 Zeichen je mehrzeiligem Text, Name 200 Zeichen); der Editor prüft nur zur Bedienhilfe.

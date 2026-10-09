@@ -49,6 +49,14 @@ final class LetterTemplateController extends Controller
                 'source' => '/system/letter-templates/source',
             ],
             'settings' => $this->centerSettings(),
+            'labels' => [
+                'document' => 'Briefvorlage',
+                'documents' => 'Briefe',
+                'count_key' => 'letter_count',
+                'show_in' => 'Im Brief anzeigen',
+                'zone_badge' => 'Fester Bereich · Lage nach DIN 5008',
+                'placeholder_hint' => 'In ein Textfeld klicken, dann Platzhalter wählen. Er wird beim Erstellen des Briefes durch die Daten ersetzt.',
+            ],
         ];
 
         return Response::html($this->view->renderPartial('letter_templates/editor', [

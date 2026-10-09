@@ -12,22 +12,27 @@ use RuntimeException;
 /**
  * Layout des Patientenausweises: genau zwei DIN-A4-Seiten.
  *
- * Seite 1 bildet die Vorlage (.reference/idcard_ann.png) nach:
- *   oben links:  Logo, Ueberschrift "Schrittmacher - Patientenausweis" mit
- *                "(Patient Identification Card)" sowie "Patientendaten:" mit Notfallkontakt,
- *                Hausarzt und betreuendem Nachsorgezentrum;
- *   oben rechts: "Implantate:" mit den Tabellen "Schrittmacher" (Modell / Impl.Ort / Impl.Datum)
- *                und "Elektroden" (Modell / Lokalisation / Impl.Datum), darunter "Hinweise:",
- *                "Achtung Flugsicherheit:" und "Attention Airline Security:";
- *   unten:       "Sonstiges", "Bemerkung", "Arzt", "Naechste Kontrolle in" und der Barcode.
- * Seite 2: Messwerttabelle der aktuellen Untersuchung und der letzten sechs frueheren
- *          Untersuchungen (Vorlage: config/patient_card_measurements.php).
+ * Der Aufbau wird vollstaendig aus der Ausweisvorlage gelesen (PatientCardTemplate), die im
+ * Snapshot des Ausweises eingefroren ist. Vorlagenaenderungen koennen ein bereits erzeugtes PDF
+ * daher nicht veraendern; fehlt die eingefrorene Vorlage (Ausweise vor Migration 014), wird die
+ * Standardvorlage verwendet, die den urspruenglich fest verdrahteten Aufbau abbildet.
+ *
+ * Seite 1:
+ *   Kopfbereich (Zone "header"): Logo, Ueberschrift "Schrittmacher - Patientenausweis" mit
+ *   "(Patient Identification Card)";
+ *   linke Spalte:  Patientendaten, Notfallkontakt, Hausarzt, betreuendes Nachsorgezentrum;
+ *   rechte Spalte: Implantate (Tabellen "Schrittmacher" und "Elektroden"), MRT-Tauglichkeit,
+ *                  Hinweise und Flugsicherheit;
+ *   unten:         Abschlussblock mit "Sonstiges", "Bemerkung", "Arzt",
+ *                  "Naechste Kontrolle in" und dem Barcode der Patientenkennung.
+ * Seite 2: Kopfzeile (Zone "header"), Messwerttabelle der aktuellen Untersuchung und der letzten
+ *          sechs frueheren Untersuchungen (Werte aus config/patient_card_measurements.php) sowie
+ *          die freien Textbausteine.
  *
  * Spaltenraster, Schriftgroessen und Zeilenabstaende sind aus der Vorlage abgeleitet.
- * Der Generator arbeitet ausschliesslich mit dem uebergebenen Snapshot und dem uebergebenen
- * Logo. Stammdatenaenderungen koennen ein bereits erzeugtes PDF daher nicht veraendern.
- * Es werden keine medizinischen Bewertungen erzeugt; fehlende Stammdaten erscheinen als
- * "nicht angegeben", Zellen der Messwerttabelle bleiben leer.
+ * Der Generator arbeitet ausschliesslich mit dem uebergebenen Snapshot, der darin eingefrorenen
+ * Vorlage und dem uebergebenen Logo. Es werden keine medizinischen Bewertungen erzeugt; fehlende
+ * Stammdaten erscheinen als "nicht angegeben", Zellen der Messwerttabelle bleiben leer.
  */
 final class PatientCardPdfGenerator
 {
@@ -135,6 +140,10 @@ final class PatientCardPdfGenerator
     private PdfDocument $pdf;
     /** @var array<string, mixed> */
     private array $card = [];
+    /** @var array<string, mixed> eingefrorene, gepruefte Ausweisvorlage */
+    private array $template = [];
+    /** @var array<string, string> Werte der Platzhalter des Ausweises */
+    private array $values = [];
 
     public function __construct(private readonly bool $compress = true)
     {
@@ -153,13 +162,15 @@ final class PatientCardPdfGenerator
         }
         $this->pdf = new PdfDocument($this->compress);
         $this->card = $card;
+        $this->template = self::template($card);
+        $this->values = self::values($card, $generatedAt);
 
         $this->pageOne($logo);
         $this->pageTwo();
         if ($this->pdf->pageCount() !== self::PAGES) {
             throw new RuntimeException('Der Patientenausweis muss aus genau zwei Seiten bestehen.');
         }
-        $this->footers($generatedAt);
+        $this->footers();
 
         return $this->pdf->output([
             'Title' => sprintf('Patientenausweis %s', (string) ($card['patient']['patient_name'] ?? '')),
@@ -167,6 +178,44 @@ final class PatientCardPdfGenerator
             'Creator' => 'HSM2Med',
             'Producer' => 'HSM2Med PdfDocument',
         ], $generatedAt);
+    }
+
+    /**
+     * Im Snapshot eingefrorene Vorlage; ohne eingefrorene Vorlage (Ausweise vor Migration 014)
+     * wird die Standardvorlage verwendet.
+     *
+     * @param array<string, mixed> $card
+     * @return array<string, mixed>
+     */
+    private static function template(array $card): array
+    {
+        $embedded = $card['template']['content'] ?? null;
+        try {
+            return PatientCardTemplate::normalize($embedded ?? PatientCardTemplate::default());
+        } catch (PatientCardException) {
+            throw new RuntimeException('Die im Ausweis eingefrorene Ausweisvorlage ist ungültig.');
+        }
+    }
+
+    /**
+     * Werte der Platzhalter der Vorlage, ausschliesslich aus dem Snapshot.
+     *
+     * @param array<string, mixed> $card
+     * @return array<string, string>
+     */
+    private static function values(array $card, DateTimeImmutable $generatedAt): array
+    {
+        return PatientCardTemplate::values($card, $generatedAt);
+    }
+
+    /**
+     * Fester Text eines Bausteins mit ersetzten Platzhaltern.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function text(array $block, string $key): string
+    {
+        return PatientCardTemplate::fill(PatientCardTemplate::blockText($block, $key), $this->values);
     }
 
     public static function filename(array $card): string
@@ -186,10 +235,34 @@ final class PatientCardPdfGenerator
     {
         $this->pdf->addPage();
 
-        $left = $this->patientColumn($logo);
-        $right = $this->implantColumn();
-        $bottom = $this->summaryBlock(max($left, $right) + self::SUMMARY_GAP);
+        $y = ['left' => $this->headerZone($logo, self::MARGIN_X, self::TOP, self::LEFT_COLUMN_WIDTH), 'right' => self::TOP];
+        $first = ['left' => true, 'right' => true];
+        $summary = null;
+        foreach (PatientCardTemplate::enabledBlocks($this->template) as $block) {
+            $area = PatientCardTemplate::area((string) $block['type']);
+            if ($area === 'page2') {
+                continue;
+            }
+            if ($area === 'bottom') {
+                $summary = $block;
+                continue;
+            }
+            $x = $area === 'left' ? self::MARGIN_X : self::RIGHT_COLUMN_X;
+            $width = $area === 'left' ? self::LEFT_COLUMN_WIDTH : self::RIGHT_COLUMN_WIDTH;
+            if ($first[$area]) {
+                $first[$area] = false;
+            } elseif ($area === 'left') {
+                $y[$area] = $this->divider($x, $y[$area], $width);
+            } else {
+                $y[$area] += self::SECTION_GAP;
+            }
+            $y[$area] = $this->blockOne($block, $x, $y[$area], $width);
+        }
 
+        $bottom = max($y['left'], $y['right']);
+        if ($summary !== null) {
+            $bottom = $this->summaryBlock($summary, $bottom + self::SUMMARY_GAP);
+        }
         if ($bottom > self::BOTTOM_LIMIT) {
             throw new RuntimeException(
                 'Die Stammdatentexte sind zu lang: Seite 1 des Patientenausweises wurde nicht vollstaendig bedruckt.',
@@ -198,145 +271,217 @@ final class PatientCardPdfGenerator
     }
 
     /**
-     * Linke Spalte der Vorlage: Logo, Ueberschrift und Patientendaten.
+     * Kopfbereich (Zone "header") auf Seite 1: Logo, Ueberschrift und Unterzeile.
      */
-    private function patientColumn(?ImageData $logo): float
+    private function headerZone(?ImageData $logo, float $x, float $y, float $width): float
     {
-        $patient = $this->card['patient'];
-        $contact = $this->card['emergency_contact'];
-        $physician = $this->card['physician'];
-        $settings = $this->card['settings'];
-
-        $x = self::MARGIN_X;
-        $width = self::LEFT_COLUMN_WIDTH;
-        $y = self::TOP;
-
-        $this->logo($x, $y, $logo);
-        $y += self::LOGO_HEIGHT + self::LOGO_GAP;
-
-        $heading = 'Schrittmacher - Patientenausweis';
-        $this->pdf->text(
-            $x + ($width - PdfDocument::textWidth($heading, 'bold', self::SIZE_HEADING)) / 2,
-            $y + 0.72 * self::SIZE_HEADING,
-            $heading,
-            'bold',
-            self::SIZE_HEADING,
-            self::INK,
-        );
-        $y += self::SIZE_HEADING * 1.2;
-
-        $subtitle = '(Patient Identification Card)';
-        $this->pdf->text(
-            $x + ($width - PdfDocument::textWidth($subtitle, 'italic', self::SIZE_HEADING)) / 2,
-            $y + 0.72 * self::SIZE_HEADING,
-            $subtitle,
-            'italic',
-            self::SIZE_HEADING,
-            self::INK,
-        );
-        $y += self::SIZE_HEADING * 1.85;
-
-        $y = $this->sectionTitle($x, $y, $width, 'Patientendaten:');
-        $y = $this->fieldRows($x, $y, $width, [
-            ['Name', $this->orEmpty((string) $patient['patient_name'])],
-            ['geboren am:', $this->orEmpty((string) $patient['date_of_birth_display'])],
-            ['Straße:', $this->orEmpty((string) $patient['street'])],
-            ['PLZ/Wohnort:', $this->orEmpty(trim((string) $patient['postal_code'] . ' ' . (string) $patient['city']))],
-            ['Telefon:', $this->orEmpty((string) $patient['phone'])],
-            ['Indikation:', $this->orEmpty((string) $patient['indication'])],
-        ]);
-
-        $y = $this->divider($x, $y, $width);
-        $y = $this->sectionTitle($x, $y, $width, 'Notfallkontakt:');
-        $y = $this->fieldRows($x, $y, $width, [
-            ['Name:', $this->orEmpty((string) $contact['name'])],
-            ['Telefon:', $this->orEmpty((string) $contact['phone'])],
-        ]);
-
-        $y = $this->divider($x, $y, $width);
-        $y = $this->sectionTitle($x, $y, $width, 'Hausarzt:');
-        $y = $this->fieldRows($x, $y, $width, [
-            ['Name:', $this->orEmpty((string) $physician['name'])],
-            ['Praxis-Adresse:', $this->orEmpty((string) $physician['practice'])],
-            ['PLZ/Ort:', $this->orEmpty(trim((string) $physician['postal_code'] . ' ' . (string) $physician['city']))],
-            ['Telefon:', $this->orEmpty((string) $physician['phone'])],
-        ]);
-
-        $y = $this->divider($x, $y, $width);
-        $y = $this->sectionTitle($x, $y, $width, 'Betreuendes Nachsorgezentrum:', self::SIZE_SECTION, self::LINE_CENTER_TITLE);
-
-        return $this->paragraph(
-            $x,
-            $y,
-            $width,
-            trim((string) $settings['center_name'] . "\n" . (string) $settings['center_address']),
-            'regular',
-            self::SIZE_FIELD,
-            self::INK,
-            self::LINE_CENTER,
-        );
+        if (PatientCardTemplate::zoneOption($this->template, 'header', 'show_logo')) {
+            $this->logo($x, $y, $logo);
+            $y += self::LOGO_HEIGHT + self::LOGO_GAP;
+        }
+        if (!PatientCardTemplate::zoneOption($this->template, 'header', 'show_title')) {
+            return $y;
+        }
+        $heading = PatientCardTemplate::fill(PatientCardTemplate::zoneText($this->template, 'header', 'title'), $this->values);
+        if ($heading !== '') {
+            $this->pdf->text(
+                $x + ($width - PdfDocument::textWidth($heading, 'bold', self::SIZE_HEADING)) / 2,
+                $y + 0.72 * self::SIZE_HEADING,
+                $heading,
+                'bold',
+                self::SIZE_HEADING,
+                self::INK,
+            );
+            $y += self::SIZE_HEADING * 1.2;
+        }
+        $subtitle = PatientCardTemplate::fill(PatientCardTemplate::zoneText($this->template, 'header', 'subtitle'), $this->values);
+        if ($subtitle !== '') {
+            $this->pdf->text(
+                $x + ($width - PdfDocument::textWidth($subtitle, 'italic', self::SIZE_HEADING)) / 2,
+                $y + 0.72 * self::SIZE_HEADING,
+                $subtitle,
+                'italic',
+                self::SIZE_HEADING,
+                self::INK,
+            );
+            $y += self::SIZE_HEADING * 1.85;
+        }
+        return $y;
     }
 
     /**
-     * Rechte Spalte der Vorlage: Implantate, Elektroden, Hinweise und Flugsicherheit.
+     * Baustein der Seite 1 an der Stelle, die seiner Lage in der Vorlage entspricht.
+     *
+     * @param array<string, mixed> $block
      */
-    private function implantColumn(): float
+    private function blockOne(array $block, float $x, float $y, float $width): float
+    {
+        return match ((string) $block['type']) {
+            'patient_data' => $this->patientDataBlock($block, $x, $y, $width),
+            'emergency_contact' => $this->emergencyContactBlock($block, $x, $y, $width),
+            'physician' => $this->physicianBlock($block, $x, $y, $width),
+            'center' => $this->centerBlock($block, $x, $y, $width),
+            'implants' => $this->implantsBlock($block, $x, $y, $width),
+            'mrt' => $this->mrtBlock($block, $x, $y, $width),
+            'notice' => $this->noticeBlock($block, $x, $y, $width),
+            default => $y,
+        };
+    }
+
+    /**
+     * Linke Spalte: Patientendaten.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function patientDataBlock(array $block, float $x, float $y, float $width): float
+    {
+        $patient = $this->card['patient'];
+
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'));
+        $rows = [
+            [$this->text($block, 'label_name'), $this->orEmpty((string) $patient['patient_name'])],
+            [$this->text($block, 'label_birth'), $this->orEmpty((string) $patient['date_of_birth_display'])],
+            [$this->text($block, 'label_street'), $this->orEmpty((string) $patient['street'])],
+            [$this->text($block, 'label_city'), $this->orEmpty(trim((string) $patient['postal_code'] . ' ' . (string) $patient['city']))],
+            [$this->text($block, 'label_phone'), $this->orEmpty((string) $patient['phone'])],
+        ];
+        if (PatientCardTemplate::blockOption($block, 'show_indication')) {
+            $rows[] = [$this->text($block, 'label_indication'), $this->orEmpty((string) $patient['indication'])];
+        }
+        return $this->fieldRows($x, $y, $width, $rows);
+    }
+
+    /**
+     * Linke Spalte: Notfallkontakt.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function emergencyContactBlock(array $block, float $x, float $y, float $width): float
+    {
+        $contact = $this->card['emergency_contact'];
+
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'));
+        return $this->fieldRows($x, $y, $width, [
+            [$this->text($block, 'label_name'), $this->orEmpty((string) $contact['name'])],
+            [$this->text($block, 'label_phone'), $this->orEmpty((string) $contact['phone'])],
+        ]);
+    }
+
+    /**
+     * Linke Spalte: Hausarzt.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function physicianBlock(array $block, float $x, float $y, float $width): float
+    {
+        $physician = $this->card['physician'];
+
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'));
+        return $this->fieldRows($x, $y, $width, [
+            [$this->text($block, 'label_name'), $this->orEmpty((string) $physician['name'])],
+            [$this->text($block, 'label_practice'), $this->orEmpty((string) $physician['practice'])],
+            [$this->text($block, 'label_city'), $this->orEmpty(trim((string) $physician['postal_code'] . ' ' . (string) $physician['city']))],
+            [$this->text($block, 'label_phone'), $this->orEmpty((string) $physician['phone'])],
+        ]);
+    }
+
+    /**
+     * Linke Spalte: betreuendes Nachsorgezentrum.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function centerBlock(array $block, float $x, float $y, float $width): float
+    {
+        $settings = $this->card['settings'];
+
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'), self::SIZE_SECTION, self::LINE_CENTER_TITLE);
+        $body = trim((string) $settings['center_name'] . "\n" . (string) $settings['center_address']);
+        $extra = trim($this->text($block, 'extra'));
+        if ($extra !== '') {
+            $body = ($body === '' ? '' : $body . "\n") . $extra;
+        }
+        return $this->paragraph($x, $y, $width, $body, 'regular', self::SIZE_FIELD, self::INK, self::LINE_CENTER);
+    }
+
+    /**
+     * Rechte Spalte: Implantate mit Schrittmacher- und Elektrodentabelle.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function implantsBlock(array $block, float $x, float $y, float $width): float
     {
         $device = $this->card['device'];
-        $settings = $this->card['settings'];
         $leads = $this->card['leads'];
 
-        $x = self::RIGHT_COLUMN_X;
-        $width = self::RIGHT_COLUMN_WIDTH;
-        $y = self::TOP;
-
-        $y = $this->sectionTitle($x, $y, $width, 'Implantate:', self::SIZE_IMPLANT_TITLE);
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'), self::SIZE_IMPLANT_TITLE);
         $y += 2.6;
-        $y = $this->sectionTitle($x, $y, $width, 'Schrittmacher:');
-        $y = $this->table($x, $y, $width, self::deviceColumns($width), [[
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'device_title'));
+        $y = $this->table($x, $y, $width, self::columns(
+            $width,
+            $this->text($block, 'col_model'),
+            $this->text($block, 'col_location'),
+            $this->text($block, 'col_date'),
+        ), [[
             $this->deviceCell(),
             $this->orEmpty((string) $device['implant_location']),
             $this->orEmpty((string) $device['implant_date_display']),
         ]]);
 
-        $y += self::SECTION_GAP;
-        $y = $this->sectionTitle($x, $y, $width, 'Elektroden:');
-        if ($leads === []) {
-            $y = $this->paragraph(
-                $x,
-                $y,
-                $width,
-                'Für diesen Bericht sind keine Elektrodendaten hinterlegt.',
-                'italic',
-                self::SIZE_NOTICE,
-                self::MUTED,
-            );
-        } else {
-            $rows = [];
-            foreach ($leads as $lead) {
-                $rows[] = [
-                    $this->leadCell($lead),
-                    $this->orEmpty((string) $lead['chamber_label']),
-                    $this->orEmpty((string) $lead['implant_date_display']),
-                ];
-            }
-            $y = $this->table($x, $y, $width, self::leadColumns($width), $rows);
+        if (!PatientCardTemplate::blockOption($block, 'show_leads')) {
+            return $y;
         }
-
         $y += self::SECTION_GAP;
-        $y = $this->sectionTitle($x, $y, $width, 'MRT-Tauglichkeit:');
-        $y = $this->paragraph($x, $y, $width, $this->mrtText($device), 'bold', self::SIZE_FIELD, self::INK, self::LINE_FIELD);
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'lead_title'));
+        if ($leads === []) {
+            return $this->paragraph($x, $y, $width, $this->text($block, 'lead_empty'), 'italic', self::SIZE_NOTICE, self::MUTED);
+        }
+        $rows = [];
+        foreach ($leads as $lead) {
+            $rows[] = [
+                $this->leadCell($lead),
+                $this->orEmpty((string) $lead['chamber_label']),
+                $this->orEmpty((string) $lead['implant_date_display']),
+            ];
+        }
+        return $this->table($x, $y, $width, self::columns(
+            $width,
+            $this->text($block, 'col_model'),
+            $this->text($block, 'col_localization'),
+            $this->text($block, 'col_date'),
+        ), $rows);
+    }
 
-        $y += self::SECTION_GAP;
-        $y = $this->sectionTitle($x, $y, $width, 'Hinweise:', self::SIZE_NOTICE_TITLE);
+    /**
+     * Rechte Spalte: MRT-Tauglichkeit.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function mrtBlock(array $block, float $x, float $y, float $width): float
+    {
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'));
+        return $this->paragraph($x, $y, $width, $this->mrtText($this->card['device']), 'bold', self::SIZE_FIELD, self::INK, self::LINE_FIELD);
+    }
+
+    /**
+     * Rechte Spalte: Hinweise aus den Stammdaten und Hinweise zur Flugsicherheit.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function noticeBlock(array $block, float $x, float $y, float $width): float
+    {
+        $settings = $this->card['settings'];
+
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'), self::SIZE_NOTICE_TITLE);
         $y = $this->paragraph($x, $y, $width, (string) $settings['notice_text'], 'regular', self::SIZE_NOTICE);
-
+        if (!PatientCardTemplate::blockOption($block, 'show_flight')) {
+            return $y;
+        }
         $y += self::FLIGHT_GAP;
-        $y = $this->sectionTitle($x, $y, $width, 'Achtung Flugsicherheit:', self::SIZE_NOTICE_TITLE);
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'flight_title_de'), self::SIZE_NOTICE_TITLE);
         $y = $this->paragraph($x, $y, $width, (string) $settings['flight_notice_de'], 'regular', self::SIZE_NOTICE);
 
         $y += self::PAIRED_GAP;
-        $y = $this->sectionTitle($x, $y, $width, 'Attention Airline Security:', self::SIZE_NOTICE_TITLE);
+        $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'flight_title_en'), self::SIZE_NOTICE_TITLE);
 
         return $this->paragraph($x, $y, $width, (string) $settings['flight_notice_en'], 'regular', self::SIZE_NOTICE);
     }
@@ -344,7 +489,12 @@ final class PatientCardPdfGenerator
     /**
      * Abschlussblock am Fuss von Seite 1 wie in der Vorlage.
      */
-    private function summaryBlock(float $y): float
+    /**
+     * Abschlussblock am Fuss von Seite 1 wie in der Vorlage.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function summaryBlock(array $block, float $y): float
     {
         $followUp = $this->card['follow_up'];
         $x = self::MARGIN_X;
@@ -353,12 +503,15 @@ final class PatientCardPdfGenerator
         $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.9);
 
         $y = $this->fieldRows($x, $y + 11.0, $width, [
-            ['Sonstiges', $this->orEmpty((string) $followUp['report_label'])],
-            ['Bemerkung', ''],
-            ['Arzt', $this->orEmpty((string) $followUp['control_physician'])],
-            ['Nächste Kontrolle in', $this->orEmpty((string) $followUp['next_control_display'])],
+            [$this->text($block, 'label_other'), $this->orEmpty((string) $followUp['report_label'])],
+            [$this->text($block, 'label_remark'), ''],
+            [$this->text($block, 'label_physician'), $this->orEmpty((string) $followUp['control_physician'])],
+            [$this->text($block, 'label_next_control'), $this->orEmpty((string) $followUp['next_control_display'])],
         ], self::SUMMARY_LABEL_WIDTH, self::SIZE_SUMMARY, self::LINE_SUMMARY);
 
+        if (!PatientCardTemplate::blockOption($block, 'show_barcode')) {
+            return $y;
+        }
         return $this->barcode($x, $y, (string) $this->card['patient']['patient_identifier']);
     }
 
@@ -413,30 +566,16 @@ final class PatientCardPdfGenerator
     }
 
     /**
-     * Spalten der Schrittmachertabelle (Vorlage: Modell / Impl.Ort / Impl.Datum).
+     * Drei Spalten im Breitenverhaeltnis der Vorlage (Modell / Ort / Datum).
      *
      * @return list<array{title: string, width: float}>
      */
-    private static function deviceColumns(float $width): array
+    private static function columns(float $width, string $model, string $location, string $date): array
     {
         return [
-            ['title' => 'Modell', 'width' => $width * 0.40],
-            ['title' => 'Impl.Ort', 'width' => $width * 0.31],
-            ['title' => 'Impl.Datum', 'width' => $width * 0.29],
-        ];
-    }
-
-    /**
-     * Spalten der Elektrodentabelle (Vorlage: Modell / Lokalisation / Impl.Datum).
-     *
-     * @return list<array{title: string, width: float}>
-     */
-    private static function leadColumns(float $width): array
-    {
-        return [
-            ['title' => 'Modell', 'width' => $width * 0.40],
-            ['title' => 'Lokalisation', 'width' => $width * 0.31],
-            ['title' => 'Impl.Datum', 'width' => $width * 0.29],
+            ['title' => $model, 'width' => $width * 0.40],
+            ['title' => $location, 'width' => $width * 0.31],
+            ['title' => $date, 'width' => $width * 0.29],
         ];
     }
 
@@ -487,29 +626,95 @@ final class PatientCardPdfGenerator
     // --------------------------------------------------------------------- Seite 2
 
     /**
-     * Seite 2: Messwerttabelle der aktuellen und der letzten frueheren Untersuchungen.
+     * Seite 2: Kopfzeile, Messwerttabelle der aktuellen und der letzten frueheren Untersuchungen
+     * sowie die freien Textbausteine der Vorlage.
      *
-     * Die Tabelle wird ausschliesslich aus dem Snapshot gelesen (PatientCardService::snapshot()
-     * Schluessel "measurements"); das Layout kennt die Vorlage selbst nicht. Zellen ohne Wert
-     * bleiben leer, es werden keine Werte erfunden.
+     * Die Messwerte werden ausschliesslich aus dem Snapshot gelesen (PatientCardService::snapshot()
+     * Schluessel "measurements"); das Layout kennt die Messwertvorlage selbst nicht. Zellen ohne
+     * Wert bleiben leer, es werden keine Werte erfunden.
      */
     private function pageTwo(): void
     {
         $this->pdf->addPage();
 
-        $patient = $this->card['patient'];
-        $device = $this->card['device'];
         $x = self::MARGIN_X;
         $width = self::CONTENT_WIDTH;
-        $y = self::TOP;
+        $y = $this->continuationZone($x, self::TOP, $width);
 
-        $header = sprintf(
-            'Patientenausweis · %s · Geburtsdatum %s · Gerät %s · Seriennummer %s',
-            (string) $patient['patient_name'],
-            (string) $patient['date_of_birth_display'],
-            trim((string) $device['model_name'] . ' ' . (string) $device['model_number']),
-            (string) $device['serial_number'],
-        );
+        $blocks = [];
+        foreach (PatientCardTemplate::enabledBlocks($this->template) as $block) {
+            if (PatientCardTemplate::area((string) $block['type']) === 'page2') {
+                $blocks[] = $block;
+            }
+        }
+
+        $reserved = 0.0;
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $reserved += $this->textBlockHeight($block, $width);
+            }
+        }
+
+        $measurements = null;
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? '') === 'measurements') {
+                $measurements = $block;
+                break;
+            }
+        }
+
+        if ($measurements !== null) {
+            $notes = PatientCardTemplate::blockText($measurements, 'notes');
+            $notesHeading = PatientCardTemplate::blockText($measurements, 'notes_heading');
+            $showNotes = PatientCardTemplate::blockOption($measurements, 'show_notes');
+            $notesHeight = $showNotes
+                ? count($this->wrap($notes, $width, 'regular', self::SIZE_NOTICE)) * self::SIZE_NOTICE * self::LINE_TEXT
+                    + self::SIZE_SECTION * self::LINE_SECTION + 9.5
+                : 0.0;
+            $y = $this->measurementGrid(
+                $x,
+                $y,
+                $width,
+                self::BOTTOM_LIMIT - $y - $notesHeight - $reserved,
+                PatientCardTemplate::blockText($measurements, 'current_label'),
+                PatientCardTemplate::blockText($measurements, 'empty'),
+            );
+            if ($showNotes) {
+                $y = $this->sectionTitle($x, $y + 8.0, $width, $notesHeading);
+                $y = $this->paragraph($x, $y, $width, $notes, 'regular', self::SIZE_NOTICE);
+            }
+        }
+
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? '') !== 'text') {
+                continue;
+            }
+            $heading = trim($this->text($block, 'heading'));
+            $text = trim($this->text($block, 'text'));
+            if ($heading === '' && $text === '') {
+                continue;
+            }
+            $y += 8.0;
+            if ($heading !== '') {
+                $y = $this->sectionTitle($x, $y, $width, $heading);
+            }
+            $y = $this->paragraph($x, $y, $width, $text, 'regular', self::SIZE_NOTICE);
+        }
+
+        if ($y > self::BOTTOM_LIMIT) {
+            throw new RuntimeException('Seite 2 des Patientenausweises wurde nicht vollstaendig bedruckt.');
+        }
+    }
+
+    /**
+     * Kopfzeile ab Seite 2 (Zone "header", Text "continuation").
+     */
+    private function continuationZone(float $x, float $y, float $width): float
+    {
+        $header = PatientCardTemplate::fill(PatientCardTemplate::zoneText($this->template, 'header', 'continuation'), $this->values);
+        if (trim($header) === '') {
+            return $y;
+        }
         $lineHeight = self::SIZE_TABLE * self::LINE_TEXT;
         $headerLines = $this->wrap($header, $width, 'regular', self::SIZE_TABLE);
         foreach ($headerLines as $index => $line) {
@@ -524,23 +729,26 @@ final class PatientCardPdfGenerator
         }
         $y += count($headerLines) * $lineHeight + 6.0;
         $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.7);
-        $y += 12.0;
+        return $y + 12.0;
+    }
 
-        $notes = 'Dargestellt sind die Messwerte der aktuellen Untersuchung und der bis zu sechs letzten '
-            . 'früheren Untersuchungen dieses Patienten, jeweils mit dem Datum der Untersuchung als '
-            . 'Spaltenkopf. Leere Zellen bedeuten, dass der jeweilige Bericht keinen Wert enthält. '
-            . 'Änderungen an Stammdaten oder später importierte Berichte verändern diesen Ausweis nicht.';
-        $notesHeading = 'Hinweise zur Messwerttabelle / Notes on the measurements';
-        $notesHeight = count($this->wrap($notes, $width, 'regular', self::SIZE_NOTICE)) * self::SIZE_NOTICE * self::LINE_TEXT
-            + self::SIZE_SECTION * self::LINE_SECTION
-            + 9.5;
-        $y = $this->measurementGrid($x, $y, $width, self::BOTTOM_LIMIT - $y - $notesHeight);
-
-        $y = $this->sectionTitle($x, $y + 8.0, $width, $notesHeading);
-        $y = $this->paragraph($x, $y, $width, $notes, 'regular', self::SIZE_NOTICE);
-        if ($y > self::BOTTOM_LIMIT) {
-            throw new RuntimeException('Seite 2 des Patientenausweises wurde nicht vollstaendig bedruckt.');
+    /**
+     * Hoehe eines freien Textbausteins unterhalb der Messwerttabelle.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function textBlockHeight(array $block, float $width): float
+    {
+        $heading = trim($this->text($block, 'heading'));
+        $text = trim($this->text($block, 'text'));
+        if ($heading === '' && $text === '') {
+            return 0.0;
         }
+        $height = 8.0;
+        if ($heading !== '') {
+            $height += self::SIZE_SECTION * self::LINE_SECTION;
+        }
+        return $height + count($this->wrap($text, $width, 'regular', self::SIZE_NOTICE)) * self::SIZE_NOTICE * self::LINE_TEXT + 1.5;
     }
 
     /**
@@ -552,13 +760,13 @@ final class PatientCardPdfGenerator
      *
      * @param float $available Hoehe, die der Tabelle bis zum Fuss der Seite zur Verfuegung steht
      */
-    private function measurementGrid(float $x, float $y, float $width, float $available): float
+    private function measurementGrid(float $x, float $y, float $width, float $available, string $currentLabel, string $emptyText): float
     {
         $measurements = is_array($this->card['measurements'] ?? null) ? $this->card['measurements'] : [];
         $columns = is_array($measurements['columns'] ?? null) ? array_values($measurements['columns']) : [];
         $sections = is_array($measurements['sections'] ?? null) ? array_values($measurements['sections']) : [];
         if ($columns === [] || $sections === []) {
-            return $this->noticeBox($x, $y, $width, 'Es sind keine Messwerte dieses Patienten gespeichert.');
+            return $this->noticeBox($x, $y, $width, $emptyText);
         }
 
         $lineHeight = self::SIZE_GRID * self::LINE_GRID;
@@ -577,7 +785,7 @@ final class PatientCardPdfGenerator
                 2,
             );
             if (($column['current'] ?? false) === true) {
-                foreach ($this->gridCell('(aktuelle Untersuchung)', $valueWidth, 'italic', self::SIZE_GRID, 2) as $line) {
+                foreach ($this->gridCell($currentLabel, $valueWidth, 'italic', self::SIZE_GRID, 2) as $line) {
                     $lines[] = $line;
                 }
             }
@@ -784,32 +992,45 @@ final class PatientCardPdfGenerator
 
     // --------------------------------------------------------------------- Bausteine
 
-    private function footers(DateTimeImmutable $generatedAt): void
+    /**
+     * Fusszeile beider Seiten (Zone "footer").
+     */
+    private function footers(): void
     {
         $total = $this->pdf->pageCount();
-        $created = 'Erstellt am ' . $generatedAt->format('d.m.Y H:i:s');
-        $patientName = (string) ($this->card['patient']['patient_name'] ?? '');
+        $showDisclaimer = PatientCardTemplate::zoneOption($this->template, 'footer', 'show_disclaimer');
+        $showMeta = PatientCardTemplate::zoneOption($this->template, 'footer', 'show_meta');
+        $disclaimer = PatientCardTemplate::fill(PatientCardTemplate::zoneText($this->template, 'footer', 'disclaimer'), $this->values);
+        $meta = PatientCardTemplate::fill(PatientCardTemplate::zoneText($this->template, 'footer', 'meta'), $this->values);
+        $label = PatientCardTemplate::zoneText($this->template, 'footer', 'page_label');
         for ($page = 0; $page < $total; $page++) {
             $this->pdf->setPage($page);
             $lineY = PdfDocument::PAGE_HEIGHT - 46;
             $this->pdf->line(self::MARGIN_X, $lineY, PdfDocument::PAGE_WIDTH - self::MARGIN_X, $lineY, self::MUTED, 0.4);
-            $this->pdf->text(
-                self::MARGIN_X,
-                $lineY + 11,
-                'Automatisch erzeugter Patientenausweis auf Basis importierter Nachsorgeberichte – keine medizinische Bewertung oder Diagnose.',
-                'regular',
-                7,
-                self::MUTED,
-            );
-            $this->pdf->text(
-                self::MARGIN_X,
-                $lineY + 21,
-                sprintf('%s · %s · Ausweisfassung %d', $created, $patientName, (int) ($this->card['card_version'] ?? 1)),
-                'regular',
-                7,
-                self::MUTED,
-            );
-            $pageLabel = sprintf('Seite %d von %d', $page + 1, $total);
+            if ($showDisclaimer && $disclaimer !== '') {
+                $this->pdf->text(
+                    self::MARGIN_X,
+                    $lineY + 11,
+                    $disclaimer,
+                    'regular',
+                    7,
+                    self::MUTED,
+                );
+            }
+            if ($showMeta && $meta !== '') {
+                $this->pdf->text(
+                    self::MARGIN_X,
+                    $lineY + 21,
+                    $meta,
+                    'regular',
+                    7,
+                    self::MUTED,
+                );
+            }
+            $pageLabel = PatientCardTemplate::fill($label, $this->values + ['page' => $page + 1, 'pages' => $total]);
+            if ($pageLabel === '') {
+                continue;
+            }
             $width = PdfDocument::textWidth($pageLabel, 'bold', 8);
             $this->pdf->text(
                 PdfDocument::PAGE_WIDTH - self::MARGIN_X - $width,

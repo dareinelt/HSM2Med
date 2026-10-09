@@ -26,6 +26,7 @@ final class Permission
     public const string PATIENTS = 'patients';
     public const string PATIENT_CARDS = 'patient_cards';
     public const string PATIENT_CARD_SETTINGS = 'patient_card_settings';
+    public const string PATIENT_CARD_TEMPLATES = 'patient_card_templates';
     public const string LETTERS = 'letters';
     public const string LETTER_TEMPLATES = 'letter_templates';
     public const string SYSTEM = 'system';
@@ -49,6 +50,7 @@ final class Permission
         self::PATIENTS => 'Patientenakte',
         self::PATIENT_CARDS => 'Patientenausweise',
         self::PATIENT_CARD_SETTINGS => 'Ausweis-Stammdaten',
+        self::PATIENT_CARD_TEMPLATES => 'Ausweisvorlagen (Editor)',
         self::LETTERS => 'Briefe',
         self::LETTER_TEMPLATES => 'Briefvorlagen (Editor)',
         self::SYSTEM => 'Systeminformationen',
@@ -70,6 +72,7 @@ final class Permission
         self::PATIENTS => 'Patientenakten ansehen und bearbeiten',
         self::PATIENT_CARDS => 'Patientenausweise erstellen und verwalten',
         self::PATIENT_CARD_SETTINGS => 'Hinweistexte der Ausweise pflegen',
+        self::PATIENT_CARD_TEMPLATES => 'Ausweisvorlagen bearbeiten',
         self::LETTERS => 'Briefe schreiben und versenden',
         self::LETTER_TEMPLATES => 'Briefvorlagen bearbeiten',
         self::SYSTEM => 'Systeminformationen und Diagnose',
@@ -148,6 +151,7 @@ final class Permission
             str_starts_with($path, '/patient-cards') => self::PATIENT_CARDS,
             str_starts_with($path, '/letters') => self::LETTERS,
             str_starts_with($path, '/system/letter-templates') => self::LETTER_TEMPLATES,
+            str_starts_with($path, '/system/patient-card-templates') => self::PATIENT_CARD_TEMPLATES,
             str_starts_with($path, '/system/settings') => self::SYSTEM_SETTINGS,
             str_starts_with($path, '/system/users') => self::USERS,
             str_starts_with($path, '/system/logs') => self::LOGS,

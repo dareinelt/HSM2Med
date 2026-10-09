@@ -93,6 +93,12 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   anderen Vorlage übernehmen. Jeder Brief kann mit seiner ursprünglichen
   Vorlage reproduziert oder – auf ausdrücklichen Wunsch – mit der aktuellen Vorlage neu
   ausgefertigt werden. Technische Referenz: [docs/editor-referenz.md](docs/editor-referenz.md).
+- **Vorlageneditor für Patientenausweise** (System → *Ausweisvorlage bearbeiten*, öffnet in neuem
+  Tab): derselbe Editor für die festen Texte und den Aufbau des Patientenausweises
+  (Kopf- und Fußzeile, Bausteine in Spalten auf Seite 1 und untereinander auf Seite 2,
+  Live-Vorschau und PDF-Vorschau mit Beispieldaten). Ausweisvorlagen sind ebenfalls
+  **versioniert**; jeder Ausweis trägt die beim Erzeugen gültige Fassung eingefroren in seinem
+  Snapshot. Das Recht heißt **Ausweisvorlagen (Editor)**.
 - CLI für Import, PDF-Export, Migrationen, Schema-Erzeugung und das Anlegen des Administrators.
 - **Anmeldung und Benutzerverwaltung**: Ohne Anmeldung ist die Anwendung nicht bedienbar. Beim
   Aufruf wird die Oberfläche geladen und erscheint hinter dem Anmeldefenster leicht abgedunkelt
@@ -259,7 +265,7 @@ mit großen Symbolen und Beschriftung:
 | **Patientenakte** | *Akten* (Patientenübersicht, Patient anlegen); *Weiterverarbeiten* (Ausweise und Nachsorge, Briefe); *Nachschlagen* (Importprotokoll) |
 | **Patientenausweise** | *Ausweise* (Ausweisübersicht, Ausweis erstellen, Ausweis-Stammdaten); *Quellen* (Patientenakten, Berichte) |
 | **Briefe** | *Briefe* (Briefübersicht, Brief erstellen); *Vorlagen* (Praxis-Informationen, Briefvorlage); *Quellen* (Patientenakten, Berichte) |
-| **System** | *Praxis* (Praxis-Informationen, Briefvorlage); *Betrieb* (Systeminformationen, Importprotokoll); *Daten und Datenschutz* (Datenschutz, Berichte) |
+| **System** | *Praxis* (Praxis-Informationen); *Zugang* (Benutzerverwaltung, Eigenes Kennwort); *Betrieb* (Systeminformationen, Fehlerprotokoll, Importprotokoll); *Vorlagen* (Briefvorlage, Ausweisvorlage); *Daten und Datenschutz* (Datenschutz, Berichte) |
 
 Der jeweils aktuelle Reiter ist hervorgehoben; welcher Reiter zu einer Seite gehört, steuert
 `src/Http/Ribbon.php` über den `$active`-Schlüssel der Seite. Angezeigt werden nur Reiter und
@@ -584,6 +590,42 @@ wird verwendet, mehrere Treffer → der Benutzer muss den Patienten ausdrücklic
   unveränderlichen Bericht-Snapshots).
 - Dateiname: `Patientenausweis_<Nachname>_<Vorname>_<Datum>[_Nr<laufende Nummer>].pdf`.
 
+### Ausweisvorlage bearbeiten (Editor)
+
+System → *Ausweisvorlage bearbeiten* (Kopf der Systemseite und Funktionsband *System* → *Vorlagen*)
+öffnet den Vorlageneditor in einem neuen Tab. Er ist derselbe Editor wie für die Briefe
+([docs/editor-referenz.md](docs/editor-referenz.md), Abschnitt 11): links der Aufbau mit den
+Bausteinen (Drag and Drop, ↑/↓, Ein-/Ausblenden), in der Mitte eine Seitenvorschau beider
+A4-Seiten mit Beispieldaten, rechts die Eigenschaften des gewählten Bausteins bzw. Bereichs.
+Ein Textbaustein lässt sich ergänzen; die Bausteine selbst sind fest an ihren Bereich gebunden
+(linke/rechte Spalte auf Seite 1, Abschlussblock am Fuß von Seite 1, Messwerttabelle und freie
+Texte auf Seite 2).
+
+* **Kopfbereich:** Logo und Überschrift, Unterzeile und die Kopfzeile ab Seite 2.
+* **Fußzeile:** Hinweis zur automatischen Erzeugung, Zusatzzeile mit Erstellungsdatum und
+  Ausweisfassung, Seitenangabe (`{page}`, `{pages}`).
+* **Bausteine:** Patientendaten, Notfallkontakt, Hausarzt, Nachsorgezentrum, Implantate,
+  MRT-Tauglichkeit, Hinweise, Abschlussblock und Messwerttabelle – jeweils mit eigenen
+  Überschriften, Beschriftungen und Optionen (z. B. Elektrodentabelle, Flugsicherheit,
+  Barcode, Hinweise zur Messwerttabelle).
+* **Platzhalter:** z. B. `{patient_name}`, `{date_of_birth}`, `{device_model}`, `{center_name}`,
+  `{report_date}`, `{card_version}`; ein Klick fügt sie an der Cursorposition ein.
+* **PDF-Vorschau** erzeugt mit Beispieldaten ein PDF der ungespeicherten Vorlage.
+* **Speichern** erzeugt eine neue, unveränderliche Fassung mit Änderungsnotiz; wurde die Vorlage
+  zwischenzeitlich von jemand anderem geändert, meldet der Editor einen Konflikt und bietet die
+  Fassungsliste zum Laden an. Unveränderter Inhalt wird als solcher gemeldet.
+
+Vorlagenänderungen wirken **nur auf neu erstellte Ausweise**: Jeder Ausweis trägt die beim
+Erzeugen gültige Fassung vollständig in seinem Snapshot und wird immer daraus gerendert.
+Das Recht für den Editor heißt **Ausweisvorlagen (Editor)** (`patient_card_templates`);
+vorgegeben haben es *Admin* und *Arzt*.
+
+![Ausweiseditor](docs/screenshots/60-ausweiseditor.png)
+
+![Bereich auf Seite 2 im Ausweiseditor](docs/screenshots/61-ausweiseditor-seite2.png)
+
+![Fassungen der Ausweisvorlage](docs/screenshots/62-ausweiseditor-fassungen.png)
+
 ### Routen
 
 | Methode | Pfad | Zweck |
@@ -774,6 +816,10 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 | POST | `/system/letter-templates/preview` | PDF-Vorschau einer ungespeicherten Vorlage mit Beispieldaten |
 | GET | `/system/letter-templates/source` | Aktuelle Vorlage einer Empfängerart als JSON (Bausteine übernehmen) |
 | GET | `/system/letter-templates/versions/{id}` | Gespeicherte Fassung als JSON (zum Laden in den Editor) |
+| GET | `/system/patient-card-templates` | Vorlageneditor des Patientenausweises (eigener Tab) |
+| POST | `/system/patient-card-templates` | Ausweisvorlage als neue Fassung speichern (JSON-Antwort, CSRF) |
+| POST | `/system/patient-card-templates/preview` | PDF-Vorschau einer ungespeicherten Ausweisvorlage mit Beispieldaten |
+| GET | `/system/patient-card-templates/versions/{id}` | Gespeicherte Fassung der Ausweisvorlage als JSON |
 
 ### Briefvorlage und Vorlageneditor
 

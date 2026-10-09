@@ -25,6 +25,8 @@ use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
 use App\PatientCard\PatientCardService;
 use App\PatientCard\PatientCardSettingsService;
+use App\PatientCard\PatientCardTemplateRepository;
+use App\PatientCard\PatientCardTemplateService;
 use App\Security\ImageUploadValidator;
 use Tests\Support\Fixtures;
 
@@ -167,6 +169,7 @@ final class LetterViewTest extends DatabaseTestCase
             new PatientCardPdfGenerator(),
             $this->clock,
             MeasurementTemplate::default(dirname(__DIR__, 2)),
+            new PatientCardTemplateService(new PatientCardTemplateRepository($this->pdo), $this->clock),
         );
         $stmt = $this->pdo->prepare('SELECT id FROM reports WHERE patient_id = ? ORDER BY id DESC LIMIT 1');
         $stmt->execute([$this->patientId]);

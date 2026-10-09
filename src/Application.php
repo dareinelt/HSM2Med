@@ -31,6 +31,8 @@ use App\PatientCard\PatientCardPdfGenerator;
 use App\PatientCard\PatientCardRepository;
 use App\PatientCard\PatientCardService;
 use App\PatientCard\PatientCardSettingsService;
+use App\PatientCard\PatientCardTemplateRepository;
+use App\PatientCard\PatientCardTemplateService;
 use App\Report\ReportService;
 use App\Report\ReportSummaryBuilder;
 use App\Repository\GroupRepository;
@@ -209,7 +211,18 @@ final class Application
             new PatientCardPdfGenerator(),
             $this->clock,
             $this->measurementTemplate(),
+            $this->patientCardTemplateService(),
         );
+    }
+
+    public function patientCardTemplateRepository(): PatientCardTemplateRepository
+    {
+        return new PatientCardTemplateRepository($this->pdo());
+    }
+
+    public function patientCardTemplateService(): PatientCardTemplateService
+    {
+        return new PatientCardTemplateService($this->patientCardTemplateRepository(), $this->clock);
     }
 
     public function patientCardSettingsService(): PatientCardSettingsService

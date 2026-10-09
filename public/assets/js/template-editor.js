@@ -1,10 +1,11 @@
 /*
- * HSM2Med – Vorlageneditor fuer Briefe nach DIN 5008 (Form B).
+ * HSM2Med – Vorlageneditor fuer Briefe (DIN 5008, Form B) und Patientenausweise.
  *
  * Eigenstaendige Seite ohne Fremdbibliotheken; CSP-konform (keine Inline-Skripte, keine
  * Inline-Styles im Markup – Masse werden ueber element.style gesetzt). Die Daten kommen aus dem
  * JSON-Datenblock #template-editor-data. Gespeichert wird per fetch() als neue Fassung; die
- * Pruefung der Inhalte erfolgt verbindlich auf dem Server (LetterTemplate::normalize).
+ * Pruefung der Inhalte erfolgt verbindlich auf dem Server (LetterTemplate::normalize bzw.
+ * PatientCardTemplate::normalize). Welche Vorlagenart bearbeitet wird, steht in def.kind.
  */
 (() => {
     'use strict';
@@ -15,10 +16,23 @@
     }
     const data = JSON.parse(dataNode.textContent || '{}');
     const def = data.definition;
+    /** Vorlagenart: "letter" (DIN 5008) oder "patient_card" (Patientenausweis). */
+    const isCard = String(def.kind || 'letter') === 'patient_card';
+    /** Texte, die sich zwischen Brief- und Ausweisvorlage unterscheiden (der Server liefert sie mit). */
+    const ui = Object.assign({
+        document: 'Briefvorlage',
+        documents: 'Briefe',
+        count_key: 'letter_count',
+        show_in: 'Im Brief anzeigen',
+        zone_badge: 'Fester Bereich · Lage nach DIN 5008',
+        placeholder_hint: 'In ein Textfeld klicken, dann Platzhalter wählen. Er wird beim Erstellen des Briefes durch die Daten ersetzt.',
+    }, obj(data.labels));
     const $ = (selector) => document.querySelector(selector);
 
-    // Seitengeometrie in Millimetern (wie LetterPdfGenerator).
-    const PAGE = { width: 210, height: 297, left: 25, right: 20, bodyTop: 98.46, footer: 274 };
+    // Seitengeometrie in Millimetern (wie LetterPdfGenerator bzw. PatientCardPdfGenerator).
+    const PAGE = isCard
+        ? { width: 210, height: 297, left: 14.8, right: 14.8, bodyTop: 34.2, footer: 274 }
+        : { width: 210, height: 297, left: 25, right: 20, bodyTop: 98.46, footer: 274 };
 
     const el = {
         title: $('[data-te-title]'),
@@ -46,7 +60,7 @@
     };
 
     const state = {
-        type: String(data.type || 'patient'),
+        type: String(data.type || (isCard ? '' : 'patient')),
         base: data.current,
         baseContent: prepare(data.current.content),
         content: prepare(data.current.content),
@@ -190,7 +204,7 @@
     const settings = obj(data.settings);
     const centerName = settings.center_name || 'Nachsorgezentrum (Name aus den Ausweis-Stammdaten)';
     const centerAddressLines = String(settings.center_address || 'Anschrift aus den Ausweis-Stammdaten').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const sample = {
+    const sample = Object.assign({
         center_name: centerName,
         center_address_line: centerAddressLines.join(', '),
         patient_name: 'MUSTERMANN, ERIKA',
@@ -203,7 +217,7 @@
         sequence_no: '1',
         page: '1',
         pages: '2',
-    };
+    }, obj(data.sample));
 
     /** Beispiel-Anreden je Empfaengerart, damit die Vorschau die Vorlagenart widerspiegelt. */
     const salutationSamples = {
@@ -248,8 +262,9 @@
         const dirty = isDirty();
         el.state.classList.toggle('is-dirty', dirty);
         el.state.replaceChildren(icon(dirty ? 'warning' : 'check'), h('span', { text: dirty ? 'Ungespeicherte Änderungen' : 'Gespeichert' }));
-        el.title.textContent = typeLabel(state.type) + ': ' + state.content.name + ' – Fassung ' + state.base.version_no + (dirty ? ' (geändert)' : '');
-        document.title = (dirty ? '● ' : '') + 'Briefvorlage ' + typeLabel(state.type) + ' – HSM2Med';
+        const docTitle = isCard ? ui.document : ui.document + ' ' + typeLabel(state.type);
+        el.title.textContent = docTitle + ': ' + state.content.name + ' – Fassung ' + state.base.version_no + (dirty ? ' (geändert)' : '');
+        document.title = (dirty ? '● ' : '') + docTitle + ' – HSM2Med';
         el.statusVersion.textContent = 'Grundlage: Fassung ' + state.base.version_no + ' vom ' + formatDate(state.base.created_at);
         const visible = state.content.blocks.filter((block) => block.enabled).length;
         el.statusBlocks.textContent = state.content.blocks.length + ' Bausteine, davon ' + visible + ' eingeblendet';
@@ -284,9 +299,10 @@
         return blockDef.label;
     }
 
-    /** Bezeichnung der Vorlagenart laut Server (Fallback: Schluessel). */
+    /** Bezeichnung der Vorlagenart laut Server (Ausweise haben keine Unterarten). */
     function typeLabel(type) {
-        return (def.types && def.types[type]) || type;
+        const types = obj(def.types);
+        return types[type] || (isCard ? '' : String(type));
     }
 
     function renderZones() {
@@ -350,27 +366,22 @@
         }));
     }
 
-    function renderPaper() {
-        const width = el.paper.parentElement.clientWidth - 32;
-        const mm = Math.max(1.6, Math.min(4.2, width / PAGE.width));
-        el.paper.style.setProperty('--mm', mm + 'px');
-        el.paper.style.width = (PAGE.width * mm) + 'px';
-        el.paper.style.minHeight = (PAGE.height * mm) + 'px';
-        el.paper.style.fontSize = (mm * 3.6) + 'px';
+    /** Setzt einen absolut positionierten Bereich auf der Vorschauseite. */
+    function place(node, mm, x, y, w, hgt) {
+        node.style.left = (x * mm) + 'px';
+        node.style.top = (y * mm) + 'px';
+        if (w !== null) {
+            node.style.width = (w * mm) + 'px';
+        }
+        if (hgt !== null) {
+            node.style.height = (hgt * mm) + 'px';
+        }
+        return node;
+    }
 
-        const zones = state.content.zones;
-        const place = (node, x, y, w, hgt) => {
-            node.style.left = (x * mm) + 'px';
-            node.style.top = (y * mm) + 'px';
-            if (w !== null) {
-                node.style.width = (w * mm) + 'px';
-            }
-            if (hgt !== null) {
-                node.style.height = (hgt * mm) + 'px';
-            }
-            return node;
-        };
-        const zoneBox = (key, extraClass, ...children) => h('div', {
+    /** Klickbarer Zonenrahmen der Vorschau. */
+    function zoneBox(key, extraClass, ...children) {
+        return h('div', {
             class: 'te-zone ' + extraClass + (isSelected('zone', key) ? ' is-selected' : '') + (hasErrors('zones.' + key) ? ' has-error' : ''),
             dataset: { zone: key },
             title: def.zones[key].label + ' – zum Bearbeiten klicken',
@@ -379,6 +390,41 @@
                 select('zone', key);
             },
         }, h('span', { class: 'te-zone__tag', text: def.zones[key].label }), ...children);
+    }
+
+    /** Baustein in der Vorschau (Klick- und Ziehziel wie in der Bausteinliste). */
+    function previewBlockNode(block) {
+        const node = h('div', {
+            class: 'te-pblock te-pblock--' + block.type + (isSelected('block', block.id) ? ' is-selected' : '') + (block.enabled ? '' : ' is-off') + (hasErrors(blockPath(block.id)) ? ' has-error' : ''),
+            draggable: 'true',
+            dataset: { blockId: block.id },
+            title: blockTitle(block) + ' – zum Bearbeiten klicken, zum Verschieben ziehen',
+            onclick: (event) => {
+                event.stopPropagation();
+                select('block', block.id);
+            },
+        }, h('span', { class: 'te-zone__tag', text: blockTitle(block) + (block.enabled ? '' : ' · ausgeblendet') }), ...blockPreview(block));
+        bindDrag(node, block.id);
+        return node;
+    }
+
+    function renderPaper() {
+        const width = el.paper.parentElement.clientWidth - 32;
+        const mm = Math.max(1.6, Math.min(4.2, width / PAGE.width));
+        el.paper.style.setProperty('--mm', mm + 'px');
+        el.paper.style.width = (PAGE.width * mm) + 'px';
+        el.paper.style.minHeight = (PAGE.height * mm) + 'px';
+        el.paper.style.fontSize = (mm * 3.6) + 'px';
+
+        if (isCard) {
+            renderCardPaper(mm);
+            return;
+        }
+        renderLetterPaper(mm);
+    }
+
+    function renderLetterPaper(mm) {
+        const zones = state.content.zones;
 
         const head = h('div', { class: 'te-paper__head' });
         head.style.height = (PAGE.bodyTop * mm) + 'px';
@@ -392,13 +438,13 @@
                 textNode(letterhead.texts.extra, null),
             ),
             letterhead.options.show_logo ? h('div', { class: 'te-lh__logo', text: settings.has_logo ? 'Logo' : 'Logo (nicht hinterlegt)' }) : null,
-        ), PAGE.left, 8, PAGE.width - PAGE.left - PAGE.right, 34));
+        ), mm, PAGE.left, 8, PAGE.width - PAGE.left - PAGE.right, 34));
 
         // Ruecksendeangabe und Anschriftfeld
         const ret = zones.return_address;
         head.append(place(zoneBox('return_address', 'te-zone--return' + (ret.options.show ? '' : ' is-off'),
             ret.options.show ? h('span', { class: 'te-return', text: fill(ret.texts.text) }) : h('span', { class: 'te-empty', text: 'Rücksendeangabe ausgeblendet' }),
-        ), 20, 45, 85, 5));
+        ), mm, 20, 45, 85, 5));
         const recipient = zones.recipient;
         const recipientLines = recipient.options.source === 'patient'
             ? ['Frau', 'Erika Mustermann', 'Musterstraße 1', '12345 Beispielstadt']
@@ -406,7 +452,7 @@
         head.append(place(zoneBox('recipient', 'te-zone--recipient',
             recipient.texts.remark.trim() !== '' ? h('span', { class: 'te-remark', text: fill(recipient.texts.remark) }) : null,
             h('div', { class: 'te-recipient' }, ...recipientLines.map((line) => h('span', { text: line }))),
-        ), 20, 50.5, 85, 40));
+        ), mm, 20, 50.5, 85, 40));
 
         // Informationsblock
         const info = zones.info_block;
@@ -423,7 +469,7 @@
             infoRows.length === 0
                 ? h('span', { class: 'te-empty', text: 'Informationsblock ausgeblendet' })
                 : h('dl', { class: 'te-info' }, ...infoRows.flatMap(([, label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })])),
-        ), 125, 50, 75, 44));
+        ), mm, 125, 50, 75, 44));
 
         // Falz- und Lochmarken
         const marks = [];
@@ -439,18 +485,7 @@
         const body = h('div', { class: 'te-paper__body', dataset: { dropzone: 'body' } });
         body.style.padding = '0 ' + (PAGE.right * mm) + 'px 0 ' + (PAGE.left * mm) + 'px';
         for (const block of state.content.blocks) {
-            const node = h('div', {
-                class: 'te-pblock te-pblock--' + block.type + (isSelected('block', block.id) ? ' is-selected' : '') + (block.enabled ? '' : ' is-off') + (hasErrors(blockPath(block.id)) ? ' has-error' : ''),
-                draggable: 'true',
-                dataset: { blockId: block.id },
-                title: blockTitle(block) + ' – zum Bearbeiten klicken, zum Verschieben ziehen',
-                onclick: (event) => {
-                    event.stopPropagation();
-                    select('block', block.id);
-                },
-            }, h('span', { class: 'te-zone__tag', text: blockTitle(block) + (block.enabled ? '' : ' · ausgeblendet') }), ...blockPreview(block));
-            bindDrag(node, block.id);
-            body.append(node);
+            body.append(previewBlockNode(block));
         }
         if (state.content.blocks.length === 0) {
             body.append(h('p', { class: 'te-empty', text: 'Keine Bausteine vorhanden.' }));
@@ -480,6 +515,81 @@
         el.paper.replaceChildren(head, ...marks, body, h('div', { class: 'te-paper__grow' }), appendixBox, continuation, foot);
     }
 
+    /**
+     * Vorschau des Patientenausweises: Seite 1 mit Kopfbereich, zwei Spalten und Abschlussblock,
+     * darunter Seite 2 mit Messwerttabelle und freien Textbausteinen sowie die Fusszeile.
+     */
+    function renderCardPaper(mm) {
+        const zones = state.content.zones;
+        const margin = (node) => {
+            node.style.marginLeft = (PAGE.left * mm) + 'px';
+            node.style.marginRight = (PAGE.right * mm) + 'px';
+            return node;
+        };
+        const areaOf = (block) => obj(def.areas)[block.type] || 'left';
+
+        const head = h('div', { class: 'te-paper__head' });
+        head.style.height = (PAGE.bodyTop * mm) + 'px';
+        const header = zones.header;
+        head.append(place(zoneBox('header', 'te-zone--card-head' + (header.options.show_title ? '' : ' is-off'),
+            header.options.show_title
+                ? h('div', { class: 'te-lh__text' }, h('strong', { text: fill(header.texts.title) }), h('span', { text: fill(header.texts.subtitle) }))
+                : h('span', { class: 'te-empty', text: 'Überschrift ausgeblendet' }),
+            header.options.show_logo ? h('div', { class: 'te-lh__logo', text: settings.has_logo ? 'Logo' : 'Logo (nicht hinterlegt)' }) : null,
+        ), mm, PAGE.left, 4, PAGE.width - PAGE.left - PAGE.right, 22));
+
+        const columns = { left: h('div', { class: 'te-card-column te-card-column--left' }), right: h('div', { class: 'te-card-column te-card-column--right' }) };
+        const onPage1 = state.content.blocks.filter((block) => areaOf(block) !== 'page2');
+        const page1 = h('div', { class: 'te-card-columns' });
+        page1.append(columns.left, columns.right);
+        const summaryBlocks = [];
+        for (const block of state.content.blocks) {
+            const area = areaOf(block);
+            if (area === 'left' || area === 'right') {
+                columns[area].append(previewBlockNode(block));
+            } else if (area === 'bottom') {
+                summaryBlocks.push(previewBlockNode(block));
+            }
+        }
+        for (const key of ['left', 'right']) {
+            if (columns[key].childElementCount === 0) {
+                columns[key].append(h('p', { class: 'te-empty', text: 'Leer' }));
+            }
+        }
+        const body = h('div', { class: 'te-paper__body' }, page1, ...summaryBlocks.map(margin));
+        body.style.padding = '0 ' + (PAGE.right * mm) + 'px 0 ' + (PAGE.left * mm) + 'px';
+        if (onPage1.length === 0) {
+            body.append(h('p', { class: 'te-empty', text: 'Keine Bausteine auf Seite 1.' }));
+        }
+
+        const page2Blocks = state.content.blocks.filter((block) => areaOf(block) === 'page2');
+        const page2 = h('div', { class: 'te-zone te-zone--card-page2' },
+            h('span', { class: 'te-zone__tag', text: 'Seite 2' }),
+            page2Blocks.length === 0
+                ? h('span', { class: 'te-empty', text: 'Keine Bausteine auf Seite 2.' })
+                : h('div', { class: 'te-card-page2' }, ...page2Blocks.map(previewBlockNode)),
+        );
+
+        const footer = zones.footer;
+        const foot = margin(zoneBox('footer', 'te-zone--footer',
+            h('div', { class: 'te-footer' },
+                h('div', {},
+                    footer.options.show_disclaimer
+                        ? textNode(footer.texts.disclaimer, null)
+                        : h('span', { class: 'te-empty', text: 'Hinweis ausgeblendet' }),
+                    footer.options.show_meta ? h('span', { class: 'te-footer__meta', text: fill(footer.texts.meta) }) : null),
+                h('span', { class: 'te-footer__page', text: fill(footer.texts.page_label) }),
+            ),
+        ));
+
+        const continuation = margin(h('div', { class: 'te-zone te-zone--continuation' },
+            h('span', { class: 'te-muted', text: 'Kopfzeile ab Seite 2: ' }),
+            h('span', { text: fill(header.texts.continuation) }),
+        ));
+
+        el.paper.replaceChildren(head, body, h('div', { class: 'te-paper__grow' }), page2, continuation, foot);
+    }
+
     function headingNode(text) {
         const value = fill(text).trim();
         return value === '' ? null : h('strong', { class: 'te-p-heading', text: value });
@@ -492,6 +602,9 @@
     function blockPreview(block) {
         const t = block.texts;
         const empty = fill(state.content.zones.general.texts.empty);
+        if (isCard) {
+            return cardBlockPreview(block, t, empty);
+        }
         switch (block.type) {
             case 'subject':
                 return [h('strong', { class: 'te-p-subject', text: fill(t.title) }), t.line2.trim() !== '' ? h('strong', { class: 'te-p-subject', text: fill(t.line2) }) : null];
@@ -519,6 +632,73 @@
                     h('span', { class: 'te-p-meta', text: 'Anhang unter der Grußformel · beginnt auf einer neuen Seite · entfällt ohne Bericht' })];
             case 'closing':
                 return [textNode(t.text, 'Keine Grußformel'), h('span', { class: 'te-p-signature', 'aria-hidden': 'true' }), textNode(t.signature, null)];
+            case 'text':
+                return [headingNode(t.heading), textNode(t.text, 'Leerer Textbaustein – rechts Text eingeben')];
+            default:
+                return [];
+        }
+    }
+
+    /** Baustein-Vorschau fuer Patientenausweise (Beispieldaten aus PatientCardSample). */
+    function cardBlockPreview(block, t, empty) {
+        const rows = (pairs) => h('dl', { class: 'te-p-rows' }, ...pairs
+            .filter(([label]) => String(label).trim() !== '')
+            .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })]));
+        switch (block.type) {
+            case 'patient_data':
+                return [headingNode(t.title), rows([
+                    [t.label_name, sample.patient_name],
+                    [t.label_birth, sample.date_of_birth],
+                    [t.label_street, 'Musterstraße 1'],
+                    [t.label_city, '12345 Beispielstadt'],
+                    [t.label_phone, '01234 567890'],
+                    [block.options.show_indication ? t.label_indication : '', 'Beispielindikation'],
+                ])];
+            case 'emergency_contact':
+                return [headingNode(t.title), rows([[t.label_name, 'Max Mustermann'], [t.label_phone, '0170 1234567']])];
+            case 'physician':
+                return [headingNode(t.title), rows([
+                    [t.label_name, 'Dr. med. Beispiel'],
+                    [t.label_practice, 'Praxispraxis'],
+                    [t.label_city, '12345 Beispielstadt'],
+                    [t.label_phone, '01234 567890'],
+                ])];
+            case 'center':
+                return [headingNode(t.title), rows([[centerName, centerAddressLines.join(', ')]]),
+                    textNode(t.extra, null)];
+            case 'implants':
+                return [headingNode(t.title),
+                    rows([[t.device_title, 'Beispielgerät DR']]),
+                    block.options.show_leads
+                        ? h('table', { class: 'te-p-table' },
+                            h('thead', {}, h('tr', {}, ...[t.col_model, t.col_location, t.col_localization, t.col_date].map((label) => h('th', { text: fill(label) })))),
+                            h('tbody', {}, h('tr', {}, ...['Beispielelektrode 1', 'rechts atrial', 'RA', '01.01.2024'].map((value) => h('td', { text: value })))))
+                        : h('span', { class: 'te-empty', text: fill(t.lead_empty) })];
+            case 'mrt':
+                return [headingNode(t.title), h('span', { class: 'te-p-sample', text: 'MRT-taugliches System (Beispielangabe aus dem Gerätebericht).' })];
+            case 'notice':
+                return [headingNode(t.title),
+                    block.options.show_flight
+                        ? h('div', { class: 'te-p-flight' },
+                            h('strong', { text: fill(t.flight_title_de) }),
+                            h('span', { text: 'Beispielhinweis zur Flugsicherheit (Gerätepass).' }),
+                            h('strong', { text: fill(t.flight_title_en) }),
+                            h('span', { text: 'Example notice for airline security.' }))
+                        : null,
+                    h('span', { class: 'te-p-sample', text: 'Weitere Hinweise aus dem Gerätepass (Beispiel).' })];
+            case 'summary':
+                return [h('dl', { class: 'te-p-rows' },
+                    ...[[t.label_other, ''], [t.label_remark, ''], [t.label_physician, 'Dr. med. Beispiel'], [t.label_next_control, '6 Monate']]
+                        .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value !== '' ? value : empty })])),
+                    block.options.show_barcode ? h('span', { class: 'te-barcode', 'aria-hidden': 'true' }) : null];
+            case 'measurements':
+                return [h('strong', { class: 'te-p-heading', text: 'Messwerttabelle' }),
+                    h('table', { class: 'te-p-table' },
+                        h('thead', {}, h('tr', {}, ...['Messwert', '01.01.2024', '01.07.2024'].map((label) => h('th', { text: label })))),
+                        h('tbody', {}, ...['Ventrikelstimulation', 'Vorhofstimulation', 'Reizschwelle'].map((label) => h('tr', {},
+                            h('td', { text: label }), h('td', { text: 'Beispielwert' }), h('td', { text: 'Beispielwert' }))))),
+                    h('span', { class: 'te-p-meta', text: fill(t.current_label) }),
+                    block.options.show_notes ? h('span', { class: 'te-p-sample', text: fill(t.notes) }) : null];
             case 'text':
                 return [headingNode(t.heading), textNode(t.text, 'Leerer Textbaustein – rechts Text eingeben')];
             default:
@@ -554,7 +734,7 @@
             h('p', { class: 'te-hint', text: definition.description }),
         ];
         if (kind === 'zone') {
-            nodes.push(h('p', { class: 'te-badge', text: 'Fester Bereich · Lage nach DIN 5008' }));
+            nodes.push(h('p', { class: 'te-badge', text: ui.zone_badge }));
         }
         if (state.errors[path]) {
             nodes.push(h('p', { class: 'field-error', text: state.errors[path] }));
@@ -565,7 +745,7 @@
             nodes.push(h('div', { class: 'te-props__row' },
                 h('label', { class: 'check' },
                     h('input', { type: 'checkbox', checked: block.enabled, onchange: (event) => { block.enabled = event.target.checked; changed(); } }),
-                    ' Im Brief anzeigen'),
+                    ' ' + ui.show_in),
                 h('span', { class: 'te-props__tools' },
                     h('button', { type: 'button', disabled: index === 0, onclick: () => moveBy(block.id, -1, false), title: 'Nach oben verschieben', text: '↑ Nach oben' }),
                     h('button', { type: 'button', disabled: index === state.content.blocks.length - 1, onclick: () => moveBy(block.id, 1, false), title: 'Nach unten verschieben', text: '↓ Nach unten' }),
@@ -674,7 +854,7 @@
         });
         const panel = h('div', { class: 'te-placeholders' },
             h('h4', { class: 'te-subhead', text: 'Platzhalter' }),
-            h('p', { class: 'te-hint', text: 'In ein Textfeld klicken, dann Platzhalter wählen. Er wird beim Erstellen des Briefes durch die Daten ersetzt.' }),
+            h('p', { class: 'te-hint', text: ui.placeholder_hint }),
             h('div', { class: 'te-chips' },
                 ...Object.entries(def.placeholders).map(([key, label]) => chip(key, label, false)),
                 ...Object.entries(def.pagePlaceholders).map(([key, label]) => chip(key, label, true))),
@@ -792,7 +972,9 @@
         const block = { id, type: 'text', enabled: true, options: fillOptions(def.blocks.text, {}), texts: fillTexts(def.blocks.text, {}) };
         const selected = state.selected.kind === 'block' ? state.content.blocks.findIndex((candidate) => candidate.id === state.selected.key) : -1;
         // Nach dem gewaehlten Baustein einfuegen, sonst vor der Grussformel bzw. am Ende.
-        let index = selected >= 0 ? selected + 1 : state.content.blocks.findIndex((candidate) => candidate.type === 'closing');
+        let index = selected >= 0
+            ? selected + 1
+            : state.content.blocks.findIndex((candidate) => candidate.type === (isCard ? 'measurements' : 'closing'));
         if (index < 0) {
             index = state.content.blocks.length;
         }
@@ -1036,7 +1218,7 @@
             h('td', { text: version.name }),
             h('td', { text: formatDate(version.created_at) }),
             h('td', { text: version.comment || '–' }),
-            h('td', { class: 'num', text: String(version.letter_count) }),
+            h('td', { class: 'num', text: String(version[ui.count_key] || 0) }),
             h('td', {}, h('button', { type: 'button', onclick: () => loadVersion(version.id), text: 'In Editor laden' })),
         )));
     }
@@ -1085,7 +1267,7 @@
 
     /** Wechselt die Vorlagenart: laedt die aktuelle Fassung der anderen Art in den Editor. */
     async function switchType(type) {
-        if (type === state.type) {
+        if (isCard || type === state.type) {
             return;
         }
         const label = typeLabel(type);
@@ -1133,7 +1315,7 @@
         if (!block) {
             return;
         }
-        const others = Object.keys(def.types || {}).filter((type) => type !== state.type);
+        const others = isCard ? [] : Object.keys(def.types || {}).filter((type) => type !== state.type);
         if (others.length === 0) {
             return;
         }

@@ -315,6 +315,25 @@
 .te-footer__meta { display: block; color: #6b7079; }
 .te-footer__page { flex: 0 0 auto; white-space: nowrap; }
 
+/* Patientenausweis: Kopfbereich, zwei Spalten auf Seite 1, Seite 2 darunter */
+.te-zone--card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: calc(var(--mm) * 4);
+    padding-bottom: calc(var(--mm) * 1);
+    border-bottom: 1px solid #c9d0da;
+}
+.te-card-columns { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--mm) * 2.5); align-items: start; }
+.te-card-column { display: flex; flex-direction: column; min-width: 0; }
+.te-card-column--right { padding-left: calc(var(--mm) * 2.5); border-left: 1px dashed #dfe4ec; }
+.te-card-page2 { display: flex; flex-direction: column; }
+.te-card-page2 .te-pblock + .te-pblock { margin-top: calc(var(--mm) * 2); }
+.te-zone--card-page2 { margin-top: calc(var(--mm) * 2); padding: calc(var(--mm) * 1.5); border: 1px dashed #c9d0da; font-size: .86em; }
+.te-p-flight { display: flex; flex-direction: column; gap: calc(var(--mm) * .4); padding: calc(var(--mm) * 1) calc(var(--mm) * 1.2); border: 1px solid #e0b48a; background: #fdf6ec; font-size: .86em; }
+.te-barcode { display: block; width: calc(var(--mm) * 45); height: calc(var(--mm) * 10); margin-top: calc(var(--mm) * 1);
+    background: repeating-linear-gradient(90deg, #333 0 1px, transparent 1px 3px, #333 3px 4px, transparent 4px 7px); }
+
 /* ----------------------------------------------------------- Eigenschaften */
 .te-props__title { margin: 0 0 .2rem; font-size: 1.05rem; color: var(--office-accent); }
 .te-props__row {
