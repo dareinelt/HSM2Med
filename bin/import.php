@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /*
- * Kommandozeilen-Import einer Merlin-Exportdatei.
+ * Kommandozeilen-Import einer Exportdatei (Merlin .txt/.log oder Biotronik
+ * IEEE 11073-10103 .xml). Der Parser wird automatisch erkannt.
  *   php bin/import.php <datei> [--dry-run] [--force]
  *
  *   --dry-run  nur analysieren, nichts speichern

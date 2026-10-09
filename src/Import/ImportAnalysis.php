@@ -20,6 +20,8 @@ final readonly class ImportAnalysis
         public string $filename,
         public int $fileSize,
         public string $fileHash,
+        public string $parserName,
+        public string $parserVersion,
         public ParseResult $parseResult,
         public array $assignments,
         public ReportSummary $summary,

@@ -10,7 +10,7 @@ use App\Database\Migrator;
 use App\Import\ImportArchive;
 use App\Import\ImportService;
 use App\Import\ImportValidator;
-use App\Import\MerlinParser;
+use App\Import\ParserChain;
 use App\Import\PendingUploadStore;
 use App\Letter\DeviceCheckAppendix;
 use App\Letter\LetterPdfGenerator;
@@ -127,7 +127,7 @@ final class Application
     {
         return new ImportService(
             $this->pdo(),
-            new MerlinParser(),
+            ParserChain::default(),
             new ImportValidator(),
             $this->mapping(),
             new ReportSummaryBuilder($this->mapping()),

@@ -1,7 +1,8 @@
-# HSM2Med – Herzschrittmacher-Auslesedaten (Abbott/St. Jude Merlin)
+# HSM2Med – Herzschrittmacher-Auslesedaten (Abbott/St. Jude Merlin, Biotronik)
 
 HSM2Med ist eine vollständig offline lauffähige Webanwendung, die Exportdateien aus dem
-Abbott/St. Jude **Merlin**-Programmiergerät importiert, strukturiert darstellt, als
+Abbott/St. Jude **Merlin**-Programmiergerät sowie XML-Exporte von **Biotronik**
+(IEEE 11073-10103) importiert, strukturiert darstellt, als
 unveränderliche Berichte in MySQL speichert und daraus PDF-Berichte erzeugt – auch für
 historische Auslesungen, ausschließlich aus der Datenbank.
 
@@ -38,9 +39,11 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 
 ## Funktionsumfang
 
-- Upload von Merlin-Exportdateien (`.txt`/`.log`) mit Prüfung **vor** dem Speichern
+- Upload von Merlin-Exportdateien (`.txt`/`.log`) und Biotronik-XML-Exporten
+  (`.xml`, IEEE 11073-10103) mit Prüfung **vor** dem Speichern
   (Vorschau mit Patient, Gerät, Sonden, Kategorien, Warnungen und Fehlern).
-- Verlustfreier Parser: Feldtrenner ist ausschließlich ASCII 0x1C (File Separator);
+- Verlustfreier Parser: bei Merlin ist der Feldtrenner ausschließlich ASCII 0x1C (File Separator),
+  bei Biotronik werden die `<value>`-Knoten des XML gelesen;
   Werte, leere Felder, Einheiten, Dezimalzahlen und Datumsangaben bleiben unverändert.
 - Speicherung jedes Imports als **unveränderlicher Bericht** (Snapshot) in MySQL in
   einer einzigen Transaktion – bei Fehlern vollständiger Rollback.
@@ -320,7 +323,7 @@ Patienten unter `/patients/new`.
 ![Importvorschau](docs/screenshots/03-import-vorschau.png)
 
 **2. Dubletten und ungültige Dateien** – eine bereits importierte Datei kann nur nach
-ausdrücklicher Bestätigung erneut importiert werden; Dateien ohne Merlin-Format werden abgelehnt:
+ausdrücklicher Bestätigung erneut importiert werden; Dateien ohne erkanntes Format werden abgelehnt:
 
 ![Dublettenhinweis](docs/screenshots/09-import-dublette.png)
 
@@ -847,6 +850,10 @@ docker compose exec -u www-data web php bin/import.php /tmp/export.log --dry-run
 docker compose exec -u www-data web php bin/import.php /tmp/export.log             # importieren
 docker compose exec -u www-data web php bin/import.php /tmp/export.log --force     # Dublette erzwingen
 
+# Import eines Biotronik-XML-Exports (Format wird automatisch erkannt)
+docker compose cp ./BIOIEEE_export.xml web:/tmp/BIOIEEE_export.xml
+docker compose exec -u www-data web php bin/import.php /tmp/BIOIEEE_export.xml --dry-run
+
 # PDF-Export eines gespeicherten Berichts (nur aus der Datenbank)
 docker compose exec -u www-data web php bin/export-pdf.php 1 /tmp/bericht-1.pdf --raw
 docker compose cp web:/tmp/bericht-1.pdf ./bericht-1.pdf
@@ -893,11 +900,45 @@ Beispiel (FS als `␜` dargestellt):
 - Unterstützte Kodierungen: UTF-8 (mit/ohne BOM), UTF-16 mit BOM, sonst Windows-1252 bzw.
   ISO-8859-1 (Fallback mit Warnung). Zeilenumbrüche CRLF, LF und CR werden akzeptiert.
 
+### Biotronik XML (IEEE 11073-10103)
+
+XML-Exporte des Herstellers Biotronik (`creator="BioICSConverter"`, Dateiname beginnt mit
+`BIOIEEE_`) werden ebenfalls importiert. Der Parser wird automatisch anhand von Inhalt und
+Endung gewählt.
+
+```xml
+<biotronik-ieee11073-export creator="BioICSConverter" format-version="4.10">
+  <dataset>
+    <section name="MDC">
+      <section name="IDC">
+        <section name="DEV">
+          <value code="720898" name="MODEL" type="ST">Enticos 4 SR</value>
+          <value code="730880" name="LOWRATE" type="NM" unit="{beats}/min">60</value>
+        </section>
+      </section>
+    </section>
+  </dataset>
+</biotronik-ieee11073-export>
+```
+
+- Jeder `<value>`-Knoten ergibt einen Datensatz. Der Inhalt ist der Wert (nur außenliegende
+  Leerzeichen werden entfernt), `unit` die Einheit, `name` die Bezeichnung.
+- Als Parameter-ID dient das Attribut `code` (z. B. `730880`). Fehlt es (typisch für die
+  Patientendaten), wird eine stabile Ersatz-ID aus dem Abschnittspfad gebildet
+  (z. B. `MDC.ATTR.PT.DOB`); darauf weist die Warnung `missing_value_code` hin.
+- Der Abschnittspfad wird zusätzlich als `section` gespeichert. Sonden (Leads) werden über
+  die in `config/parameter_mapping.php` hinterlegten `lead_sections` erkannt.
+- Datumswerte liegen im IEEE-Format `YYYYMMDDThhmmss[±hhmm]` vor (z. B. `20261008T123829+0200`).
+  Der Originaltext bleibt gespeichert; eine Zeitzone wird nicht umgerechnet.
+- Die Werte sind **keine** standardisierten IEEE-11073-Codes; `standard_codes` bleibt leer.
+- Eine eingebettete XML-Signatur (`<Signature>`) wird ignoriert.
+
 ## Parserverhalten und Fehlerbehandlung
 
 - Getrennt wird **ausschließlich** an 0x1C; Tabulatoren, Semikolons, Kommas usw. sind
   normale Zeichen. Werte werden nicht gerundet, konvertiert oder getrimmt (lediglich
-  Zeilenumbrüche vor der ID werden entfernt).
+  Zeilenumbrüche vor der ID werden entfernt). Für XML-Exporte gilt die Trennerprüfung nicht;
+  dort werden ausschließlich die `<value>`-Knoten ausgewertet.
 - Leere Werte und Einheiten bleiben leere Zeichenketten (niemals `NULL` oder `0`).
 - Unbekannte Parameter werden vollständig übernommen (Kategorie „Sonstige / Nicht kategorisiert“).
 - Mehrfach vorkommende IDs werden alle gespeichert (Warnung `duplicate_parameter_id`).
@@ -917,6 +958,11 @@ Beispiel (FS als `␜` dargestellt):
 | `encoding_fallback` | Warnung | Kein gültiges UTF-8, Fallback-Kodierung genutzt |
 | `duplicate_parameter_id` | Warnung | ID mehrfach vorhanden |
 | `missing_device_serial`, `missing_patient`, `unparsed_date` | Warnung | Stammdaten fehlen bzw. Datum nicht erkannt |
+| `invalid_xml` | Fehler (blockiert) | XML nicht lesbar (Biotronik) |
+| `unexpected_root` | Fehler (blockiert) | Wurzelelement ist nicht `<biotronik-ieee11073-export>` |
+| `no_values` | Fehler (blockiert) | XML enthält keine `<value>`-Knoten |
+| `missing_value_name` | Fehler | `<value>` ohne Attribut `name` – Datensatz übersprungen |
+| `missing_value_code` | Warnung | `<value>` ohne Attribut `code` – Ersatz-ID aus dem Abschnittspfad |
 
 Importstatus: `completed`, `completed_with_warnings`, `completed_with_errors`, `failed`.
 Fehlgeschlagene Importe werden mit Grund im Importprotokoll gespeichert.
@@ -1006,9 +1052,12 @@ erDiagram
 Die Zuordnung steht in `config/parameter_mapping.php`:
 
 - `categories` – Kategorien mit Bezeichnung und Sortierung.
-- `by_id` – Zuordnung Merlin-ID → Kategorie (höchste Priorität).
+- `by_id` – Zuordnung Parameter-ID → Kategorie (höchste Priorität; Merlin-IDs und
+  Biotronik-`code`-Werte wie `730880`).
 - `by_name` / `name_patterns` – Zuordnung über Bezeichnung bzw. reguläre Ausdrücke.
-- `fields` / `lead_fields` – welche IDs Kopf- und Sondendaten liefern.
+- `fields` / `lead_fields` – welche IDs bzw. Namen Kopf- und Sondendaten liefern
+  (`combine` setzt Werte aus mehreren Feldern zusammen, z. B. den Patientennamen).
+- `lead_sections` – Abschnittspfade, die im Biotronik-XML je eine Sonde beschreiben.
 - `standard_codes` – nur **explizit dokumentierte** Zuordnungen zu Standardcodes (leer).
 
 Nach jeder inhaltlichen Änderung `version` erhöhen und den Web-Container neu bauen
@@ -1122,6 +1171,10 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
 - **Parser (1–12):** Normalformat, 0x1C als einziger Trenner, leere Werte/Einheiten,
   Dezimal- und Prozentwerte, Datumswerte, Sonderzeichen, unbekannte Parameter,
   fehlerhafte Datensätze, lange Bezeichnungen, Zeilenumbrüche, Referenzdatei.
+- **Biotronik-Parser:** Referenzdatei `tests/fixtures/BIOTRONIC_ANN.xml` (61 Datensätze),
+  Parsererkennung, Abschnittspfade, Ersatz-IDs ohne `code`, Einheiten, Duplikatnamen,
+  IEEE-Datumsformate, leere Werte, Fehlerfälle und der vollständige Datenbankimport
+  inklusive PDF.
 - **Datenbank (13–18):** erfolgreicher Import, Rollback, Fremdschlüssel,
   vollständige und unveränderte Parameter, Neuladen, Unveränderlichkeit historischer
   Berichte, außerdem Dubletten, Suche, Schema und Migrationen.
@@ -1283,7 +1336,7 @@ sämtliche Daten.
 | `exec ... entrypoint.sh: no such file or directory` | Zeilenenden: Repository mit LF auschecken (`.gitattributes`), Image neu bauen |
 | „Migration wurde nach dem Anwenden verändert“ | Angewendete Migrationen nie ändern – neue Migration anlegen |
 | Upload abgelehnt (Größe) | `UPLOAD_MAX_SIZE` erhöhen, Container neu starten |
-| Upload abgelehnt (Format) | Datei muss 0x1C-Trenner enthalten und auf `.txt`/`.log` enden |
+| Upload abgelehnt (Format) | Merlin: Datei muss 0x1C-Trenner enthalten und auf `.txt`/`.log` enden. Biotronik: `.xml` mit Wurzelelement `<biotronik-ieee11073-export>` |
 | „Ungültiges Sicherheitstoken“ | Seite neu laden (Session abgelaufen) |
 | Fehlerseite mit Referenz | „Im Fehlerprotokoll anzeigen" oder Referenz unter `/system/logs` suchen; alternativ `docker compose exec web cat /var/www/storage/logs/app.log` |
 | Port belegt | `WEB_PORT` in `.env` ändern |

@@ -6,7 +6,7 @@ namespace App\Report;
 
 use App\Import\ParsedRecord;
 use App\Mapping\ParameterMapping;
-use App\Support\MerlinDate;
+use App\Support\SourceDate;
 
 /**
  * Leitet die Kopfdaten (Patient, Geraet, Sonden) aus den Datensaetzen ab und erzeugt den
@@ -30,7 +30,7 @@ final class ReportSummaryBuilder
     {
         $fields = [];
         foreach ($this->mapping->fields() as $key => $spec) {
-            $fields[$key] = $this->findField($records, $spec['ids'], $spec['names']);
+            $fields[$key] = $this->findField($records, $spec);
         }
         return new ReportSummary($fields, $this->extractLeads($records));
     }
@@ -42,7 +42,7 @@ final class ReportSummaryBuilder
     {
         $row = static function (string $label, string $key, bool $isDate = false, bool $dateOnly = false) use ($summary): array {
             $value = $summary->value($key);
-            $display = $isDate ? MerlinDate::display($value, $dateOnly) : $value;
+            $display = $isDate ? SourceDate::display($value, $dateOnly) : $value;
             return [
                 'label' => $label,
                 'value' => $display,
@@ -81,27 +81,68 @@ final class ReportSummaryBuilder
                 ],
             ],
             'leads' => array_map(static function (array $lead): array {
-                $lead['implant_date_display'] = MerlinDate::display($lead['implant_date'], true);
+                $lead['implant_date_display'] = SourceDate::display($lead['implant_date'], true);
                 return $lead;
             }, $summary->leads),
         ];
     }
 
     /**
+     * Erster Treffer nach Quell-ID, danach nach Bezeichnung; ersatzweise zusammengesetzte Felder
+     * (z.B. Nachname + Vorname).
+     *
      * @param list<ParsedRecord> $records
-     * @param list<string> $ids
-     * @param list<string> $names
+     * @param array{ids: list<string>, names: list<string>, combine: ?array{names: list<string>, separator: string}} $spec
      * @return array{value: string, unit: string, parameter_id: string, position: int}|null
      */
-    private function findField(array $records, array $ids, array $names): ?array
+    private function findField(array $records, array $spec): ?array
     {
-        foreach ($ids as $id) {
+        foreach ($spec['ids'] as $id) {
             foreach ($records as $record) {
                 if ($record->parameterId === $id) {
                     return $this->fieldFromRecord($record);
                 }
             }
         }
+
+        $byName = $this->findByName($records, $spec['names']);
+        if ($byName !== null) {
+            return $byName;
+        }
+
+        $combine = $spec['combine'];
+        if ($combine === null) {
+            return null;
+        }
+        $values = [];
+        $first = null;
+        foreach ($combine['names'] as $name) {
+            $found = $this->findByName($records, [$name]);
+            if ($found === null || trim($found['value']) === '') {
+                continue;
+            }
+            $first ??= $found;
+            $values[] = $found['value'];
+        }
+        if ($first === null) {
+            return null;
+        }
+
+        return [
+            'value' => implode($combine['separator'], $values),
+            'unit' => '',
+            'parameter_id' => $first['parameter_id'],
+            'position' => $first['position'],
+        ];
+    }
+
+    /**
+     * @param list<ParsedRecord> $records
+     * @param list<string> $names
+     * @return array{value: string, unit: string, parameter_id: string, position: int}|null
+     */
+    private function findByName(array $records, array $names): ?array
+    {
         $wanted = array_map(static fn (string $n): string => mb_strtolower(trim($n)), $names);
         foreach ($wanted as $name) {
             foreach ($records as $record) {
@@ -132,38 +173,8 @@ final class ReportSummaryBuilder
      */
     private function extractLeads(array $records): array
     {
-        $leads = [];
-        foreach ($records as $record) {
-            foreach ($this->mapping->leadFields() as $field => $pattern) {
-                if (preg_match($pattern, $record->name, $m) !== 1) {
-                    continue;
-                }
-                $sourceChamber = trim($m['chamber']);
-                $chamber = $this->mapping->leadChamber($sourceChamber);
-                $key = $chamber['key'];
-                $leads[$key] ??= [
-                    'chamber' => $key,
-                    'chamber_label' => $chamber['label'],
-                    'chamber_source' => $sourceChamber,
-                    'manufacturer' => null,
-                    'model_label' => null,
-                    'model_number' => null,
-                    'serial_number' => null,
-                    'lead_type' => null,
-                    'implant_date' => null,
-                    'source_parameter_ids' => [],
-                    'first_position' => $record->position,
-                ];
-                if ($leads[$key][$field] === null) {
-                    $leads[$key][$field] = (string) $record->value;
-                    $leads[$key]['source_parameter_ids'][] = $record->parameterId;
-                    if ($field === 'model_number' && isset($m['label'])) {
-                        $leads[$key]['model_label'] = trim($m['label']);
-                    }
-                }
-                break;
-            }
-        }
+        $leads = $this->extractSectionLeads($records);
+        $leads = $this->extractPatternLeads($records, $leads);
 
         // Nur Sonden mit mindestens einem identifizierenden, nicht leeren Wert
         $leads = array_filter($leads, static function (array $lead): bool {
@@ -180,5 +191,148 @@ final class ReportSummaryBuilder
             [$order[$a['chamber']] ?? 99, $a['first_position']] <=> [$order[$b['chamber']] ?? 99, $b['first_position']]);
 
         return array_values($leads);
+    }
+
+    /**
+     * Sonden aus ganzen XML-Abschnitten: alle Felder eines Abschnitts gehoeren zu einer Sonde.
+     *
+     * @param list<ParsedRecord> $records
+     * @return array<string, array<string, mixed>>
+     */
+    private function extractSectionLeads(array $records): array
+    {
+        $leads = [];
+        foreach ($this->mapping->leadSections() as $definition) {
+            foreach ($this->groupBySection($records, $definition['section']) as $group) {
+                $chamberRecord = $this->findFieldRecord($group, $definition['chamber']);
+                if ($chamberRecord === null || trim((string) $chamberRecord->value) === '') {
+                    continue;
+                }
+                $sourceChamber = trim((string) $chamberRecord->value);
+                $chamber = $this->mapping->leadChamber($sourceChamber);
+                $key = $chamber['key'];
+                $leads[$key] ??= $this->emptyLead($key, $chamber['label'], $sourceChamber, $group[0]->position);
+
+                foreach ($definition['fields'] as $field => $spec) {
+                    if ($leads[$key][$field] !== null) {
+                        continue;
+                    }
+                    $record = $this->findFieldRecord($group, $spec);
+                    if ($record === null) {
+                        continue;
+                    }
+                    $leads[$key][$field] = (string) $record->value;
+                    $leads[$key]['source_parameter_ids'][] = $record->parameterId;
+                    if ($field === 'model_number') {
+                        $leads[$key]['model_label'] = (string) $record->value;
+                    }
+                }
+            }
+        }
+        return $leads;
+    }
+
+    /**
+     * Datensaetze nach Abschnittspfad gruppieren; gleichnamige Abschnitte sind durch "#n" getrennt.
+     *
+     * @param list<ParsedRecord> $records
+     * @return list<list<ParsedRecord>>
+     */
+    private function groupBySection(array $records, string $section): array
+    {
+        $groups = [];
+        foreach ($records as $record) {
+            if ($record->section === '' || !$this->isSection($record->section, $section)) {
+                continue;
+            }
+            $groups[$record->section][] = $record;
+        }
+        return array_values($groups);
+    }
+
+    private function isSection(string $section, string $wanted): bool
+    {
+        if ($section === $wanted) {
+            return true;
+        }
+        return str_starts_with($section, $wanted) && str_starts_with(substr($section, strlen($wanted)), '#');
+    }
+
+    /**
+     * @param list<ParsedRecord> $group
+     * @param array{ids: list<string>, names: list<string>, combine: ?array{names: list<string>, separator: string}} $spec
+     */
+    private function findFieldRecord(array $group, array $spec): ?ParsedRecord
+    {
+        foreach ($spec['ids'] as $id) {
+            foreach ($group as $record) {
+                if ($record->parameterId === $id) {
+                    return $record;
+                }
+            }
+        }
+        foreach ($spec['names'] as $name) {
+            foreach ($group as $record) {
+                if (mb_strtolower(trim($record->name)) === mb_strtolower(trim($name))) {
+                    return $record;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyLead(string $key, string $label, string $sourceChamber, int $position): array
+    {
+        return [
+            'chamber' => $key,
+            'chamber_label' => $label,
+            'chamber_source' => $sourceChamber,
+            'manufacturer' => null,
+            'model_label' => null,
+            'model_number' => null,
+            'serial_number' => null,
+            'lead_type' => null,
+            'implant_date' => null,
+            'source_parameter_ids' => [],
+            'first_position' => $position,
+        ];
+    }
+
+    /**
+     * Sonden aus Textzeilen (Merlin-Format). Datensaetze aus XML-Abschnitten werden hier nicht
+     * erneut ausgewertet, weil ihre Bezeichnungen nicht dem Merlin-Zeilenformat entsprechen.
+     *
+     * @param list<ParsedRecord> $records
+     * @param array<string, array<string, mixed>> $leads
+     * @return array<string, array<string, mixed>>
+     */
+    private function extractPatternLeads(array $records, array $leads): array
+    {
+        foreach ($records as $record) {
+            if ($record->section !== '') {
+                continue;
+            }
+            foreach ($this->mapping->leadFields() as $field => $pattern) {
+                if (preg_match($pattern, $record->name, $m) !== 1) {
+                    continue;
+                }
+                $sourceChamber = trim($m['chamber']);
+                $chamber = $this->mapping->leadChamber($sourceChamber);
+                $key = $chamber['key'];
+                $leads[$key] ??= $this->emptyLead($key, $chamber['label'], $sourceChamber, $record->position);
+                if ($leads[$key][$field] === null) {
+                    $leads[$key][$field] = (string) $record->value;
+                    $leads[$key]['source_parameter_ids'][] = $record->parameterId;
+                    if ($field === 'model_number' && isset($m['label'])) {
+                        $leads[$key]['model_label'] = trim($m['label']);
+                    }
+                }
+                break;
+            }
+        }
+        return $leads;
     }
 }

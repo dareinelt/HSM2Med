@@ -71,7 +71,7 @@ final class Ribbon
                         'label' => 'Überblick',
                         'items' => [
                             ['label' => 'Dashboard', 'icon' => 'dashboard', 'href' => '/', 'title' => 'Kennzahlen und letzte Vorgänge', 'match' => ['dashboard']],
-                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Merlin-Berichte', 'match' => []],
+                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Berichte', 'match' => []],
                             ['label' => 'Patientenakten', 'icon' => 'patients', 'href' => '/patients', 'title' => 'Patienten mit ihren Nachsorgeuntersuchungen', 'match' => []],
                             ['label' => 'Patientenausweise', 'icon' => 'cards', 'href' => '/patient-cards', 'title' => 'Ausweise mit MRT-Kompatibilität und Nachsorgeplan', 'match' => []],
                             ['label' => 'Briefe', 'icon' => 'letters', 'href' => '/letters', 'title' => 'Arztbriefe aus den Auslesedaten', 'match' => []],
@@ -103,16 +103,16 @@ final class Ribbon
                 'sections' => ['import', 'imports'],
                 'groups' => [
                     [
-                        'label' => 'Merlin-Export einlesen',
+                        'label' => 'Auslesedaten einlesen',
                         'items' => [
-                            ['label' => 'Datei importieren', 'icon' => 'import', 'href' => '/import', 'title' => 'TXT-Export des Programmiergeräts prüfen und übernehmen', 'match' => ['import']],
+                            ['label' => 'Datei importieren', 'icon' => 'import', 'href' => '/import', 'title' => 'Exportdatei des Programmiergeräts prüfen und übernehmen', 'match' => ['import']],
                             ['label' => 'Importprotokoll', 'icon' => 'log', 'href' => '/imports', 'title' => 'Alle Importe mit Status und Fehlern', 'match' => ['imports']],
                         ],
                     ],
                     [
                         'label' => 'Weiter zur Auswertung',
                         'items' => [
-                            ['label' => 'Berichte ansehen', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Merlin-Berichte', 'match' => []],
+                            ['label' => 'Berichte ansehen', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Berichte', 'match' => []],
                             ['label' => 'Patientenausweise', 'icon' => 'cards', 'href' => '/patient-cards', 'title' => 'Ausweise mit MRT-Kompatibilität und Nachsorgeplan', 'match' => []],
                         ],
                     ],
@@ -128,7 +128,7 @@ final class Ribbon
                     [
                         'label' => 'Berichte',
                         'items' => [
-                            ['label' => 'Berichtsübersicht', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Merlin-Berichte', 'match' => ['reports']],
+                            ['label' => 'Berichtsübersicht', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Berichte', 'match' => ['reports']],
                             ['label' => 'Importprotokoll', 'icon' => 'log', 'href' => '/imports', 'title' => 'Alle Importe mit Status und Fehlern', 'match' => []],
                         ],
                     ],
@@ -189,7 +189,7 @@ final class Ribbon
                         'label' => 'Quellen',
                         'items' => [
                             ['label' => 'Patientenakten', 'icon' => 'patients', 'href' => '/patients', 'title' => 'Patienten mit ihren Nachsorgeuntersuchungen', 'match' => []],
-                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Merlin-Berichte', 'match' => []],
+                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Berichte', 'match' => []],
                         ],
                     ],
                 ],
@@ -219,7 +219,7 @@ final class Ribbon
                         'label' => 'Quellen',
                         'items' => [
                             ['label' => 'Patientenakten', 'icon' => 'patients', 'href' => '/patients', 'title' => 'Patienten mit ihren Nachsorgeuntersuchungen', 'match' => []],
-                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Merlin-Berichte', 'match' => []],
+                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Berichte', 'match' => []],
                         ],
                     ],
                 ],
@@ -262,7 +262,7 @@ final class Ribbon
                         'label' => 'Daten und Datenschutz',
                         'items' => [
                             ['label' => 'Datenschutz', 'icon' => 'shield', 'href' => '/system#datenschutz', 'title' => 'Wo die Daten gespeichert werden und wie sie geschützt sind', 'match' => []],
-                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Merlin-Berichte', 'match' => []],
+                            ['label' => 'Berichte', 'icon' => 'reports', 'href' => '/reports', 'title' => 'Alle importierten Berichte', 'match' => []],
                         ],
                     ],
                 ],
@@ -368,7 +368,7 @@ final class Ribbon
     public static function quickAccess(): array
     {
         return [
-            ['label' => 'Import', 'icon' => 'import', 'href' => '/import', 'title' => 'Merlin-Datei importieren'],
+            ['label' => 'Import', 'icon' => 'import', 'href' => '/import', 'title' => 'Datei importieren'],
             ['label' => 'Patient anlegen', 'icon' => 'user-plus', 'href' => '/patients/new', 'title' => 'Neuen Patienten erfassen'],
             ['label' => 'Ausweis erstellen', 'icon' => 'card-plus', 'href' => '/patient-cards/new', 'title' => 'Patientenausweis aus Bericht erzeugen'],
             ['label' => 'Brief erstellen', 'icon' => 'mail-new', 'href' => '/letters/new', 'title' => 'Arztbrief aus Bericht erzeugen'],

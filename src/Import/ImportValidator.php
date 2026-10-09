@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Import;
 
 use App\Report\ReportSummary;
-use App\Support\MerlinDate;
+use App\Support\SourceDate;
 
 /**
  * Fachliche/technische Plausibilitaetspruefung vor dem Speichern.
@@ -74,7 +74,7 @@ final class ImportValidator
             }
             foreach (['patient_dob' => 'Geburtsdatum', 'device_implant_date' => 'Implantationsdatum', 'session_timestamp' => 'Sitzungszeitpunkt', 'interrogation_timestamp' => 'Abfragezeitpunkt'] as $key => $label) {
                 $value = $summary->nonEmpty($key);
-                if ($value !== null && MerlinDate::parse($value) === null) {
+                if ($value !== null && SourceDate::parse($value) === null) {
                     $warnings[] = ImportIssue::warning('unparsed_date', sprintf('%s "%s" hat kein erkanntes Datumsformat; der Originalwert wird gespeichert.', $label, $value));
                 }
             }

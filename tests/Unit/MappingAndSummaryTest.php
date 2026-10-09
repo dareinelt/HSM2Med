@@ -93,7 +93,7 @@ final class MappingAndSummaryTest extends TestCase
     {
         $config = require dirname(__DIR__, 2) . '/config/parameter_mapping.php';
         $mapping = new ParameterMapping($config);
-        $this->assertSame('1.0.0', $mapping->version());
+        $this->assertSame('1.1.0', $mapping->version());
         foreach ($config['by_id'] as $id => $target) {
             $this->assertTrue(preg_match('/^\d{1,32}$/D', (string) $id) === 1, "ID {$id}");
         }

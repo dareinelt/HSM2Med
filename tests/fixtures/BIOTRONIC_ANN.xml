@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<biotronik-ieee11073-export creator-version="1.0" creator="BioICSConverter" format-version="4.10">
+	<dataset>
+	<section name="MDC">
+	<section name="IDC">
+	<section name="DEV">
+	<value code="720897" name="TYPE" type="MDC_IDC_ENUM_DEV_TYPE" enumeration_code="753665">IPG</value>
+	<value code="720898" name="MODEL" type="String">Enticos 4 SR</value>
+	<value code="720899" name="SERIAL" type="String">1000118587</value>
+	<value code="720900" name="MFG" type="MDC_IDC_ENUM_MFG" enumeration_code="753731">BIO</value>
+	<value code="720901" name="IMPLANT_DT" type="DateTime">20231211T000000</value>
+	<value code="720904" name="IMPLANTING_FACILITY" type="String">Klinikum WF</value></section>
+	<section name="LEAD">
+	<value code="720961" name="MODEL" type="String">Solia S 60</value>
+	<value code="720962" name="SERIAL" type="String">8001149599</value>
+	<value code="720963" name="MFG" type="MDC_IDC_ENUM_MFG" enumeration_code="753731">BIO</value>
+	<value code="720964" name="IMPLANT_DT" type="DateTime">20231211T000000</value>
+	<value code="720965" name="POLARITY_TYPE" type="MDC_IDC_ENUM_LEAD_POLARITY_TYPE" enumeration_code="753794">BI</value>
+	<value code="720966" name="LOCATION" type="MDC_IDC_ENUM_LEAD_LOCATION_CHAMBER" enumeration_code="753860">RV</value></section>
+	<section name="SESS">
+	<value code="721025" name="DTM" type="DateTime">20261008T123829+0200</value>
+	<value code="721026" name="TYPE" type="MDC_IDC_ENUM_SESS_TYPE" enumeration_code="754050">InClinic</value>
+	<value code="721028" name="DTM_PREVIOUS" type="DateTime">20251202T000000</value></section>
+	<section name="MSMT">
+	<section name="BATTERY">
+	<value code="721216" name="DTM" type="DateTime">20261008T123829</value>
+	<value code="721280" name="STATUS" type="MDC_IDC_ENUM_BATTERY_STATUS" enumeration_code="754116">MOS</value>
+	<value code="721536" name="REMAINING_PERCENTAGE" type="Numeric" unit="%">40</value></section>
+	<section name="LEADCHNL_RV">
+	<value code="721985" name="LEAD_CHANNEL_STATUS" type="MDC_IDC_ENUM_CHANNEL_STATUS" enumeration_code="754241">CheckLead</value>
+	<section name="SENSING">
+	<value code="722054" name="INTR_AMPL_MIN" type="Numeric" unit="mV">5.7</value>
+	<value code="722053" name="INTR_AMPL_MAX" type="Numeric" unit="mV">6.1</value>
+	<value code="722055" name="INTR_AMPL_MEAN" type="Numeric" unit="mV">6.0</value>
+	<value code="722113" name="POLARITY" type="MDC_IDC_ENUM_POLARITY" enumeration_code="754306">BI</value></section>
+	<section name="PACING_THRESHOLD">
+	<value code="722177" name="AMPLITUDE" type="Numeric" unit="V">4.7</value>
+	<value code="722241" name="PULSEWIDTH" type="Numeric" unit="ms">0.4</value>
+	<value code="722305" name="MEASUREMENT_METHOD" type="MDC_IDC_ENUM_MEASUREMENT_METHOD" enumeration_code="754370">ProgrammerAutomatic</value>
+	<value code="722369" name="POLARITY" type="MDC_IDC_ENUM_POLARITY" enumeration_code="754306">BI</value></section>
+	<section name="IMPEDANCE">
+	<value code="722433" name="VALUE" type="Numeric" unit="Ohm">585</value>
+	<value code="722497" name="POLARITY" type="MDC_IDC_ENUM_POLARITY" enumeration_code="754306">BI</value></section></section></section>
+	<section name="SET">
+	<section name="MAGNET">
+	<value code="729472" name="RESP" type="String">AUTO</value></section>
+	<section name="LEADCHNL_RV">
+	<section name="SENSING">
+	<value code="729601" name="POLARITY" type="MDC_IDC_ENUM_POLARITY" enumeration_code="754306">BI</value>
+	<value code="729921" name="ADAPTATION_MODE" type="MDC_IDC_ENUM_SENSING_ADAPTATION_MODE" enumeration_code="754625">AdaptiveSensing</value></section>
+	<section name="PACING">
+	<value code="729985" name="AMPLITUDE" type="Numeric" unit="V">5.0</value>
+	<value code="730049" name="PULSEWIDTH" type="Numeric" unit="ms">1.5</value>
+	<value code="730113" name="POLARITY" type="MDC_IDC_ENUM_POLARITY" enumeration_code="754306">BI</value>
+	<value code="730433" name="CAPTURE_MODE" type="MDC_IDC_ENUM_PACING_CAPTURE_MODE" enumeration_code="754690">FixedPacing</value></section></section>
+	<section name="BRADY">
+	<value code="730752" name="MODE" type="MDC_IDC_ENUM_BRADY_MODE" enumeration_code="754773">VVI</value>
+	<value code="730816" name="VENDOR_MODE" type="String">VVI</value>
+	<value code="730880" name="LOWRATE" type="Numeric" unit="{beats}/min">60</value>
+	<value code="730944" name="HYSTRATE" type="Numeric" unit="{beats}/min">50</value>
+	<value code="731008" name="NIGHT_RATE" type="Numeric" unit="{beats}/min">55</value></section></section>
+	<section name="STAT">
+	<section name="BRADY">
+	<value code="737505" name="DTM_START" type="DateTime">20250107T000000</value>
+	<value code="737506" name="DTM_END" type="DateTime">20261008T123829</value>
+	<value code="737536" name="RV_PERCENT_PACED" type="Numeric" unit="%">94</value></section>
+	<section name="EPISODE">
+	<value code="737952" name="TYPE" type="MDC_IDC_ENUM_EPISODE_TYPE" enumeration_code="754882">Epis_VT</value>
+	<value code="737984" name="VENDOR_TYPE" type="MDC_IDC_ENUM_EPISODE_VENDOR_TYPE" enumeration_code="770052">BIO-Epis_VT2</value>
+	<value code="738000" name="RECENT_COUNT" type="Numeric">0</value>
+	<value code="738017" name="RECENT_COUNT_DTM_START" type="DateTime">20250107T000000</value>
+	<value code="738018" name="RECENT_COUNT_DTM_END" type="DateTime">20261008T123829</value></section></section></section>
+	<section name="ATTR">
+	<section name="PT">
+	<value name="NAME_GIVEN" type="String">FIRSTNAME1</value>
+	<value name="NAME_FAMILY" type="String">LASTNAME1</value>
+	<value name="SEX" type="String">2</value>
+	<value name="DOB" type="Date">19280425</value></section></section></section>
+	<section name="BIO">
+	<section name="REQUEST">
+	<value name="CONTAINS_PII_DATA" type="BIO_IDC_ENUM_BOOLEAN">TRUE</value>
+	<value name="DATE" type="DateTime">20261009T082744+0200</value>
+	<value name="ID" type="String">80005599_20261009T082744</value>
+	<section name="PROGRAMMER">
+	<value name="SERIAL" type="String">80005599</value>
+	<value name="SW_VERSION_AT_REQUEST" type="String">NEO 2502.A/1</value>
+	<value name="SW_VERSION_AT_FOLLOWUP" type="String">NEO 2502.A/1</value></section></section>
+	<section name="IDC">
+	<section name="SESS">
+	<value name="FOLLOWUP_ID" type="Numeric">8</value></section>
+	<section name="SET">
+	<value name="ID" type="Numeric">6</value></section></section></section></dataset>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" /><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" /><Reference URI=""><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature" /><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" /></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" /><DigestValue>yApSKkhDbEucJmSzs6fvrgNuC9Y=</DigestValue></Reference></SignedInfo><SignatureValue>Aw2UaYQPnwuRokQaCMiJBRmyKfbgtn+J9pdJwgR9glhYEf2yKsRWzGYQ2JSEsUKJIFqOlqdgJ/Cc3FGQhWJA+i+g+r3YIPr3ZsBv3n724PlZDwIbypqt/r0mQQ4EdCnpKQ2Qz7zitelqFn8du/iF9CkayDjObVSRl4obLQlHV9kzkkUsV7Cil3Bx6gOFimzmMjfYgAePl0eH3YbkIa5OAbkDduKCf/Sza3DiwqybnOL1NZrJiCDZl+GWWdkxKgoWrEuLWp3ubMPlc0mUvDj77cQuhbBqggjm+trPQ2C6cwuY0M60JICaDIKN97H+DGF9rdfLsGDhuUpxUyNmPjVt1+fpvPzO1UXLirsnRYcluEMT4Z8iPkB4eGrV7tb0E+Pw8u+0Nc86M71k5Kg0J61/brfCIH1WQ8vTsBonBOQ+aOC9IJzE+aUPulXPKoGuqMZ2/2rsAb+TK8JyGgccjSgokD1/qKEpdRdU6Y7So1PG/ZM9mxmHfKF7yyTqob+Ui/4yNgHpN1XeX5TbD1HVQVSShs2IfErTQN5yDdcklQTxv+txMt/hPXWXKA27cp7XljAn1khcngRk/zF0pJXPNevFMzGIBs5XW0M6T5hpiYtDCEWBnTD/lEJp6Ai30Q0bCGBY3CkTkF9r9H1CoodPRh27D4Y0iu5SMt8euUg9KW2eSeQ=</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIEhDCCBAqgAwIBAgIBAjAKBggqhkjOPQQDBDBvMRAwDgYDVQQKDAdpbml0aWFsMRIwEAYDVQQLDAlCSU9UUk9OSUsxCzAJBgNVBAsMAkNBMQwwCgYDVQQLDANSSU8xLDAqBgNVBAMMI0JJT1RST05JS19Qcm9ncmFtbWVyX0RhdGFfRXhwb3J0X0NBMB4XDTIwMDQwMzEzMjQ1NVoXDTMwMDQwMTEzMjQ1NVowga4xEDAOBgNVBAoMB2luaXRpYWwxEjAQBgNVBAsMCUJJT1RST05JSzEQMA4GA1UECwwHRGV2aWNlczEMMAoGA1UECwwDQ1JNMRMwEQYDVQQLDApQcm9ncmFtbWVyMQwwCgYDVQQLDANSSU8xFDASBgNVBAsMC1JJT19HZW5lcmljMS0wKwYDVQQDDCRCSU9UUk9OSUtfUHJvZ3JhbW1lcl9SU0FfRGF0YV9FeHBvcnQwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCwFHtK9hAnuKgw6zszU/KoA9f00X8PUrTXl9d6OCLm9RhaQJ7c3n67Azw2Ju1gjvOg1l6bfSqEFr0fFHqPL7JoY4Dkl6UuXPT38N85nOZPe/GX/AnucisMmvQFPHrV1+DEflj3ggLBLCcUcEfiVCOD28d7YaQNmBRZ90YjPIBtGQwFJCh+WwVOW7k3nJ2wJ8yjgdloNvUa66ixyhEfaba5iqZDhg1NvyPc1COPQYlFIUvmnri6VI6UhcVf5Z+48UfDPrz4QrzG98+xA0GRc19DETrTcGg+0E/fID+PLvzDeRKjhis8+LhVV1OsmksAojH5lOptgCBmij2WR26LVXlCCOVsDG0aOaRyoDzG89klN5gUzySbpTMe19kTqWD/H/9SX+XeuZ71BffHZVm3ZQ8/3JRvkJKG4SddwPuv2KEkGEYKWtRlRGb9fSNZxBXpjMMMb8HSErM3K2uRsESREEy0FaOdTUo+bQndjExnIoJhGg9Q9K9hgFkJiEd8qSbX4y6xDgJrRYW21LizEzNYvEi/uApTw6A1V6maTrl203XdqopA7WEY7Mf2mApyuAeTODoykmtShiaSfNTbAcYE8aZviJjPWE8MmzVxSTbO186VS+hL/vtcEbVqCiyxhKzb3QQXkQyCeb/kRCV1XWlKaTQG7Tq1/jQE2RSWIy9Qhkh2bQIDAQABo4GLMIGIMB0GA1UdDgQWBBTopcrV71itAs+tPVsXkpfpqfsNUjAfBgNVHSMEGDAWgBR0dPcsN+P68udRGFLv+uVnFzA0STAkBglghkgBhvhCAQ0EFxYVR2VuZXJhdGVkIGJ5IEVDT1MgUEtJMAsGA1UdDwQEAwIF4DATBgNVHSUEDDAKBggrBgEFBQcDBDAKBggqhkjOPQQDBANoADBlAjAYxx544OKWK8FexMgWzlYgcIugLEmgTrFwi/Ga9PyMTNa09bXFrA6tgOsGFvocdV0CMQDOcQ0J8rezhhKMdaCAjPwTinFNhiWHhsVTyEsuqogLV3RBjicwXozLnI5+0HS/RYY=</X509Certificate></X509Data></KeyInfo></Signature></biotronik-ieee11073-export>

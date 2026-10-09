@@ -8,7 +8,7 @@ use App\Config\Config;
 use App\Http\Request;
 use App\Http\Response;
 use App\Import\ImportService;
-use App\Import\MerlinParser;
+use App\Import\ParserChain;
 use App\Security\UploadValidator;
 use App\Support\LogReader;
 use Throwable;
@@ -43,7 +43,7 @@ final class SystemController extends Controller
                 'PHP-Version' => PHP_VERSION,
                 'Server' => (string) ($_SERVER['SERVER_SOFTWARE'] ?? 'unbekannt'),
                 'Zeitzone' => $config->timezone,
-                'Parser-Version' => MerlinParser::VERSION,
+                'Parser' => implode(', ', ParserChain::default()->descriptions()),
                 'Mapping-Version' => $this->app->mapping()->version(),
                 'Berichtsversion' => (string) ImportService::REPORT_VERSION,
                 'Max. Uploadgröße' => UploadValidator::formatBytes($config->uploadMaxBytes),

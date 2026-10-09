@@ -3,20 +3,25 @@
 declare(strict_types=1);
 
 /*
- * Parameter-Mapping fuer Merlin-Exporte.
+ * Parameter-Mapping fuer Merlin-Exporte (.txt/.log) und Biotronik-XML-Exporte
+ * (IEEE 11073-10103, Creator "BioICSConverter", Dateinamen z.B. BIOIEEE_ANN.xml).
  *
- * WICHTIG: Die Schluessel in "by_id" sind Quellformat-Parameter-IDs des Merlin-Exports.
+ * WICHTIG: Die Schluessel in "by_id" sind Quellformat-Parameter-IDs der Exportdatei
+ * (Merlin: 1-8-stellige IDs, Biotronik: 6-stellige "code"-Attribute).
  * Sie sind KEINE IEEE-11073- oder sonstigen Standard-IDs. Eine Standardzuordnung darf nur
  * explizit und dokumentiert unter "standard_codes" erfolgen.
  *
  * Aufloesungsreihenfolge: by_id -> by_name (exakt, ohne Gross-/Kleinschreibung) -> name_patterns
  * -> fallback_category. Kein Parameter wird verworfen.
  *
+ * Die Bezeichnungen in "display_name" benennen nur das Quellfeld (z.B. LOWRATE -> Grundfrequenz).
+ * Es findet keine Bewertung, Rundung, Normalisierung oder Umrechnung statt.
+ *
  * Bei inhaltlichen Aenderungen "version" erhoehen. Bereits importierte Berichte bleiben
  * unveraendert, da Kategorie und Bezeichnung beim Import im Bericht gespeichert werden.
  */
 return [
-    'version' => '1.0.0',
+    'version' => '1.1.0',
 
     'categories' => [
         'patient'    => ['label' => 'Patient', 'sort' => 10],
@@ -24,6 +29,7 @@ return [
         'battery'    => ['label' => 'Batterie', 'sort' => 30],
         'atrium'     => ['label' => 'Atrium', 'sort' => 40],
         'ventricle'  => ['label' => 'Ventrikel / RV', 'sort' => 50],
+        'lead'       => ['label' => 'Sonde / Elektrode', 'sort' => 55],
         'pacing'     => ['label' => 'Stimulation / Programmierung', 'sort' => 60],
         'statistics' => ['label' => 'Pacing-Statistik', 'sort' => 70],
         'arrhythmia' => ['label' => 'Arrhythmie / Ereignisse', 'sort' => 80],
@@ -172,6 +178,81 @@ return [
         '607' => 'mri', // MRI Atrial Pulse Configuration
         '608' => 'mri', // MRI RV Pulse Configuration
         '609' => 'mri', // MRI Activator Ready Status
+
+        // --- Biotronik XML-Export (IEEE 11073-10103) ------------------------------------------
+        // Schluessel = Attributwert "code" der <value>-Knoten; in Klammern das Quellfeld "name"
+        // mit dem Abschnittspfad. Nur Benennung des Quellfelds, keine Bewertung.
+
+        // Gerät (MDC/IDC/DEV)
+        '720897' => ['category' => 'device', 'display_name' => 'Gerätetyp (TYPE)'],
+        '720898' => ['category' => 'device', 'display_name' => 'Gerätemodell (MODEL)'],
+        '720899' => ['category' => 'device', 'display_name' => 'Seriennummer des Geräts (SERIAL)'],
+        '720900' => ['category' => 'device', 'display_name' => 'Hersteller des Geräts (MFG)'],
+        '720901' => ['category' => 'device', 'display_name' => 'Implantationsdatum des Geräts (IMPLANT_DT)'],
+        '720904' => ['category' => 'device', 'display_name' => 'Implantierendes Zentrum (IMPLANTING_FACILITY)'],
+
+        // Sonde (MDC/IDC/LEAD)
+        '720961' => ['category' => 'lead', 'display_name' => 'Sondenmodell (MODEL)'],
+        '720962' => ['category' => 'lead', 'display_name' => 'Seriennummer der Sonde (SERIAL)'],
+        '720963' => ['category' => 'lead', 'display_name' => 'Hersteller der Sonde (MFG)'],
+        '720964' => ['category' => 'lead', 'display_name' => 'Implantationsdatum der Sonde (IMPLANT_DT)'],
+        '720965' => ['category' => 'lead', 'display_name' => 'Polaritätstyp der Sonde (POLARITY_TYPE)'],
+        '720966' => ['category' => 'lead', 'display_name' => 'Position der Sonde (LOCATION)'],
+
+        // Sitzung (MDC/IDC/SESS)
+        '721025' => ['category' => 'device', 'display_name' => 'Sitzungszeitpunkt (DTM)'],
+        '721026' => ['category' => 'device', 'display_name' => 'Sitzungsart (TYPE)'],
+        '721028' => ['category' => 'device', 'display_name' => 'Vorheriger Sitzungszeitpunkt (DTM_PREVIOUS)'],
+
+        // Batterie (MDC/IDC/MSMT/BATTERY)
+        '721216' => ['category' => 'battery', 'display_name' => 'Messzeitpunkt der Batterie (DTM)'],
+        '721280' => ['category' => 'battery', 'display_name' => 'Batteriestatus (STATUS)'],
+        '721536' => ['category' => 'battery', 'display_name' => 'Restkapazität der Batterie (REMAINING_PERCENTAGE)'],
+
+        // RV-Sondenkanal: Messwerte (MDC/IDC/MSMT/LEADCHNL_RV)
+        '721985' => ['category' => 'ventricle', 'display_name' => 'Status des RV-Sondenkanals (LEAD_CHANNEL_STATUS)'],
+        '722053' => ['category' => 'ventricle', 'display_name' => 'Intrinsische Amplitude Maximum (INTR_AMPL_MAX)'],
+        '722054' => ['category' => 'ventricle', 'display_name' => 'Intrinsische Amplitude Minimum (INTR_AMPL_MIN)'],
+        '722055' => ['category' => 'ventricle', 'display_name' => 'Intrinsische Amplitude Mittelwert (INTR_AMPL_MEAN)'],
+        '722113' => ['category' => 'ventricle', 'display_name' => 'Polarität der Wahrnehmung (POLARITY)'],
+        '722177' => ['category' => 'ventricle', 'display_name' => 'Reizamplitude im Schwellentest (AMPLITUDE)'],
+        '722241' => ['category' => 'ventricle', 'display_name' => 'Impulsbreite im Schwellentest (PULSEWIDTH)'],
+        '722305' => ['category' => 'ventricle', 'display_name' => 'Messmethode des Schwellentests (MEASUREMENT_METHOD)'],
+        '722369' => ['category' => 'ventricle', 'display_name' => 'Polarität im Schwellentest (POLARITY)'],
+        '722433' => ['category' => 'ventricle', 'display_name' => 'Impedanz (VALUE)'],
+        '722497' => ['category' => 'ventricle', 'display_name' => 'Polarität der Impedanzmessung (POLARITY)'],
+
+        // Magnetantwort (MDC/IDC/SET/MAGNET)
+        '729472' => ['category' => 'battery', 'display_name' => 'Magnetantwort (RESP)'],
+
+        // RV-Sondenkanal: Wahrnehmung (MDC/IDC/SET/LEADCHNL_RV/SENSING)
+        '729601' => ['category' => 'ventricle', 'display_name' => 'Polarität der Wahrnehmung (POLARITY)'],
+        '729921' => ['category' => 'ventricle', 'display_name' => 'Anpassungsmodus der Wahrnehmung (ADAPTATION_MODE)'],
+
+        // RV-Sondenkanal: Stimulation (MDC/IDC/SET/LEADCHNL_RV/PACING)
+        '729985' => ['category' => 'ventricle', 'display_name' => 'Reizamplitude (AMPLITUDE)'],
+        '730049' => ['category' => 'ventricle', 'display_name' => 'Impulsbreite (PULSEWIDTH)'],
+        '730113' => ['category' => 'ventricle', 'display_name' => 'Polarität der Stimulation (POLARITY)'],
+        '730433' => ['category' => 'ventricle', 'display_name' => 'Capture-Modus (CAPTURE_MODE)'],
+
+        // Brady-Programmierung (MDC/IDC/SET/BRADY)
+        '730752' => ['category' => 'pacing', 'display_name' => 'Brady-Modus (MODE)'],
+        '730816' => ['category' => 'pacing', 'display_name' => 'Herstellermodus (VENDOR_MODE)'],
+        '730880' => ['category' => 'pacing', 'display_name' => 'Low Rate / Grundfrequenz (LOWRATE)'],
+        '730944' => ['category' => 'pacing', 'display_name' => 'Hysterese-Frequenz (HYSTRATE)'],
+        '731008' => ['category' => 'pacing', 'display_name' => 'Nachtfrequenz (NIGHT_RATE)'],
+
+        // Pacing-Statistik (MDC/IDC/STAT/BRADY)
+        '737505' => ['category' => 'statistics', 'display_name' => 'Beginn des Auswertungszeitraums (DTM_START)'],
+        '737506' => ['category' => 'statistics', 'display_name' => 'Ende des Auswertungszeitraums (DTM_END)'],
+        '737536' => ['category' => 'statistics', 'display_name' => 'Ventrikulär stimulierte Schläge (RV_PERCENT_PACED)'],
+
+        // Episoden (MDC/IDC/STAT/EPISODE)
+        '737952' => ['category' => 'arrhythmia', 'display_name' => 'Episodentyp (TYPE)'],
+        '737984' => ['category' => 'arrhythmia', 'display_name' => 'Herstellerspezifischer Episodentyp (VENDOR_TYPE)'],
+        '738000' => ['category' => 'arrhythmia', 'display_name' => 'Anzahl der Episoden im Zeitraum (RECENT_COUNT)'],
+        '738017' => ['category' => 'arrhythmia', 'display_name' => 'Beginn des Episodenzeitraums (RECENT_COUNT_DTM_START)'],
+        '738018' => ['category' => 'arrhythmia', 'display_name' => 'Ende des Episodenzeitraums (RECENT_COUNT_DTM_END)'],
     ],
 
     // Fallback: exakte Bezeichnung (Gross-/Kleinschreibung egal)
@@ -179,6 +260,15 @@ return [
         'manufacturer: device' => 'device',
         'device manufacturer' => 'device',
         'manufacturer' => 'device',
+        // Biotronik-Wertknoten ohne "code" (Abschnitt MDC/ATTR/PT und BIO/...)
+        'name_family' => 'patient',
+        'name_given' => 'patient',
+        'dob' => 'patient',
+        'sex' => 'patient',
+        'contains_pii_data' => 'programmer',
+        'sw_version_at_request' => 'programmer',
+        'sw_version_at_followup' => 'programmer',
+        'followup_id' => 'device',
     ],
 
     // Fallback: Muster auf die Bezeichnung (erste Uebereinstimmung gewinnt)
@@ -198,19 +288,20 @@ return [
     ],
 
     // Felder fuer die Kopfdaten des Berichts (Patient / Geraet). Erst ID, dann Bezeichnung.
+    // "combine" fasst mehrere Quellfelder zu einem Wert zusammen (Biotronik: NAME_FAMILY + NAME_GIVEN).
     'fields' => [
-        'patient_name'            => ['ids' => ['2430'], 'names' => ['Patient Name']],
+        'patient_name'            => ['ids' => ['2430'], 'names' => ['Patient Name'], 'combine' => ['names' => ['NAME_FAMILY', 'NAME_GIVEN'], 'separator' => ', ']],
         'patient_identifier'      => ['ids' => ['204'], 'names' => ['Patient ID']],
-        'patient_dob'             => ['ids' => ['2431'], 'names' => ['Patient Date of Birth']],
-        'device_manufacturer'     => ['ids' => [], 'names' => ['Manufacturer: Device', 'Device Manufacturer', 'Manufacturer']],
-        'device_model_name'       => ['ids' => ['200'], 'names' => ['Device Model Name']],
+        'patient_dob'             => ['ids' => ['2431'], 'names' => ['Patient Date of Birth', 'DOB']],
+        'device_manufacturer'     => ['ids' => ['720900'], 'names' => ['Manufacturer: Device', 'Device Manufacturer', 'Manufacturer', 'MFG']],
+        'device_model_name'       => ['ids' => ['200', '720898'], 'names' => ['Device Model Name']],
         'device_model_number'     => ['ids' => ['201'], 'names' => ['Device Model Number']],
-        'device_serial'           => ['ids' => ['202'], 'names' => ['Device Serial Number']],
-        'device_implant_date'     => ['ids' => ['2442'], 'names' => ['Implant Date: Device']],
-        'mode'                    => ['ids' => ['301'], 'names' => ['Mode']],
-        'base_rate'               => ['ids' => ['302'], 'names' => ['Base Rate']],
-        'session_timestamp'       => ['ids' => ['105'], 'names' => ['Session Timestamp']],
-        'interrogation_timestamp' => ['ids' => ['203'], 'names' => ['Device Last Interrogation Date and Time']],
+        'device_serial'           => ['ids' => ['202', '720899'], 'names' => ['Device Serial Number']],
+        'device_implant_date'     => ['ids' => ['2442', '720901'], 'names' => ['Implant Date: Device']],
+        'mode'                    => ['ids' => ['301', '730752'], 'names' => ['Mode']],
+        'base_rate'               => ['ids' => ['302', '730880'], 'names' => ['Base Rate']],
+        'session_timestamp'       => ['ids' => ['105', '721025'], 'names' => ['Session Timestamp']],
+        'interrogation_timestamp' => ['ids' => ['203', '721028'], 'names' => ['Device Last Interrogation Date and Time']],
     ],
 
     // Sonden-Erkennung ueber die Parameterbezeichnung ("chamber" = Kammerbezeichnung der Quelle)
@@ -220,6 +311,21 @@ return [
         'implant_date'  => '/^Implant Date:\s*(?<chamber>.+?)\s+Lead$/i',
         'serial_number' => '/^(?<chamber>.+?)\s+Lead Serial Number$/i',
         'lead_type'     => '/^(?<chamber>.+?)\s+Lead Type$/i',
+    ],
+
+    // Sonden-Erkennung ueber ganze XML-Abschnitte (Biotronik): ein Abschnitt = eine Sonde.
+    // Die Kammer stammt aus dem Feld "chamber" innerhalb desselben Abschnitts.
+    'lead_sections' => [
+        [
+            'section' => 'MDC/IDC/LEAD',
+            'chamber' => ['ids' => ['720966'], 'names' => ['LOCATION']],
+            'fields' => [
+                'manufacturer'  => ['ids' => ['720963'], 'names' => ['MFG']],
+                'model_number'  => ['ids' => ['720961'], 'names' => ['MODEL']],
+                'serial_number' => ['ids' => ['720962'], 'names' => ['SERIAL']],
+                'implant_date'  => ['ids' => ['720964'], 'names' => ['IMPLANT_DT']],
+            ],
+        ],
     ],
 
     'lead_chambers' => [

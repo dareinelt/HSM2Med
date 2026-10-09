@@ -21,12 +21,14 @@ final class ParameterMapping
     private array $namePatterns;
     private string $fallback;
     private string $version;
-    /** @var array<string, array{ids: list<string>, names: list<string>}> */
+    /** @var array<string, array{ids: list<string>, names: list<string>, combine: ?array{names: list<string>, separator: string}}> */
     private array $fields;
     /** @var array<string, string> */
     private array $leadFields;
     /** @var list<array{pattern: string, key: string, label: string}> */
     private array $leadChambers;
+    /** @var list<array{section: string, chamber: array{ids: list<string>, names: list<string>}, fields: array<string, array{ids: list<string>, names: list<string>, combine: null}}> */
+    private array $leadSections;
     /** @var array<string, array{system: string, code: string, source?: string}> */
     private array $standardCodes;
 
@@ -72,14 +74,42 @@ final class ParameterMapping
 
         $this->fields = [];
         foreach ($config['fields'] ?? [] as $key => $spec) {
-            $this->fields[(string) $key] = [
-                'ids' => array_map('strval', $spec['ids'] ?? []),
-                'names' => array_map('strval', $spec['names'] ?? []),
-            ];
+            $this->fields[(string) $key] = self::normalizeFieldSpec($spec);
         }
         $this->leadFields = array_map('strval', $config['lead_fields'] ?? []);
         $this->leadChambers = array_values($config['lead_chambers'] ?? []);
+
+        $this->leadSections = [];
+        foreach ($config['lead_sections'] ?? [] as $section) {
+            $sectionFields = [];
+            foreach ($section['fields'] ?? [] as $field => $fieldSpec) {
+                $sectionFields[(string) $field] = self::normalizeFieldSpec($fieldSpec);
+            }
+            $this->leadSections[] = [
+                'section' => (string) ($section['section'] ?? ''),
+                'chamber' => self::normalizeFieldSpec($section['chamber'] ?? []),
+                'fields' => $sectionFields,
+            ];
+        }
+
         $this->standardCodes = $config['standard_codes'] ?? [];
+    }
+
+    /**
+     * @param array<string, mixed> $spec
+     * @return array{ids: list<string>, names: list<string>, combine: ?array{names: list<string>, separator: string}}
+     */
+    private static function normalizeFieldSpec(array $spec): array
+    {
+        $combine = $spec['combine'] ?? null;
+        return [
+            'ids' => array_map('strval', $spec['ids'] ?? []),
+            'names' => array_map('strval', $spec['names'] ?? []),
+            'combine' => is_array($combine) ? [
+                'names' => array_map('strval', $combine['names'] ?? []),
+                'separator' => (string) ($combine['separator'] ?? ' '),
+            ] : null,
+        ];
     }
 
     public static function fromFile(string $path): self
@@ -128,7 +158,7 @@ final class ParameterMapping
     }
 
     /**
-     * @return array<string, array{ids: list<string>, names: list<string>}>
+     * @return array<string, array{ids: list<string>, names: list<string>, combine: ?array{names: list<string>, separator: string}}>
      */
     public function fields(): array
     {
@@ -141,6 +171,17 @@ final class ParameterMapping
     public function leadFields(): array
     {
         return $this->leadFields;
+    }
+
+    /**
+     * Sonden, die aus ganzen XML-Abschnitten gebildet werden (alle Felder eines Abschnitts
+     * gehoeren zu einer Sonde; die Kammer stammt aus einem Feld desselben Abschnitts).
+     *
+     * @return list<array{section: string, chamber: array{ids: list<string>, names: list<string>, combine: null}, fields: array<string, array{ids: list<string>, names: list<string>, combine: null}}>
+     */
+    public function leadSections(): array
+    {
+        return $this->leadSections;
     }
 
     /**

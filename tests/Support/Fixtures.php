@@ -123,4 +123,21 @@ final class Fixtures
     {
         return (string) file_get_contents(self::sampleFilePath());
     }
+
+    /** Biotronik-XML-Export nach IEEE 11073-10103 (anonymisiertes Beispiel, Creator "BioICSConverter"). */
+    public static function biotronikFilePath(): string
+    {
+        return dirname(__DIR__) . '/fixtures/BIOTRONIC_ANN.xml';
+    }
+
+    public static function biotronikFile(): string
+    {
+        return (string) file_get_contents(self::biotronikFilePath());
+    }
+
+    /** Wie der Hersteller sie ausliefert: Praefix BIOIEEE_ vor dem Dateinamen. */
+    public static function biotronikUploadName(): string
+    {
+        return 'BIOIEEE_ANN.xml';
+    }
 }
