@@ -21,7 +21,7 @@
 <div class="tiles">
     <a class="tile" href="/import">
         <?= $icon('import') ?>
-        <div><strong>Merlin-Datei importieren</strong><span>Auslesedatei des Programmiergeräts einlesen</span></div>
+        <div><strong>Datei importieren</strong><span>Auslesedatei des Programmiergeräts einlesen</span></div>
     </a>
     <a class="tile" href="/reports">
         <?= $icon('reports') ?>

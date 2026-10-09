@@ -30,8 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const ext = file.name.toLowerCase().split('.').pop();
             let message = '';
-            if (ext !== 'txt' && ext !== 'log') {
-                message = 'Nur Dateien mit der Endung .txt oder .log sind erlaubt.';
+            if (ext !== 'txt' && ext !== 'log' && ext !== 'xml') {
+                message = 'Nur Dateien mit der Endung .txt, .log oder .xml sind erlaubt.';
             } else if (maxBytes > 0 && file.size > maxBytes) {
                 message = 'Die Datei ist zu groß.';
             }

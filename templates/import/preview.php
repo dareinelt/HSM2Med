@@ -61,7 +61,7 @@ $cell = static function (?string $value) use ($e): string {
             <tr><th>Gültige Datensätze</th><td><?= $e($result->validRecordCount()) ?></td></tr>
             <tr><th>Fehler</th><td class="<?= $analysis->errorCount() > 0 ? 'text-error' : '' ?>"><?= $e($analysis->errorCount()) ?></td></tr>
             <tr><th>Warnungen</th><td class="<?= $analysis->warningCount() > 0 ? 'text-warning' : '' ?>"><?= $e($analysis->warningCount()) ?></td></tr>
-            <tr><th>Parser-Version</th><td><?= $e(App\Import\MerlinParser::VERSION) ?></td></tr>
+            <tr><th>Parser</th><td><?= $e($analysis->parserName . ' ' . $analysis->parserVersion) ?></td></tr>
         </table>
     </section>
     <section class="card">

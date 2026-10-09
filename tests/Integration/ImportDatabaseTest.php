@@ -218,7 +218,7 @@ final class ImportDatabaseTest extends DatabaseTestCase
         $new = $service->load($second->reportId);
         $this->assertSame('LASTNAME, FIRSTNAME', $old->report['patient_name_snapshot']);
         $this->assertSame('NEUNAME, VORNAME', $new->report['patient_name_snapshot']);
-        $this->assertSame('1.0.0', $old->report['mapping_version']);
+        $this->assertSame('1.1.0', $old->report['mapping_version']);
         $this->assertSame('2.0.0', $new->report['mapping_version']);
         $oldLabels = array_column($old->categories(), 'label');
         $newLabels = array_column($new->categories(), 'label');

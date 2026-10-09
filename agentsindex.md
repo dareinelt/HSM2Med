@@ -9,8 +9,9 @@
 
 ## 0. Schnellüberblick (Überblock)
 
-**HSM2Med** ist eine vollständig offline lauffähige Webanwendung, die Merlin-Exportdateien
-(Abbott/St. Jude Programmiergerät) importiert, verlustfrei in MySQL als unveränderlichen
+**HSM2Med** ist eine vollständig offline lauffähige Webanwendung, die Exportdateien von
+Herzschrittmachern/ICDs importiert – Abbott/St. Jude **Merlin** (`.txt`/`.log`, 0x1C-getrennt)
+und **Biotronik** als XML nach IEEE 11073-10103 (`.xml`) – verlustfrei in MySQL als unveränderlichen
 Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich aus der Datenbank.
 
 | Frage | Antwort |
@@ -33,8 +34,9 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
 
 1. **Keine medizinische Bewertung.** Werte werden nie interpretiert, gerundet, konvertiert
    oder normalisiert – sie werden exakt so gespeichert und angezeigt wie in der Quelldatei.
-2. **Trenner ist ausschließlich 0x1C** (ASCII File Separator). Nie an Tab, Semikolon, Komma
-   oder Zeilenumbruch trennen.
+2. **Merlin: Trenner ist ausschließlich 0x1C** (ASCII File Separator). Nie an Tab, Semikolon,
+   Komma oder Zeilenumbruch trennen. Biotronik-XML wird über `<value>`-Knoten gelesen – die
+   Trennerprüfung entfällt dort (`.xml` + Wurzelelement `<biotronik-ieee11073-export>`).
 3. **Leere Werte/Einheiten bleiben `''`**, niemals `NULL` oder `0`.
 4. **Berichte sind unveränderlich.** Historische Berichte nie umschreiben; Layout-Änderungen
    laufen über `report_version`, Zuordnungs-Änderungen über `mapping_version`.
@@ -64,12 +66,16 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
 ## 1. Was ist das Projekt?
 
 HSM2Med verarbeitet Auslesedaten von Herzschrittmachern/ICDs aus dem Abbott/St. Jude
-**Merlin**-Programmiergerät. Funktionsumfang:
+**Merlin**-Programmiergerät und aus **Biotronik**-XML-Exporten (IEEE 11073-10103,
+`BioICSConverter`). Funktionsumfang:
 
-- **Import** von Merlin-Exportdateien (`.txt`/`.log`) mit Prüfung **vor** dem Speichern:
+- **Import** von Exportdateien mit Prüfung **vor** dem Speichern:
   Upload → Analyse → Vorschau (Patient, Gerät, Sonden, Kategorien, Warnungen, Fehler) →
-  endgültiges Speichern oder Verwerfen.
-- **Verlustfreier Parser**: 0x1C-getrennte Datensätze, Originalwerte bleiben unverändert.
+  endgültiges Speichern oder Verwerfen. Erkannt werden Merlin-Textexporte (`.txt`/`.log`)
+  und Biotronik-XML (`.xml`, Dateiname beginnt mit `BIOIEEE_`); die Parserwahl übernimmt
+  `App\Import\ParserChain`.
+- **Verlustfreier Parser**: Merlin als 0x1C-getrennte Datensätze, Biotronik über
+  `<value>`-Knoten; Originalwerte bleiben unverändert.
 - **Unveränderliche Snapshots**: jeder Import wird in einer einzigen Transaktion als Bericht
   gespeichert (bei Fehlern vollständiger Rollback); Dublettenerkennung per SHA-256.
 - **Berichtsübersicht und -detail** mit Suche (Freitext, Patient, Patienten-ID, Seriennummer,

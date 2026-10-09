@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Import\SourceEncoding;
+use DOMDocument;
 use finfo;
 
 /**
@@ -12,8 +14,11 @@ use finfo;
  */
 final class UploadValidator
 {
-    public const array ALLOWED_EXTENSIONS = ['txt', 'log'];
+    public const array ALLOWED_EXTENSIONS = ['txt', 'log', 'xml'];
     public const array ALLOWED_MIME_TYPES = ['text/plain', 'application/octet-stream', 'text/x-c', 'text/x-asm', 'text/csv'];
+    public const array ALLOWED_XML_MIME_TYPES = ['text/xml', 'application/xml', 'text/plain', 'application/octet-stream'];
+    /** Wurzelelement der Biotronik-Exporte (IEEE 11073-10103). */
+    public const string XML_ROOT_ELEMENT = 'biotronik-ieee11073-export';
 
     /** Bekannte Signaturen von Binaer-/ausfuehrbaren Formaten */
     private const array FORBIDDEN_SIGNATURES = [
@@ -76,12 +81,16 @@ final class UploadValidator
         }
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if (!in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
-            throw new UploadException('Nur Dateien mit der Endung .txt oder .log sind erlaubt.');
+            throw new UploadException('Nur Dateien mit der Endung .txt, .log oder .xml sind erlaubt.');
         }
         foreach (self::FORBIDDEN_SIGNATURES as $signature) {
             if (str_starts_with(ltrim(substr($bytes, 0, 64)), $signature)) {
-                throw new UploadException('Der Dateiinhalt ist kein Merlin-Textexport.');
+                throw new UploadException('Der Dateiinhalt ist kein unterstützter Geräteexport.');
             }
+        }
+        if ($extension === 'xml') {
+            $this->validateXmlContent($bytes);
+            return;
         }
         $mime = (new finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
         if (!is_string($mime) || (!str_starts_with($mime, 'text/') && !in_array($mime, self::ALLOWED_MIME_TYPES, true))) {
@@ -96,6 +105,41 @@ final class UploadValidator
             if (substr_count($bytes, "\x00") > strlen($bytes) / 10) {
                 throw new UploadException('Der Dateiinhalt ist kein Merlin-Textexport.');
             }
+        }
+    }
+
+    /**
+     * XML-Exporte werden ueber ihr Wurzelelement geprueft; das 0x1C-Trennzeichen gibt es dort nicht.
+     *
+     * @throws UploadException
+     */
+    private function validateXmlContent(string $bytes): void
+    {
+        [$text] = SourceEncoding::decode($bytes);
+        if (trim($text) === '') {
+            throw new UploadException('Die Datei ist leer.');
+        }
+
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
+        if (!is_string($mime) || !in_array($mime, self::ALLOWED_XML_MIME_TYPES, true)) {
+            throw new UploadException('Der Dateityp wird nicht unterstützt.');
+        }
+
+        $document = new DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        libxml_clear_errors();
+        $loaded = $document->loadXML($text, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        if (!$loaded || $document->documentElement === null) {
+            throw new UploadException('Die Datei ist kein gültiges XML.');
+        }
+        if ($document->documentElement->localName !== self::XML_ROOT_ELEMENT) {
+            throw new UploadException(sprintf(
+                'Unerwartetes XML-Wurzelelement <%s>; erwartet wird <%s>.',
+                $document->documentElement->nodeName,
+                self::XML_ROOT_ELEMENT,
+            ));
         }
     }
 

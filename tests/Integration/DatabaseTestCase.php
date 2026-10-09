@@ -11,6 +11,7 @@ use App\Import\ImportArchive;
 use App\Import\ImportService;
 use App\Import\ImportValidator;
 use App\Import\MerlinParser;
+use App\Import\ParserChain;
 use App\Mapping\ParameterMapping;
 use App\Report\ReportService;
 use App\Report\ReportSummaryBuilder;
@@ -85,7 +86,7 @@ abstract class DatabaseTestCase extends TestCase
         $class ??= ImportService::class;
         return new $class(
             $this->pdo,
-            new MerlinParser(),
+            ParserChain::default(),
             new ImportValidator(),
             $mapping,
             new ReportSummaryBuilder($mapping),

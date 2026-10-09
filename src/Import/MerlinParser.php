@@ -14,15 +14,31 @@ namespace App\Import;
  * - Werte werden weder getrimmt, gerundet noch interpretiert. Leere Felder bleiben ''.
  * - Fehlerhafte Datensaetze werden protokolliert und uebersprungen, der Import laeuft weiter.
  */
-final class MerlinParser
+final class MerlinParser implements ParserInterface
 {
     public const string VERSION = '1.0.0';
+    public const string NAME = 'Merlin (Abbott / St. Jude Medical)';
     public const string SEPARATOR = "\x1C";
     public const int FIELDS_PER_RECORD = 4;
     public const int MAX_PARAMETER_ID_LENGTH = 32;
 
     /** Ein Token, das nach einem Zeilenumbruch nur aus einer Parameter-ID besteht, beginnt einen neuen Datensatz. */
     private const string RECORD_START_PATTERN = '/^(?:\r\n|\r|\n)+[ \t]*\d{1,32}[ \t]*$/D';
+
+    public function name(): string
+    {
+        return self::NAME;
+    }
+
+    public function version(): string
+    {
+        return self::VERSION;
+    }
+
+    public function supports(string $bytes, string $filename = ''): bool
+    {
+        return str_contains($bytes, self::SEPARATOR);
+    }
 
     public function parse(string $bytes): ParseResult
     {
@@ -37,34 +53,7 @@ final class MerlinParser
      */
     public function decode(string $bytes): array
     {
-        if (str_starts_with($bytes, "\xEF\xBB\xBF")) {
-            $body = substr($bytes, 3);
-            if (mb_check_encoding($body, 'UTF-8')) {
-                return [$body, 'UTF-8 (BOM)', []];
-            }
-            $bytes = $body;
-        }
-
-        if (str_starts_with($bytes, "\xFF\xFE") || str_starts_with($bytes, "\xFE\xFF")) {
-            $encoding = $bytes[0] === "\xFF" ? 'UTF-16LE' : 'UTF-16BE';
-            $body = substr($bytes, 2);
-            if (strlen($body) % 2 === 0 && mb_check_encoding($body, $encoding)) {
-                return [mb_convert_encoding($body, 'UTF-8', $encoding), $encoding, []];
-            }
-        }
-
-        if (mb_check_encoding($bytes, 'UTF-8')) {
-            return [$bytes, 'UTF-8', []];
-        }
-
-        // Bytes, die in Windows-1252 undefiniert sind, erzwingen ISO-8859-1 (verlustfrei fuer alle Bytes).
-        $encoding = preg_match('/[\x81\x8D\x8F\x90\x9D]/', $bytes) === 1 ? 'ISO-8859-1' : 'Windows-1252';
-        $issues = [ImportIssue::warning(
-            'encoding_fallback',
-            sprintf('Die Datei ist kein gueltiges UTF-8 und wurde als %s dekodiert.', $encoding),
-        )];
-
-        return [mb_convert_encoding($bytes, 'UTF-8', $encoding), $encoding, $issues];
+        return SourceEncoding::decode($bytes);
     }
 
     /**

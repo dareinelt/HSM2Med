@@ -11,13 +11,14 @@ use App\Report\ReportSummaryBuilder;
 use App\Security\FileName;
 use App\Support\Clock;
 use App\Support\Logger;
-use App\Support\MerlinDate;
+use App\Support\SourceDate;
 use PDO;
 use RuntimeException;
 use Throwable;
 
 /**
- * Analysiert Merlin-Dateien und speichert sie atomar (eine Transaktion) als Bericht-Snapshot.
+ * Analysiert Exportdateien (Merlin-Text, Biotronik-XML) und speichert sie atomar
+ * (eine Transaktion) als Bericht-Snapshot.
  */
 class ImportService
 {
@@ -28,7 +29,7 @@ class ImportService
 
     public function __construct(
         protected readonly PDO $pdo,
-        private readonly MerlinParser $parser,
+        private readonly ParserChain $parser,
         private readonly ImportValidator $validator,
         private readonly ParameterMapping $mapping,
         private readonly ReportSummaryBuilder $summaryBuilder,
@@ -40,7 +41,8 @@ class ImportService
 
     public function analyze(string $bytes, string $originalFilename): ImportAnalysis
     {
-        $result = $this->parser->parse($bytes);
+        $parser = $this->parser->forBytes($bytes, $originalFilename);
+        $result = $parser->parse($bytes);
         $assignments = [];
         foreach ($result->records as $record) {
             $assignments[$record->position] = $this->mapping->resolve($record->parameterId, $record->name);
@@ -52,6 +54,8 @@ class ImportService
             filename: FileName::sanitize($originalFilename),
             fileSize: strlen($bytes),
             fileHash: $hash,
+            parserName: $parser->name(),
+            parserVersion: $parser->version(),
             parseResult: $result,
             assignments: $assignments,
             summary: $summary,
@@ -147,7 +151,7 @@ class ImportService
             return null;
         }
         $dobRaw = $summary->nonEmpty('patient_dob');
-        $dob = MerlinDate::parse($dobRaw)?->format('Y-m-d');
+        $dob = SourceDate::parse($dobRaw)?->format('Y-m-d');
         // Nachname/Vorname werden aus "NACHNAME, VORNAME" abgeleitet; fehlt das Komma,
         // bleibt der Vorname leer und wird im Patientenausweis-Assistenten ergaenzt.
         $parts = PatientName::split($name);
@@ -201,7 +205,7 @@ class ImportService
             $patientId,
             $summary->nonEmpty('device_manufacturer'),
             $summary->nonEmpty('device_model_name'),
-            MerlinDate::parse($implantRaw)?->format('Y-m-d'),
+            SourceDate::parse($implantRaw)?->format('Y-m-d'),
             $implantRaw,
         ];
 
@@ -239,7 +243,7 @@ class ImportService
             $v = static fn (string $key): ?string => ($lead[$key] === null || trim((string) $lead[$key]) === '') ? null : (string) $lead[$key];
             $serial = $v('serial_number');
             $implantRaw = $v('implant_date');
-            $implant = MerlinDate::parse($implantRaw)?->format('Y-m-d');
+            $implant = SourceDate::parse($implantRaw)?->format('Y-m-d');
 
             if ($serial !== null) {
                 $stmt = $this->pdo->prepare('SELECT id FROM leads WHERE device_id = ? AND chamber = ? AND serial_number = ? FOR UPDATE');
@@ -302,7 +306,7 @@ class ImportService
             $analysis->parseResult->encoding,
             $archiveFilename,
             $now,
-            MerlinParser::VERSION,
+            $analysis->parserVersion,
             $analysis->parseResult->recordCount,
             $analysis->parseResult->validRecordCount(),
             $analysis->warningCount(),
@@ -333,12 +337,12 @@ class ImportService
             $importId,
             $patientId,
             $deviceId,
-            MerlinDate::parse($sessionRaw)?->format('Y-m-d H:i:s'),
+            SourceDate::parse($sessionRaw)?->format('Y-m-d H:i:s'),
             $sessionRaw,
-            MerlinDate::parse($interrogationRaw)?->format('Y-m-d H:i:s'),
+            SourceDate::parse($interrogationRaw)?->format('Y-m-d H:i:s'),
             $interrogationRaw,
             self::REPORT_VERSION,
-            MerlinParser::VERSION,
+            $analysis->parserVersion,
             $this->mapping->version(),
             $s->value('patient_name'),
             $s->value('patient_identifier'),
@@ -502,7 +506,7 @@ class ImportService
                 $analysis->fileSize,
                 $analysis->parseResult->encoding,
                 $now,
-                MerlinParser::VERSION,
+                $analysis->parserVersion,
                 $analysis->parseResult->recordCount,
                 $analysis->parseResult->validRecordCount(),
                 $analysis->warningCount(),
