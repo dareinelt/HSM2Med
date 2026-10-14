@@ -471,13 +471,6 @@ body.office.is-locked .statusbar { user-select: none; }
     width: 100%;
     padding: .55rem .9rem;
 }
-.login-card__note {
-    margin: 1rem 0 0;
-    padding-top: .8rem;
-    border-top: 1px solid var(--office-line);
-    color: var(--office-muted);
-    font-size: .78rem;
-}
 @media (max-width: 480px) {
     .login-overlay { padding: .8rem; }
     .login-card { padding: 1.1rem 1rem .9rem; }

@@ -25,7 +25,7 @@ $target = $target ?? '/';
             <span class="login-card__mark"><?= $icon('pulse') ?></span>
             <div>
                 <h1 id="login-title" class="login-card__title">Anmeldung</h1>
-                <p class="login-card__subtitle"><?= $e(\App\Config\Config::APP_NAME) ?> – Merlin-Auslesedaten</p>
+                <p class="login-card__subtitle"><?= $e(\App\Config\Config::APP_NAME) ?></p>
             </div>
         </div>
 
@@ -54,10 +54,5 @@ $target = $target ?? '/';
                 <?= $icon('lock', 'app-icon app-icon--sm') ?> <span data-label>Anmelden</span>
             </button>
         </div>
-
-        <p class="login-card__note">
-            Nach mehreren Fehlanmeldungen wird das Konto vorübergehend gesperrt. Ohne Benutzerkonto
-            bitte an die Administration wenden.
-        </p>
     </form>
 </div>
