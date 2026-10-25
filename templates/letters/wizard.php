@@ -20,13 +20,14 @@
  * @var array<string, mixed> $measurements
  * @var list<array{key: string, label: string, available: bool, values: list<string>}> $measurementChoices
  * @var int $measurementPrevious
+ * @var list<string> $measurementDefault
  * @var list<string> $warnings
  * @var int $nextSequence
  * @var array<string, string> $errors
  * @var string|null $message
  * @var array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool,
  *     recipients: list<string>, include_appendix?: bool, include_measurements?: bool,
- *     measurements?: list<string>|null} $selection
+ *     measurements?: list<string>|null, remember_measurements?: bool} $selection
  * @var array<string, array<string, mixed>> $recipients
  * @var int $startStep
  * @var array<int, string> $steps
@@ -60,6 +61,7 @@ $includeAppendix = $appendixChosen && $appendixSections !== [];
 $measurementChosen = ($selection['include_measurements'] ?? true) === true;
 $includeMeasurements = $measurementChosen;
 $measurementSelected = $selection['measurements'] ?? null;
+$rememberMeasurements = ($selection['remember_measurements'] ?? false) === true;
 $measurementAvailable = array_values(array_filter(
     $measurementChoices,
     static fn (array $choice): bool => $choice['available'] === true,
@@ -255,7 +257,8 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
             Untersuchung, davor die letzten früheren Untersuchungen des Patienten (die Anzahl ist in
             der Briefvorlage eingestellt). Angekreuzt werden nur Messwerte, die in den Untersuchungen
             tatsächlich vorliegen; die Auswahl wird mit dem Brief eingefroren – eine geänderte Auswahl
-            ergibt einen neuen Brief.</p>
+            ergibt einen neuen Brief. Nach einer Änderung der Auswahl fragt der Assistent, ob die
+            Einstellung als Standard für alle künftigen Briefe gespeichert werden soll.</p>
         <?= $err('measurements') ?>
         <div class="field">
             <label class="check" for="include_measurements">
@@ -280,6 +283,10 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
                     <?= $e($measurementPrevious) ?> frühere Untersuchung(en)
                     (Vorgabe der Briefvorlage)
                 </p>
+                <?php if ($measurementDefault !== []): ?>
+                    <p class="muted">Gespeicherter Standard: <?= $e(count($measurementDefault)) ?> Messwert(e) –
+                        vorausgewählt, soweit dazu Werte vorliegen.</p>
+                <?php endif; ?>
                 <input type="hidden" name="measurements_present" value="1">
                 <?php foreach ((array) ($measurements['sections'] ?? []) as $section): ?>
                     <?php
@@ -324,6 +331,17 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
                         <?php endforeach; ?>
                     </fieldset>
                 <?php endforeach; ?>
+            <?php endif; ?>
+            <?php if (($measurements['present'] ?? false) === true): ?>
+                <div class="field" data-measurement-remember-row>
+                    <label class="check" for="remember_measurements">
+                        <input type="checkbox" id="remember_measurements" name="remember_measurements" value="1"
+                            data-measurement-remember <?= $rememberMeasurements ? ' checked' : '' ?>>
+                        <span>Diese Messwertauswahl als Standard für alle künftigen Briefe merken</span>
+                    </label>
+                    <small class="muted">Der Standard gilt applikationsweit für neue Briefe; bereits
+                        erstellte Briefe bleiben unverändert.</small>
+                </div>
             <?php endif; ?>
         </div>
     </section>
@@ -456,3 +474,22 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
         <button type="submit" class="button primary" data-wizard-submit data-once><?= $icon('mail-new') ?> <span data-label data-recipient-submit><?= count($selectedRecipients) > 1 ? $e(count($selectedRecipients)) . ' Briefe erzeugen' : 'Brief erzeugen' ?></span></button>
     </div>
 </form>
+
+<?php // Rueckfrage nach einer geaenderten Messwertauswahl (JavaScript, CSP-konform). ?>
+<dialog class="letter-dialog" aria-labelledby="measurement-default-question" data-measurement-default-dialog>
+    <div class="letter-dialog__head">
+        <button type="button" class="letter-dialog__close" data-measurement-default-close
+                title="Schließen" aria-label="Schließen">
+            <?= $icon('close', 'app-icon app-icon--sm') ?>
+        </button>
+    </div>
+    <div class="letter-dialog__body">
+        <h2 id="measurement-default-question">Die Messwertauswahl wurde geändert. Einstellung merken?</h2>
+        <p class="muted">Als Standard gespeichert gilt die Auswahl für alle künftig erstellten Briefe.
+            Bereits erstellte Briefe behalten ihre eingefrorene Auswahl.</p>
+        <div class="letter-dialog__actions">
+            <button type="button" class="button" data-measurement-default-answer="0">Nein, nur für diesen Brief</button>
+            <button type="button" class="button primary" data-measurement-default-answer="1">Ja, als Standard merken</button>
+        </div>
+    </div>
+</dialog>

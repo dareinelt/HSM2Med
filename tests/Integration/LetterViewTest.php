@@ -581,6 +581,60 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('Für diesen Brief wurde die Messwerttabelle abgewählt', $plain->body);
     }
 
+    /** Der Assistent fragt nach einer geaenderten Auswahl und waehlt den Standard vor. */
+    public function testMeasurementDefaultIsAskedAndPreselected(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+
+        $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertSame(200, $wizard->status);
+        $this->assertContains('data-measurement-default-dialog', $wizard->body);
+        $this->assertContains('Die Messwertauswahl wurde geändert. Einstellung merken?', $wizard->body);
+        $this->assertContains('data-measurement-default-answer="1"', $wizard->body);
+        $this->assertContains('data-measurement-default-answer="0"', $wizard->body);
+        $this->assertContains('data-measurement-remember', $wizard->body);
+        $this->assertNotContains('Gespeicherter Standard', $wizard->body);
+
+        $available = $this->app->letterService()->prepare($this->patientId, $reportId)['measurements']['available'];
+        $this->assertTrue(count($available) >= 2, 'Der Beispielbericht liefert mindestens zwei Messwerte.');
+
+        $this->assertSame(303, $this->createLetter([
+            'report_id' => (string) $reportId,
+            'measurements_present' => '1',
+            'measurements' => [$available[0]],
+            'remember_measurements' => '1',
+        ])->status);
+
+        $again = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertContains('Gespeicherter Standard: 1 Messwert(e)', $again->body);
+        $this->assertTrue($this->isMeasurementChecked($again->body, $available[0]), 'Der Standard ist vorausgewaehlt.');
+        $this->assertFalse($this->isMeasurementChecked($again->body, $available[1]), 'Nicht im Standard: nicht vorausgewaehlt.');
+
+        // Ein weiterer Brief mit "merken" ersetzt den Standard.
+        $second = $this->createLetter([
+            'report_id' => (string) $reportId,
+            'measurements_present' => '1',
+            'measurements' => [$available[1]],
+            'remember_measurements' => '1',
+        ]);
+        $this->assertSame(303, $second->status);
+        $latest = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertTrue($this->isMeasurementChecked($latest->body, $available[1]));
+        $this->assertFalse($this->isMeasurementChecked($latest->body, $available[0]));
+    }
+
+    /** Ist das Kontrollkaestchen eines Messwertes im Formular angekreuzt? */
+    private function isMeasurementChecked(string $body, string $key): bool
+    {
+        $position = strpos($body, 'id="measurement-' . $key . '"');
+        if ($position === false) {
+            return false;
+        }
+        return str_contains(substr($body, $position, 220), ' checked');
+    }
+
     /** Neuausfertigung und Reproduktion ueber die Briefansicht; die aktuelle Vorlage nur per Opt-in. */
     public function testShowOffersReissueAndReproduction(): void
     {

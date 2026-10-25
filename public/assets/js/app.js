@@ -243,6 +243,63 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Brief-Assistent: geaenderte Messwertauswahl -> Rueckfrage, ob die Auswahl als Standard
+    // fuer alle kuenftigen Briefe gespeichert werden soll. Gefragt wird einmal je Formular.
+    // Ohne JavaScript bleibt das Kontrollkaestchen im Schritt sichtbar und wird beim Absenden
+    // ausgewertet; gueltig ist in jedem Fall die serverseitige Auswertung.
+    const measurementDialog = document.querySelector('dialog[data-measurement-default-dialog]');
+    document.querySelectorAll('form[data-wizard]').forEach((form) => {
+        const remember = form.querySelector('[data-measurement-remember]');
+        const choices = Array.from(form.querySelectorAll('input[name="measurements[]"]'));
+        const include = form.querySelector('input[name="include_measurements"]');
+        if (!remember || choices.length === 0) {
+            return;
+        }
+        // Die Rueckfrage ersetzt das Kontrollkaestchen, solange JavaScript verfuegbar ist.
+        const row = form.querySelector('[data-measurement-remember-row]');
+        if (row) {
+            row.hidden = true;
+        }
+        const state = () => (include && !include.checked ? '0' : '1')
+            + choices.map((input) => (input.checked ? '1' : '0')).join('');
+        const initial = state();
+        let asked = false;
+        const answer = (keep) => {
+            remember.checked = keep;
+            asked = true;
+            if (measurementDialog && measurementDialog.open) {
+                measurementDialog.close();
+            }
+        };
+        const ask = () => {
+            if (asked || state() === initial || !measurementDialog || measurementDialog.open) {
+                return;
+            }
+            if (typeof measurementDialog.showModal === 'function') {
+                measurementDialog.showModal();
+                return;
+            }
+            measurementDialog.setAttribute('open', '');
+        };
+        choices.forEach((input) => input.addEventListener('change', ask));
+        if (include) {
+            include.addEventListener('change', ask);
+        }
+        if (measurementDialog) {
+            measurementDialog.querySelectorAll('[data-measurement-default-answer]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    answer(button.dataset.measurementDefaultAnswer === '1');
+                });
+            });
+            const close = measurementDialog.querySelector('[data-measurement-default-close]');
+            if (close) {
+                close.addEventListener('click', () => {
+                    answer(false);
+                });
+            }
+        }
+    });
+
     // Schrittmacher-/ICD-Abfrage: Abschnitte und Felder nach Geraeteart ein- und ausblenden.
     // Ohne JavaScript bleibt alles sichtbar; gueltig ist serverseitig die gewaehlte Geraeteart.
     document.querySelectorAll('[data-device-type]').forEach((select) => {
