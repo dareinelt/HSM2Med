@@ -186,4 +186,43 @@ final class LetterRepository extends PatientRepository
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row === false ? null : $row;
     }
+
+    /**
+     * Applikationsweite Standardauswahl der Messwerttabelle (leer = kein Standard gespeichert).
+     *
+     * @return list<string>
+     */
+    public function measurementDefaults(): array
+    {
+        $stmt = $this->pdo->query('SELECT selected FROM letter_measurement_defaults WHERE id = 1');
+        $raw = $stmt === false ? false : $stmt->fetchColumn();
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        return array_values(array_filter(
+            array_map('strval', array_filter($decoded, 'is_string')),
+            static fn (string $key): bool => $key !== '',
+        ));
+    }
+
+    /**
+     * Speichert die Standardauswahl der Messwerttabelle (genau eine Zeile, id = 1).
+     *
+     * @param list<string> $keys
+     */
+    public function saveMeasurementDefaults(array $keys, string $now): void
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO letter_measurement_defaults (id, selected, updated_at) VALUES (1, ?, ?)'
+            . ' ON DUPLICATE KEY UPDATE selected = VALUES(selected), updated_at = VALUES(updated_at)'
+        );
+        $stmt->execute([
+            json_encode(array_values($keys), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $now,
+        ]);
+    }
 }

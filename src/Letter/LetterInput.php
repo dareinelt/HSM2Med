@@ -14,7 +14,9 @@ namespace App\Letter;
  * eigener Brief.
  *
  * Zusaetzlich waehlt der Anwender je Brief, ob der Geraeteanhang und die Messwerttabelle
- * mitgedruckt werden und welche Messwerte in der Tabelle erscheinen (Checkbox-Liste).
+ * mitgedruckt werden und welche Messwerte in der Tabelle erscheinen (Checkbox-Liste). Auf
+ * Wunsch wird diese Messwertauswahl als applikationsweiter Standard gespeichert
+ * (rememberMeasurements); neue Briefe sind dann entsprechend vorausgewaehlt.
  */
 final class LetterInput
 {
@@ -32,6 +34,7 @@ final class LetterInput
         public readonly bool $includeAppendix = true,
         public readonly bool $includeMeasurements = true,
         public readonly ?array $measurements = null,
+        public readonly bool $rememberMeasurements = false,
     ) {
     }
 
@@ -87,6 +90,7 @@ final class LetterInput
             ($post['include_appendix'] ?? '') === '1',
             ($post['include_measurements'] ?? '') === '1',
             $measurements,
+            ($post['remember_measurements'] ?? '') === '1',
         );
     }
 
@@ -95,7 +99,7 @@ final class LetterInput
      *
      * @return array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool,
      *     recipients: list<string>, include_appendix: bool, include_measurements: bool,
-     *     measurements: list<string>|null}
+     *     measurements: list<string>|null, remember_measurements: bool}
      */
     public function selection(): array
     {
@@ -108,6 +112,7 @@ final class LetterInput
             'include_appendix' => $this->includeAppendix,
             'include_measurements' => $this->includeMeasurements,
             'measurements' => $this->measurements,
+            'remember_measurements' => $this->rememberMeasurements,
         ];
     }
 }

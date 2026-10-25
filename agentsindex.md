@@ -333,7 +333,7 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `LetterTemplate` | Vorlagenschema: Zonen, Bausteintypen, Platzhalter, `default()`, `normalize()` (Prüfung mit Feldpfaden wie `blocks.3.texts.text`), `fill()`, `editorDefinition()` für den JS-Editor |
 | `LetterTemplateService` / `LetterTemplateRepository` | Versionierung: `current()`, `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
 | `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter, Fassung 2 druckt ohne Messwerttabelle, Fassung 3 mit |
-| `LetterMeasurements` | Messwerttabelle des Briefes: löst den festen Katalog (`App\PatientCard\MeasurementTemplate`) gegen die Untersuchungen des Patienten auf (aktuelle Untersuchung ganz rechts, davor bis zu `MAX_PREVIOUS` frühere), friert die Tabelle samt Auswahl in den Snapshot ein (`freeze()`) und liefert die Checkbox-Liste des Assistenten (`choices()`, `previousCount()`) |
+| `LetterMeasurements` | Messwerttabelle des Briefes: löst den festen Katalog (`App\PatientCard\MeasurementTemplate`) gegen die Untersuchungen des Patienten auf (aktuelle Untersuchung ganz rechts, davor bis zu `MAX_PREVIOUS` frühere), friert die Tabelle samt Auswahl in den Snapshot ein (`freeze()`), liefert die Checkbox-Liste des Assistenten (`choices()`, `previousCount()`) und löst die wirksame Auswahl bzw. die Vorauswahl aus dem gespeicherten Standard auf (`chosen()`, `preselect()`) |
 | `LetterSample` | Beispieldaten für Editor-Vorschau |
 | `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`, `generic`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben; der generische Arztbrief hat eine feste Anschrift und ist nur ohne Arztanschrift wählbar |
 
@@ -473,7 +473,7 @@ Template in `templates/` ergänzen → Navigation in `templates/layout.php` übe
 
 ## 8. Datenbankschema
 
-Maßgeblich sind die Dateien in `database/migrations/` (001 bis 013);
+Maßgeblich sind die Dateien in `database/migrations/` (001 bis 015);
 `database/schema.sql` ist **generiert** (`php bin/build-schema.php`). Ein Test stellt sicher,
 dass beide identisch sind.
 
@@ -494,6 +494,7 @@ dass beide identisch sind.
 | `patient_card_master_data` | Zusammengeführte Angaben je Patient (Adresse, Notfallkontakt, Hausarzt, Kontrolle), eindeutig je Patient |
 | `patient_card_template_versions` | Unveränderliche Fassung der Ausweisvorlage (`version_no`, `name`, `comment`, `schema_version`, `content` als JSON, `content_sha256`); die höchste Nummer ist die aktuelle Vorlage |
 | `patient_cards` | Erzeugter Ausweis: Patient/Bericht, `sequence_no`, `card_version`, `settings_version_id`, `template_version_id`, Snapshot (JSON, inkl. eingefrorener Vorlage), PDF als Blob mit SHA-256 und Größe, Dateiname |
+| `letter_measurement_defaults` | Applikationsweiter Standard der Messwertauswahl für Briefe (genau eine Zeile `id=1`, `selected` als JSON-Liste der Katalogschlüssel); nur Vorauswahl im Assistenten, kein Bestandteil der Briefe |
 | `users` | Benutzerkonten: `username` (ascii_bin, eindeutig), Anzeigename, `password_hash` (niemals Klartext), `is_active`, `failed_attempts`, `locked_until`, `last_login_at`, `password_changed_at` |
 | `user_groups` | Gruppen (Rollen) mit `code`, `label`, `is_system` (nicht löschbar), `sort_order`; vorgegeben: `admin` (10), `mfa` (20), `arzt` (30) |
 | `user_group_members` | Zuordnung Benutzer ↔ Gruppe (`ON DELETE CASCADE`, trägt keine fachlichen Daten) |
@@ -653,6 +654,15 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
   fehlen Anhang und Messwerttabelle.
 - Die Messwerttabelle lässt sich nicht nachträglich ändern; eine andere Auswahl ergibt einen
   neuen Brief (neue Briefnummer, neue Fassung des Snapshots).
+- Die Auswahl lässt sich als **applikationsweiter Standard** speichern (`letter_measurement_defaults`,
+  genau eine Zeile mit den Katalogschlüsseln): `LetterInput::$rememberMeasurements`
+  (`remember_measurements === '1'`) schreibt den Standard in derselben Transaktion wie den Brief
+  (`LetterService::create()`); `prepare()` liefert ihn als `measurement_default`, und
+  `LetterMeasurements::preselect()` beschränkt ihn auf die vorhandenen Werte (nichts übrig oder
+  kein Standard → `null` = alle verfügbaren). Das Overlay im Assistenten fragt „Die
+  Messwertauswahl wurde geändert. Einstellung merken?" (`dialog[data-measurement-default-dialog]`,
+  JS in `public/assets/js/app.js`); ohne JavaScript übernimmt das die Checkbox
+  `data-measurement-remember`. Bestehende Briefe bleiben unverändert.
 
 ---
 
@@ -818,6 +828,7 @@ Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht
 | `database/migrations/002_patient_card.sql` | Schema des Patientenausweises (Identitätsschlüssel, Stammdaten und -fassungen, Logos, Ausweise mit PDF-Blob) |
 | `database/migrations/013_users_and_groups.sql` | Schema der Benutzerverwaltung (Benutzer, Gruppen, Mitgliedschaften, Rechtematrix) inkl. der vorgegebenen Gruppen *Admin*, *MFA* und *Arzt* |
 | `database/migrations/014_patient_card_templates.sql` | Versionierte Ausweisvorlagen (`patient_card_template_versions`), `patient_cards.template_version_id`, Recht `patient_card_templates` |
+| `database/migrations/015_letter_measurement_defaults.sql` | Applikationsweiter Standard der Messwertauswahl für Briefe (`letter_measurement_defaults`, eine Zeile mit JSON-Schlüsselliste) |
 | `database/schema.sql` | Generiertes Gesamtschema (muss zu den Migrationen passen) |
 | `config/parameter_mapping.php` | Kategorien und Zuordnungsregeln inkl. `version` |
 | `docker-compose.yml` | Dienste, Profile (`test`, `docs`), Netze, Volumes |

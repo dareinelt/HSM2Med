@@ -231,6 +231,46 @@ final class LetterMeasurementsTest extends TestCase
         );
     }
 
+    /** Die wirksame Auswahl: null bedeutet alle verfuegbaren Werte, sonst der Schnitt. */
+    public function testChosenResolvesSelectionAgainstAvailableValues(): void
+    {
+        $part = $this->resolved();
+
+        $this->assertSame(['0.0.0', '1.0.0', '2.0.0'], LetterMeasurements::chosen($part, null));
+        $this->assertSame(['1.0.0'], LetterMeasurements::chosen($part, ['1.0.0']));
+        $this->assertSame(
+            ['0.0.0', '2.0.0'],
+            LetterMeasurements::chosen($part, ['2.0.0', '0.0.0']),
+            'Die Reihenfolge folgt dem Katalog, nicht der Reihenfolge der Anfrage.',
+        );
+        $this->assertSame(
+            ['0.0.0'],
+            LetterMeasurements::chosen($part, ['0.0.0', '0.0.1', '9.9.9']),
+            'Nicht verfuegbare und unbekannte Schluessel entfallen.',
+        );
+        $this->assertSame([], LetterMeasurements::chosen($part, []));
+        $this->assertSame([], LetterMeasurements::chosen(['available' => []], null));
+    }
+
+    /** Die Vorauswahl folgt dem gespeicherten Standard, beschraenkt auf vorhandene Werte. */
+    public function testPreselectUsesDefaultRestrictedToAvailableValues(): void
+    {
+        $part = $this->resolved();
+
+        $this->assertNull(LetterMeasurements::preselect($part, []), 'Ohne Standard bleiben alle Werte vorausgewaehlt.');
+        $this->assertSame(['0.0.0', '2.0.0'], LetterMeasurements::preselect($part, ['0.0.0', '2.0.0']));
+        $this->assertSame(
+            ['1.0.0'],
+            LetterMeasurements::preselect($part, ['1.0.0', '0.0.1']),
+            'Standardwerte ohne Wert in den Untersuchungen werden nicht vorausgewaehlt.',
+        );
+        $this->assertNull(
+            LetterMeasurements::preselect($part, ['0.0.1']),
+            'Bleibt nichts uebrig, gilt wie bisher die vollstaendige Vorauswahl.',
+        );
+        $this->assertNull(LetterMeasurements::preselect(['available' => []], ['0.0.0']));
+    }
+
     /** Die Checkbox-Liste nennt je Zeile die Verfuegbarkeit und die Werte der Untersuchungen. */
     public function testChoicesListRowsWithAvailability(): void
     {

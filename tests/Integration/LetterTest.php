@@ -765,6 +765,84 @@ final class LetterTest extends DatabaseTestCase
         $this->assertNotContains('Messwerte im Verlauf', $text);
     }
 
+    /** Die Messwertauswahl laesst sich als applikationsweiter Standard speichern. */
+    public function testMeasurementSelectionIsSavedAsDefault(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $prepared = $this->letters->prepare($this->patientId, $reportId);
+        $available = $prepared['measurements']['available'];
+        $this->assertSame([], $prepared['measurement_default'], 'Ohne gespeicherten Standard ist nichts vorausgewaehlt.');
+        $this->assertNull(LetterMeasurements::preselect($prepared['measurements'], $prepared['measurement_default']));
+
+        $this->createLetter($reportId, ['family_doctor'], [
+            'measurements_present' => '1',
+            'measurements' => [$available[0]],
+            'remember_measurements' => '1',
+        ]);
+        $this->assertSame([$available[0]], $this->storedMeasurementDefault());
+
+        // Der Standard wirkt nur auf die Vorauswahl neuer Briefe.
+        $again = $this->letters->prepare($this->patientId, $reportId);
+        $this->assertSame([$available[0]], $again['measurement_default']);
+        $this->assertSame(
+            [$available[0]],
+            LetterMeasurements::preselect($again['measurements'], $again['measurement_default']),
+        );
+
+        // Ein Standard ohne passende Werte in den Untersuchungen faellt auf die volle Vorauswahl zurueck.
+        $this->pdo->exec("UPDATE letter_measurement_defaults SET selected = '[\"9.9.9\"]' WHERE id = 1");
+        $stale = $this->letters->prepare($this->patientId, $reportId);
+        $this->assertSame(['9.9.9'], $stale['measurement_default']);
+        $this->assertNull(LetterMeasurements::preselect($stale['measurements'], $stale['measurement_default']));
+    }
+
+    /** Ohne Rueckfrage ("merken") und bei abgelehntem Brief bleibt der Standard unveraendert. */
+    public function testMeasurementDefaultIsOnlySavedOnRequest(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $available = $this->letters->prepare($this->patientId, $reportId)['measurements']['available'];
+
+        $this->createLetter($reportId, ['family_doctor'], [
+            'measurements_present' => '1',
+            'measurements' => [$available[0]],
+        ]);
+        $this->assertSame([], $this->storedMeasurementDefault(), 'Ohne "merken" entsteht kein Standard.');
+
+        // Ein Brief, der nicht erzeugt wird, darf den Standard nicht schreiben.
+        $this->assertThrows(LetterException::class, fn (): array => $this->createLetter($reportId, ['family_doctor'], [
+            'measurements_present' => '1',
+            'measurements' => [],
+            'remember_measurements' => '1',
+        ]));
+        $this->assertSame([], $this->storedMeasurementDefault());
+
+        // Ohne Messwerttabelle gibt es keine Auswahl, die als Standard taugen wuerde.
+        $this->createLetter($reportId, ['family_doctor'], [
+            'include_measurements' => '0',
+            'remember_measurements' => '1',
+        ]);
+        $this->assertSame([], $this->storedMeasurementDefault());
+    }
+
+    /**
+     * Gespeicherter Standard der Messwertauswahl.
+     *
+     * @return list<string>
+     */
+    private function storedMeasurementDefault(): array
+    {
+        $raw = $this->pdo->query('SELECT selected FROM letter_measurement_defaults WHERE id = 1')->fetchColumn();
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? array_values(array_map('strval', $decoded)) : [];
+    }
+
     /**
      * Schluessel aller Messwertzeilen eines eingefrorenen Briefes.
      *

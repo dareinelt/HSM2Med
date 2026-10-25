@@ -158,6 +158,36 @@ label.check input { width: auto; margin-top: .25rem; flex: 0 0 auto; }
 .toc { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; }
 details summary { cursor: pointer; font-weight: 600; color: var(--primary); }
 details[open] summary { margin-bottom: .6rem; }
+/* Rueckfrage nach geaenderter Messwertauswahl im Brief-Assistenten. Das Overlay liegt
+   ausserhalb des Formulars und wird per JavaScript geoeffnet (CSP-konform). */
+.letter-dialog {
+    --letter-dialog-close: 1.7rem;
+    width: min(32rem, calc(100vw - 2rem));
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: inherit;
+    box-shadow: 0 18px 40px rgba(16, 24, 40, .3);
+}
+.letter-dialog::backdrop { background: rgba(16, 24, 40, .45); }
+.letter-dialog__head { display: flex; justify-content: flex-end; padding: .4rem .4rem 0; }
+.letter-dialog__close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: var(--letter-dialog-close); height: var(--letter-dialog-close);
+    padding: .3rem; border: 1px solid transparent; border-radius: 5px;
+    background: none; color: var(--muted); cursor: pointer;
+}
+.letter-dialog__close:hover { border-color: var(--border); background: #f2f4f7; color: var(--primary); }
+.letter-dialog__close .app-icon { width: 1.1rem; height: 1.1rem; }
+.letter-dialog__body { padding: 0 1.3rem 1.2rem; }
+.letter-dialog__body h2 { margin: 0 0 .6rem; font-size: 1.05rem; }
+.letter-dialog__actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; margin-top: 1rem; }
+@media (max-width: 720px) {
+    .letter-dialog__actions { justify-content: stretch; }
+    .letter-dialog__actions .button { flex: 1 1 100%; justify-content: center; }
+}
+
 @media print {
     .actions, .toc, form { display: none; }
     body { background: #fff; }

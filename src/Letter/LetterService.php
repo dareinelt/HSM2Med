@@ -125,6 +125,7 @@ final class LetterService
      *     measurements: array<string, mixed>,
      *     measurement_choices: list<array{key: string, label: string, available: bool, values: list<string>}>,
      *     measurement_previous: int,
+     *     measurement_default: list<string>,
      *     warnings: list<string>,
      *     next_sequence: int
      * }
@@ -179,6 +180,7 @@ final class LetterService
             'measurement_previous' => LetterMeasurements::previousCount(
                 $this->templates->current(LetterRecipient::PATIENT)['content'],
             ),
+            'measurement_default' => $this->repository->measurementDefaults(),
             'warnings' => $warnings,
             'recipients' => LetterRecipient::all($patient, $masterData),
             'next_sequence' => $this->repository->nextSequence($patientId),
@@ -200,6 +202,10 @@ final class LetterService
      * erzeugt je ausgewaehltem Empfaenger einen eigenen Brief (eigene Briefnummer, eigene
      * Dokumentnummer, eigenes PDF). Alle Briefe entstehen in einer Transaktion und teilen
      * sich die Fassung (letter_version) sowie die Datengrundlage.
+     *
+     * Ist rememberMeasurements gesetzt und die Messwerttabelle Teil des Briefes, wird die
+     * wirksame Messwertauswahl zusaetzlich als applikationsweiter Standard gespeichert (in
+     * derselben Transaktion).
      *
      * @return array{letter_id: int, letter_ids: list<int>, patient_id: int, sequence_no: int, page_count: int,
      *     letters: list<array{letter_id: int, sequence_no: int, recipient_type: string, recipient_label: string, page_count: int}>}
@@ -305,6 +311,14 @@ final class LetterService
                     'recipient_label' => (string) $recipient['label'],
                     'page_count' => LetterPdfGenerator::pageCount($pdf),
                 ];
+            }
+            // Der Standard gilt nur fuer Briefe mit Messwerttabelle; ohne Tabelle gaebe es keine
+            // Auswahl, die fuer kuenftige Briefe vorausgewaehlt werden koennte.
+            if ($input->rememberMeasurements && $input->includeMeasurements) {
+                $defaults = LetterMeasurements::chosen($prepared['measurements'], $input->measurements);
+                if ($defaults !== []) {
+                    $this->repository->saveMeasurementDefaults($defaults, $now);
+                }
             }
             $this->pdo->commit();
         } catch (\Throwable $e) {

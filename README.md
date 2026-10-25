@@ -706,7 +706,11 @@ Angeboten wird der feste Katalog der Briefvorlage, gegliedert nach Abschnitt und
 ohne Wert in den Untersuchungen sind deaktiviert und als „kein Wert in den Untersuchungen"
 gekennzeichnet. Die Checkbox **Messwerttabelle auf der letzten Seite mitdrucken** blendet die
 Seite für diesen Brief ab. Mindestens ein Messwert ist Pflicht, solange Werte vorliegen – sonst
-antwortet der Server mit HTTP 422 und öffnet Schritt 4.
+antwortet der Server mit HTTP 422 und öffnet Schritt 4. Wird die Auswahl geändert, fragt der
+Assistent „Die Messwertauswahl wurde geändert. Einstellung merken?" – mit **Ja, als Standard
+merken** gilt die Auswahl applikationsweit für alle künftigen Briefe vorausgewählt (siehe
+[Messwertauswahl als Standard](#messwertauswahl-als-standard)); ohne JavaScript übernimmt das die
+Checkbox **Diese Messwertauswahl als Standard für alle künftigen Briefe merken**.
 
 **5. Empfänger wählen** – Checkboxen für **Patient**, **Hausarzt** und **Überweisender Arzt**
 mit der Anschrift aus den Stammdaten. Für **jeden** gewählten Empfänger entsteht ein eigener
@@ -778,6 +782,25 @@ false` in der Vorlage entfällt sie vollständig. Die Kopftexte (Überschrift, E
 Spaltenkopf, Zusatz zur aktuellen Untersuchung, Hinweis ohne Messwerte) pflegt der
 [Vorlageneditor](#briefvorlage-und-vorlageneditor). Briefe der Fassungen 1 und 2 haben keine
 Messwerttabelle und bleiben unverändert.
+
+### Messwertauswahl als Standard
+
+Die Messwertauswahl lässt sich **applikationsweit** als Standard speichern (Tabelle
+`letter_measurement_defaults`, genau eine Zeile). Nach einer Änderung der Auswahl in Schritt 4
+erscheint ein Overlay mit der Frage **„Die Messwertauswahl wurde geändert. Einstellung merken?"**:
+
+- **Ja, als Standard merken** – die angekreuzten Messwerte sind in allen künftig erstellten
+  Briefen vorausgewählt.
+- **Nein, nur für diesen Brief** – die Auswahl gilt nur für den aktuellen Brief; ein bestehender
+  Standard bleibt unverändert.
+
+Gespeichert werden die Schlüssel des festen Katalogs. Ein neuer Brief wählt den Standard vor,
+**soweit die Werte in den Untersuchungen des Patienten vorliegen**; bleibt davon nichts übrig
+(oder ist kein Standard gespeichert), sind wie bisher alle verfügbaren Messwerte vorausgewählt.
+Der Standard ändert keinen bestehenden Brief: jeder Brief friert seine eigene Auswahl ein. Wird
+der Brief nicht erzeugt (z. B. fehlende Bestätigung), bleibt der Standard unverändert – er wird
+in derselben Transaktion wie der Brief geschrieben. Ohne JavaScript bleibt die Checkbox im
+Schritt 4 sichtbar und wird beim Absenden ausgewertet.
 
 ### Aufbau des Briefes (DIN 5008)
 
@@ -1105,6 +1128,10 @@ erDiagram
   überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
   (`NULL` = kein Baustein „Berichte"). `sequence_no` ist die laufende Nummer je Patient,
   `letter_version` die Fassung je Patient und Bericht (`UNIQUE (patient_id, sequence_no)`).
+- **letter_measurement_defaults** ist der applikationsweite Standard der Messwertauswahl für
+  Briefe: genau eine Zeile (`id = 1`) mit der JSON-Liste der Katalogschlüssel. Der Standard wird
+  nur geschrieben, wenn der Anwender ihn beim Erzeugen bestätigt (`remember_measurements`), und
+  dient ausschließlich der Vorauswahl im Assistenten – jeder Brief friert seine eigene Auswahl ein.
 - **letter_template_versions** ist der unveränderliche Fassungsverlauf der Briefvorlagen. Jede
   Empfängerart (`template_type`: `patient`, `family_doctor`, `referring_physician`, `generic`) hat ihren
   eigenen Verlauf (`UNIQUE (template_type, version_no)`); jede Speicherung fügt eine neue Fassung
@@ -1306,7 +1333,7 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   Vorlagenoption `show`, Briefe der Fassung 2 ohne Tabelle) sowie die Integrationstests in
   `tests/Integration/LetterTest.php` und `tests/Integration/LetterViewTest.php` (Checkbox-Liste im
   Assistenten, Spalten mit früherer und aktueller Untersuchung, eingefrorene Auswahl, Pflicht zur
-  Auswahl, Anzeige in der Detailansicht).
+  Auswahl, Anzeige in der Detailansicht, gespeicherter Standard samt Vorauswahl und Rückfrage).
 - **Brief zur Schrittmacher-/ICD-Abfrage:** Assistent (`prepare()`) mit Warnungen für fehlende
   Bausteine, Anhang, Messwerte und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
   (HTTP 422, kein Datensatz), Snapshot und Unveränderlichkeit (Patientendaten, Bausteinfassungen

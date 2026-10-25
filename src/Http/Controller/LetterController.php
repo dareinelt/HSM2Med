@@ -9,6 +9,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Letter\LetterException;
 use App\Letter\LetterInput;
+use App\Letter\LetterMeasurements;
 use App\Letter\LetterRecipient;
 use App\Security\SessionManager;
 use RuntimeException;
@@ -297,11 +298,16 @@ final class LetterController extends Controller
             // Vorauswahl: die Aerzte, deren Anschrift vollstaendig ist; gibt es keinen, der
             // generische Arztbrief (nur waehlbar, wenn keine Arztanschrift vorliegt).
             'recipients' => self::defaultRecipients($recipients),
-            // Anhang und Messwerttabelle sind voreingestellt; die Messwerte sind vollstaendig
-            // vorausgewaehlt (null = alle Werte, die in den Untersuchungen vorliegen).
+            // Anhang und Messwerttabelle sind voreingestellt. Die Messwerte folgen dem
+            // applikationsweiten Standard, soweit die Werte in den Untersuchungen vorliegen;
+            // ohne Standard (oder ohne passende Werte) sind alle verfuegbaren vorausgewaehlt.
             'include_appendix' => true,
             'include_measurements' => true,
-            'measurements' => null,
+            'measurements' => LetterMeasurements::preselect(
+                $prepared['measurements'],
+                $prepared['measurement_default'],
+            ),
+            'remember_measurements' => false,
         ];
         $startStep = 2;
         foreach ([
@@ -327,6 +333,7 @@ final class LetterController extends Controller
             'measurements' => $prepared['measurements'],
             'measurementChoices' => $prepared['measurement_choices'],
             'measurementPrevious' => $prepared['measurement_previous'],
+            'measurementDefault' => $prepared['measurement_default'],
             'warnings' => $prepared['warnings'],
             'nextSequence' => $prepared['next_sequence'],
             'errors' => $errors,

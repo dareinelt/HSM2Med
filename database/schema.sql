@@ -879,3 +879,28 @@ CROSS JOIN (SELECT 'patient_card_templates' AS permission) p
 WHERE g.code IN ('admin', 'arzt');
 
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('014_patient_card_templates', '029b4a79c887b2e3d344e7a912bffd7a83088746ee2ffaab146d030b530ba02a', NOW());
+
+-- ===== Migration 015_letter_measurement_defaults =====
+
+-- HSM2Med – Migration 015: Standardauswahl der Messwerttabelle im Brief
+--
+-- Grundsaetze:
+--  * Die Messwertauswahl des Befundbriefes laesst sich als applikationsweiter Standard
+--    speichern. Neue Briefe haben diese Messwerte dann vorausgewaehlt; der Anwender entscheidet
+--    im Assistenten nach einer Aenderung der Auswahl, ob die Einstellung gemerkt wird.
+--  * Es gibt genau eine Zeile (id = 1). Der Standard ist eine reine Arbeitserleichterung und
+--    aendert keinen bestehenden Brief: jeder Brief friert seine Auswahl im Snapshot ein.
+--  * Gespeichert werden die Schluessel der Messwertzeilen des festen Katalogs
+--    (Abschnitt.Gruppe.Zeile). Passen sie nach einer Katalogaenderung nicht mehr, greift die
+--    Vorauswahl nur fuer die weiterhin vorhandenen Zeilen; bleibt nichts uebrig, sind wie bisher
+--    alle verfuegbaren Messwerte vorausgewaehlt.
+
+CREATE TABLE letter_measurement_defaults (
+    id         TINYINT UNSIGNED NOT NULL,
+    selected   JSON NOT NULL COMMENT 'Schluessel der vorausgewaehlten Messwertzeilen',
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    COMMENT='Applikationsweite Standardauswahl der Messwerttabelle im Brief';
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('015_letter_measurement_defaults', '50e7690b7f6c7aafafe29926637de007c8c3869d592209186d09e5752073a3e1', NOW());

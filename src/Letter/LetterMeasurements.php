@@ -23,6 +23,10 @@ use App\Report\ReportData;
  * wird beim Erzeugen aufgeloest und im Snapshot eingefroren; eine geaenderte Auswahl ergibt
  * einen neuen Brief (neue Briefnummer, neue Fassung). Das PDF arbeitet ausschliesslich mit der
  * eingefrorenen Aufloesung; es werden keine Werte erfunden und keine Werte bewertet.
+ *
+ * Die Auswahl laesst sich zusaetzlich als applikationsweiter Standard speichern
+ * (letter_measurement_defaults); neue Briefe sind damit vorausgewaehlt (preselect()). Der
+ * Standard aendert keinen bestehenden Brief, weil jeder Brief seine eigene Auswahl einfriert.
  */
 final class LetterMeasurements
 {
@@ -152,9 +156,7 @@ final class LetterMeasurements
             array_map('strval', (array) ($measurements['available'] ?? [])),
             static fn (string $key): bool => $key !== '',
         ));
-        $chosen = $selected === null
-            ? $available
-            : array_values(array_intersect($available, array_map('strval', $selected)));
+        $chosen = self::chosen($measurements, $selected);
         if (!$include) {
             return self::emptyPart($version, $previousCount, $available, false);
         }
@@ -228,6 +230,46 @@ final class LetterMeasurements
             'available' => $available,
             'selected' => $shown,
         ];
+    }
+
+    /**
+     * Wirksame Auswahl: die gewaehlten Schluessel, beschraenkt auf die Messwerte, die in den
+     * Untersuchungen tatsaechlich vorliegen. null (Formular ohne Messwertliste) bedeutet
+     * "alle verfuegbaren".
+     *
+     * @param array<string, mixed> $measurements Ergebnis von resolve()
+     * @param list<string>|null $selected
+     * @return list<string>
+     */
+    public static function chosen(array $measurements, ?array $selected): array
+    {
+        $available = array_values(array_filter(
+            array_map('strval', (array) ($measurements['available'] ?? [])),
+            static fn (string $key): bool => $key !== '',
+        ));
+        if ($selected === null) {
+            return $available;
+        }
+        return array_values(array_intersect($available, array_map('strval', $selected)));
+    }
+
+    /**
+     * Vorauswahl fuer den Assistenten: die gespeicherte Standardauswahl, beschraenkt auf die
+     * Messwerte, die in den Untersuchungen des Patienten vorliegen. Bleibt davon nichts uebrig
+     * (kein Standard gespeichert oder kein Standardwert vorhanden), sind wie bisher alle
+     * verfuegbaren Messwerte vorausgewaehlt (null).
+     *
+     * @param array<string, mixed> $measurements Ergebnis von resolve()
+     * @param list<string> $defaults gespeicherte Standardauswahl
+     * @return list<string>|null null = alle verfuegbaren Messwerte
+     */
+    public static function preselect(array $measurements, array $defaults): ?array
+    {
+        if ($defaults === []) {
+            return null;
+        }
+        $chosen = self::chosen($measurements, $defaults);
+        return $chosen === [] ? null : $chosen;
     }
 
     /**
