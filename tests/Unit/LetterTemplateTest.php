@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Letter\LetterException;
+use App\Letter\LetterMeasurements;
 use App\Letter\LetterPdfGenerator;
 use App\Letter\LetterRecipient;
 use App\Letter\LetterSalutation;
@@ -83,6 +84,45 @@ final class LetterTemplateTest extends TestCase
         $this->assertSame("Zeile 1\nZeile 2", $normalized['blocks'][9]['texts']['text']);
         $this->assertSame('text-2', $normalized['blocks'][10]['id']);
         $this->assertFalse($normalized['blocks'][10]['enabled']);
+    }
+
+    /** Die Messwerttabelle ist eine eigene Zone: Anzahl frueherer Untersuchungen und Texte. */
+    public function testMeasurementTableZoneDefaultsAndChoices(): void
+    {
+        $default = LetterTemplate::default();
+        $this->assertTrue(isset($default['zones']['measurement_table']));
+        $zone = $default['zones']['measurement_table'];
+        $this->assertTrue($zone['options']['show']);
+        $this->assertSame((string) LetterMeasurements::DEFAULT_PREVIOUS, $zone['options']['previous']);
+        $this->assertSame('Messwerte im Verlauf', $zone['texts']['heading']);
+        $this->assertSame('Messwert', $zone['texts']['column_parameter']);
+        $this->assertSame('aktuelle Untersuchung', $zone['texts']['current_label']);
+
+        // Die Auswahl reicht von "keine fruehere Untersuchung" bis zur Obergrenze.
+        $choices = LetterTemplate::editorDefinition()['zones']['measurement_table']['options']['previous']['choices'];
+        $this->assertSame(range(0, LetterMeasurements::MAX_PREVIOUS), array_keys($choices));
+        $this->assertSame('keine frühere Untersuchung', $choices['0']);
+        $this->assertSame('1 frühere Untersuchung', $choices['1']);
+        $this->assertSame('4 frühere Untersuchungen', $choices['4']);
+    }
+
+    /** Die eingestellte Anzahl frueherer Untersuchungen wird geprueft und begrenzt. */
+    public function testMeasurementTablePreviousIsValidated(): void
+    {
+        $template = LetterTemplate::default();
+        $template['zones']['measurement_table']['options']['previous'] = '7';
+        $normalized = LetterTemplate::normalize($template);
+        $this->assertSame('7', $normalized['zones']['measurement_table']['options']['previous']);
+        $this->assertSame(7, LetterMeasurements::previousCount($normalized));
+
+        $template['zones']['measurement_table']['options']['previous'] = 0;
+        $normalized = LetterTemplate::normalize($template);
+        $this->assertSame('0', $normalized['zones']['measurement_table']['options']['previous']);
+        $this->assertSame(0, LetterMeasurements::previousCount($normalized));
+
+        $template['zones']['measurement_table']['options']['previous'] = '11';
+        $error = $this->assertThrows(LetterException::class, fn () => LetterTemplate::normalize($template));
+        $this->assertTrue(isset($error->fieldErrors()['zones.measurement_table.options.previous']));
     }
 
     /** Der fruehere Baustein "report" wird als Aktenbaustein "befund" weitergefuehrt. */

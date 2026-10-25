@@ -9,6 +9,7 @@ use App\Config\Config;
 use App\Import\ImportOutcome;
 use App\Letter\LetterException;
 use App\Letter\LetterInput;
+use App\Letter\LetterMeasurements;
 use App\Letter\LetterPdfGenerator;
 use App\Letter\LetterRecipient;
 use App\Letter\LetterService;
@@ -196,17 +197,31 @@ final class LetterTest extends DatabaseTestCase
     }
 
     /**
-     * @param list<string> $recipients
+     * Zweite Untersuchung desselben Patienten: der Beispielbericht mit einem spaeteren
+     * Auslesedatum. Damit entstehen zwei Spalten in der Messwerttabelle.
      */
-    private function createLetter(?int $reportId = null, array $recipients = ['family_doctor']): array
+    private function importLaterSample(string $timestamp = '11/20/2026 07:03:24'): ImportOutcome
+    {
+        $service = $this->importService();
+        $bytes = str_replace('10/07/2026 07:03:24', $timestamp, Fixtures::sampleFile());
+        return $service->import($service->analyze($bytes, 'MERLIN__ANN_5809481-spaeter.log'), $bytes);
+    }
+
+    /**
+     * @param list<string> $recipients
+     * @param array<string, mixed> $extra
+     */
+    private function createLetter(?int $reportId = null, array $recipients = ['family_doctor'], array $extra = []): array
     {
         $this->saveFamilyDoctor();
-        return $this->letters->create(LetterInput::fromPost([
+        return $this->letters->create(LetterInput::fromPost($extra + [
             'patient_id' => (string) $this->patientId,
             'report_id' => $reportId === null ? '' : (string) $reportId,
             'confirm_data' => '1',
             'confirm_letter' => '1',
             'recipients' => $recipients,
+            'include_appendix' => '1',
+            'include_measurements' => '1',
         ]));
     }
 
@@ -513,7 +528,7 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame([], $prepared['appendix']['sections']);
         $this->assertFalse($prepared['appendix']['present']);
         $this->assertFalse($prepared['mrt']['available']);
-        $this->assertSame(7, count($prepared['warnings']), 'Vier Textbausteine, Anhang, Bericht und MRT-Angabe fehlen.');
+        $this->assertSame(8, count($prepared['warnings']), 'Vier Textbausteine, Anhang, Messwerte, Bericht und MRT-Angabe fehlen.');
 
         $this->importAndSelectPatient();
         $this->fillRecords();
@@ -643,5 +658,130 @@ final class LetterTest extends DatabaseTestCase
 
         $this->assertSame(1, count($this->letters->patientChoices('Erika')));
         $this->assertSame([], $this->letters->patientChoices('Niemand'));
+    }
+
+    /** Ohne Vorgeschichte enthaelt die Tabelle nur die aktuelle Untersuchung. */
+    public function testMeasurementTableWithSingleExamination(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $prepared = $this->letters->prepare($this->patientId, $reportId);
+        $measurements = $prepared['measurements'];
+
+        $this->assertTrue($measurements['include']);
+        $this->assertTrue($measurements['present']);
+        $this->assertCount(1, $measurements['columns']);
+        $this->assertSame($reportId, (int) $measurements['columns'][0]['report_id']);
+        $this->assertTrue($measurements['columns'][0]['current']);
+        $this->assertSame(LetterMeasurements::DEFAULT_PREVIOUS, $prepared['measurement_previous']);
+        $this->assertNotSame([], $measurements['available']);
+
+        // Die Checkbox-Liste bietet genau die Zeilen an, die in der Untersuchung Werte haben.
+        $choices = $prepared['measurement_choices'];
+        $this->assertNotSame([], $choices);
+        $enabled = array_values(array_filter($choices, static fn (array $choice): bool => $choice['available'] === true));
+        $this->assertSame($measurements['available'], array_column($enabled, 'key'));
+        // Der Katalog listet auch Zeilen ohne Wert; sie sind in der Auswahl deaktiviert.
+        $this->assertTrue(count($choices) > count($enabled), 'Der Katalog ist groesser als die verfuegbare Auswahl.');
+    }
+
+    /** Fruehere Untersuchungen stehen links, die aktuelle Untersuchung ganz rechts. */
+    public function testMeasurementTableListsHistoryWithCurrentRightmost(): void
+    {
+        $firstReportId = $this->importAndSelectPatient();
+        $later = $this->importLaterSample();
+        $prepared = $this->letters->prepare($this->patientId, $later->reportId);
+        $columns = $prepared['measurements']['columns'];
+
+        $this->assertCount(2, $columns);
+        $this->assertSame($firstReportId, (int) $columns[0]['report_id']);
+        $this->assertFalse($columns[0]['current']);
+        $this->assertSame($later->reportId, (int) $columns[1]['report_id']);
+        $this->assertTrue($columns[1]['current']);
+        $this->assertSame('20.11.2026', (string) $columns[1]['date_display']);
+        $this->assertSame('07.10.2026', (string) $columns[0]['date_display']);
+
+        $letter = $this->createLetter($later->reportId);
+        $snapshot = $this->letters->letter($letter['letter_id'])['snapshot'];
+        $this->assertSame(
+            [$firstReportId, $later->reportId],
+            array_column($snapshot['measurements']['columns'], 'report_id'),
+        );
+        $this->assertTrue($snapshot['measurements']['columns'][1]['current']);
+        $this->assertSame(2, $snapshot['measurements']['column_count']);
+    }
+
+    /** Die Auswahl der Messwerte wird eingefroren; eine andere Auswahl ergibt einen neuen Brief. */
+    public function testMeasurementSelectionIsFrozenPerLetter(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $prepared = $this->letters->prepare($this->patientId, $reportId);
+        $available = $prepared['measurements']['available'];
+        $this->assertTrue(count($available) >= 2, 'Der Beispielbericht liefert mindestens zwei Messwerte.');
+
+        $first = $this->createLetter($reportId, ['family_doctor'], [
+            'measurements_present' => '1',
+            'measurements' => [$available[0]],
+        ]);
+        $firstSnapshot = $this->letters->letter($first['letter_id'])['snapshot'];
+        $this->assertSame([$available[0]], $firstSnapshot['measurements']['selected']);
+        $this->assertSame([$available[0]], $this->measurementRowKeys($firstSnapshot));
+
+        $second = $this->createLetter($reportId, ['family_doctor'], [
+            'measurements_present' => '1',
+            'measurements' => [$available[1]],
+        ]);
+        $this->assertNotSame($first['letter_id'], $second['letter_id']);
+        $secondSnapshot = $this->letters->letter($second['letter_id'])['snapshot'];
+        $this->assertSame([$available[1]], $this->measurementRowKeys($secondSnapshot));
+        $this->assertNotSame($firstSnapshot['measurements']['selected'], $secondSnapshot['measurements']['selected']);
+        $this->assertSame(2, $this->rowCount('patient_letters'));
+
+        // Der erste Brief bleibt unveraendert.
+        $this->assertSame([$available[0]], $this->measurementRowKeys($this->letters->letter($first['letter_id'])['snapshot']));
+    }
+
+    /** Ohne Auswahl und ohne Messwerttabelle wird der Brief abgelehnt bzw. ohne Tabelle erzeugt. */
+    public function testMeasurementTableRequiresSelectionAndIsOptional(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+
+        $error = $this->assertThrows(LetterException::class, fn (): array => $this->createLetter($reportId, ['family_doctor'], [
+            'measurements_present' => '1',
+            'measurements' => [],
+        ]));
+        $this->assertTrue(isset($error->fieldErrors()['measurements']));
+        $this->assertSame(0, $this->rowCount('patient_letters'));
+
+        $letter = $this->createLetter($reportId, ['family_doctor'], ['include_measurements' => '0']);
+        $snapshot = $this->letters->letter($letter['letter_id'])['snapshot'];
+        $this->assertFalse($snapshot['measurements']['include']);
+        $this->assertSame([], $this->measurementRowKeys($snapshot));
+        $this->assertNotSame([], $snapshot['measurements']['available']);
+        $text = PdfText::text((string) $this->letters->pdfContent($letter['letter_id']));
+        $this->assertNotContains('Messwerte im Verlauf', $text);
+    }
+
+    /**
+     * Schluessel aller Messwertzeilen eines eingefrorenen Briefes.
+     *
+     * @param array<string, mixed> $snapshot
+     * @return list<string>
+     */
+    private function measurementRowKeys(array $snapshot): array
+    {
+        $keys = [];
+        foreach ((array) ($snapshot['measurements']['sections'] ?? []) as $section) {
+            foreach ((array) ($section['groups'] ?? []) as $group) {
+                foreach ((array) ($group['rows'] ?? []) as $row) {
+                    $keys[] = (string) $row['key'];
+                }
+            }
+        }
+
+        return $keys;
     }
 }

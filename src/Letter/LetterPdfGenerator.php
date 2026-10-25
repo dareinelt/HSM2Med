@@ -21,6 +21,8 @@ use RuntimeException;
  *   * Brieftext          ab ca. 98,5 – linker Rand 25, rechter Rand 20
  *   * Falzmarken 105 und 210, Lochmarke 148,5 am linken Blattrand
  *   * Seitenzahl „Seite x von y“ in der Fusszeile, Folgeseiten mit Kopfzeile
+ *   * Messwerttabelle   letzte Seite – Messwertbezeichner je Zeile, Untersuchungen je Spalte
+ *                        (aktuelle Untersuchung ganz rechts)
  *
  * Reihenfolge und feste Texte der Bausteine stammen aus der im Snapshot eingefrorenen
  * Briefvorlage (siehe LetterTemplate). Snapshots der Brief-Fassung 1 (vor Einfuehrung der
@@ -32,7 +34,15 @@ use RuntimeException;
 final class LetterPdfGenerator
 {
     /** Fassung des Brief-Snapshots, die dieser Generator erzeugt. */
-    public const int SUPPORTED_LETTER_VERSION = 2;
+    public const int SUPPORTED_LETTER_VERSION = 3;
+
+    /**
+     * Aeltere Snapshot-Fassungen, die dieser Generator ebenfalls erzeugt: Fassung 2 enthaelt
+     * bereits die eingefrorene Vorlage, aber weder den Teil "measurements" noch die Auswahl
+     * "appendix.include". Der Anhang galt dort immer als gewaehlt, die Messwerttabelle als
+     * nicht gewaehlt – so bleiben alte Briefe bitgleich.
+     */
+    public const array COMPATIBLE_LETTER_VERSIONS = [2];
 
     /** Aeltere Snapshot-Fassungen, die ueber den damaligen Aufbau reproduziert werden. */
     public const array LEGACY_LETTER_VERSIONS = [1];
@@ -122,7 +132,7 @@ final class LetterPdfGenerator
         if (in_array($version, self::LEGACY_LETTER_VERSIONS, true)) {
             return (new LegacyLetterPdfGenerator($this->compress))->generate($letter, $logo, $generatedAt);
         }
-        if ($version !== self::SUPPORTED_LETTER_VERSION) {
+        if ($version !== self::SUPPORTED_LETTER_VERSION && !in_array($version, self::COMPATIBLE_LETTER_VERSIONS, true)) {
             throw new RuntimeException(sprintf(
                 'Brief-Fassung %s wird von diesem PDF-Generator nicht unterstuetzt.',
                 (string) ($letter['letter_version'] ?? '?'),
@@ -147,6 +157,7 @@ final class LetterPdfGenerator
         $infoBottom = $this->infoBlock();
         $this->body(max(self::BODY_TOP, $infoBottom + self::SIZE_TEXT * self::LINE));
         $this->appendix();
+        $this->measurementTable();
         $this->pageFurniture($generatedAt);
 
         $subject = $this->blockText('subject', 'title');
@@ -711,6 +722,9 @@ final class LetterPdfGenerator
             return;
         }
         $appendix = (array) ($this->letter['appendix'] ?? []);
+        if (($appendix['include'] ?? true) !== true) {
+            return;
+        }
         $sections = array_values(array_filter((array) ($appendix['sections'] ?? []), 'is_array'));
         if ($sections === []) {
             return;
@@ -812,6 +826,177 @@ final class LetterPdfGenerator
             if ($index < $last) {
                 $this->pdf->line(self::LEFT, $y, self::RIGHT, $y, self::RULE, 0.3);
                 $y += 1.5;
+            }
+        }
+        return $y + 3.0;
+    }
+
+    // -------------------------------------------------------------- Messwerttabelle
+
+    /**
+     * Messwerttabelle auf der letzten Seite: erste Spalte die Messwertbezeichner, erste Zeile die
+     * Untersuchungsdaten, die aktuelle Untersuchung ganz rechts. Laesst die Vorlage die Tabelle zu
+     * und hat der Anwender sie fuer diesen Brief gewaehlt, erscheint die Seite auch ohne Werte –
+     * dann mit dem Hinweis der Vorlage.
+     */
+    private function measurementTable(): void
+    {
+        if (!$this->zoneOption('measurement_table', 'show', true)) {
+            return;
+        }
+        $part = is_array($this->letter['measurements'] ?? null) ? $this->letter['measurements'] : [];
+        if (($part['include'] ?? false) !== true) {
+            return;
+        }
+
+        $this->pdf->addPage();
+        $y = self::NEXT_TOP;
+        $heading = $this->zoneText('measurement_table', 'heading');
+        if ($heading !== '') {
+            $y = $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $heading, 'bold', self::SIZE_SUBJECT) + 1.5;
+        }
+        $intro = $this->zoneText('measurement_table', 'intro');
+        if ($intro !== '') {
+            $y = $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $intro, 'regular', self::SIZE_SMALL, self::MUTED) + 2.0;
+        }
+
+        $columns = array_values(array_filter((array) ($part['columns'] ?? []), 'is_array'));
+        $sections = array_values(array_filter((array) ($part['sections'] ?? []), 'is_array'));
+        if (($part['present'] ?? false) !== true || $columns === [] || $sections === []) {
+            $empty = $this->zoneText('measurement_table', 'empty');
+            if ($empty !== '') {
+                $this->paragraph(self::LEFT, $y + 1.0, self::CONTENT_WIDTH, $empty, 'regular', self::SIZE_TABLE, self::MUTED);
+            }
+            return;
+        }
+        $this->measurementGrid($y, $columns, $sections);
+    }
+
+    /**
+     * Raster der Messwerttabelle mit Seitenumbruch und wiederholter Kopfzeile.
+     *
+     * @param list<array<string, mixed>> $columns
+     * @param list<array<string, mixed>> $sections
+     */
+    private function measurementGrid(float $y, array $columns, array $sections): float
+    {
+        $size = self::SIZE_TABLE;
+        $lineHeight = $size * self::LINE;
+        $labelWidth = count($columns) > 4 ? 48.0 * self::MM : 58.0 * self::MM;
+        $valueWidth = (self::CONTENT_WIDTH - $labelWidth) / max(1, count($columns));
+        $currentLabel = $this->zoneText('measurement_table', 'current_label');
+
+        $heads = [];
+        $headLines = 1;
+        foreach ($columns as $column) {
+            $lines = $this->wrap((string) ($column['date_display'] ?? ''), $valueWidth - 2 * self::CELL_PAD, 'bold', $size);
+            if (($column['current'] ?? false) === true && $currentLabel !== '') {
+                $lines = [...$lines, ...$this->wrap($currentLabel, $valueWidth - 2 * self::CELL_PAD, 'italic', $size)];
+            }
+            $heads[] = $lines;
+            $headLines = max($headLines, count($lines));
+        }
+        $headHeight = $headLines * $lineHeight + 2 * self::CELL_PAD;
+
+        $drawHead = function (float $top) use ($heads, $headHeight, $labelWidth, $valueWidth, $lineHeight, $size): float {
+            $parameter = $this->zoneText('measurement_table', 'column_parameter');
+            $this->pdf->text(self::LEFT + self::CELL_PAD, $top + self::CELL_PAD + 0.75 * $size, $parameter, 'bold', $size, self::INK);
+            $x = self::LEFT + $labelWidth;
+            foreach ($heads as $lines) {
+                foreach ($lines as $index => $line) {
+                    $font = $index === 0 ? 'bold' : 'italic';
+                    $this->pdf->text(
+                        $x + max(0.0, ($valueWidth - PdfDocument::textWidth($line, $font, $size)) / 2),
+                        $top + self::CELL_PAD + $index * $lineHeight + 0.75 * $size,
+                        $line,
+                        $font,
+                        $size,
+                        $index === 0 ? self::INK : self::MUTED,
+                    );
+                }
+                $x += $valueWidth;
+            }
+            $bottom = $top + $headHeight;
+            $this->pdf->line(self::LEFT, $bottom, self::RIGHT, $bottom, self::RULE, 0.7);
+            return $bottom + 1.5;
+        };
+
+        $y = $drawHead($this->ensureSpace($y, $headHeight + 3.0 * $lineHeight));
+
+        $first = true;
+        foreach ($sections as $section) {
+            $barHeight = $lineHeight + 3.0;
+            if ($y + $barHeight + $lineHeight > self::BOTTOM_LIMIT) {
+                $this->pdf->addPage();
+                $y = $drawHead(self::NEXT_TOP);
+            }
+            $y += 2.0;
+            $this->pdf->rect(self::LEFT, $y, self::CONTENT_WIDTH, $barHeight, self::SECTION_FILL, null, 0.0);
+            $this->pdf->text(self::LEFT + 2.0, $y + 1.5 + 0.75 * $size, (string) ($section['label'] ?? ''), 'bold', $size, self::INK);
+            $y += $barHeight + 1.5;
+            $first = true;
+
+            foreach ((array) ($section['groups'] ?? []) as $group) {
+                if (!is_array($group)) {
+                    continue;
+                }
+                $groupLabel = (string) ($group['label'] ?? '');
+                if ($groupLabel !== '') {
+                    $groupLines = $this->wrap($groupLabel, self::CONTENT_WIDTH - 2 * self::CELL_PAD, 'bold', $size);
+                    if ($y + count($groupLines) * $lineHeight > self::BOTTOM_LIMIT) {
+                        $this->pdf->addPage();
+                        $y = $drawHead(self::NEXT_TOP);
+                        $first = true;
+                    }
+                    foreach ($groupLines as $index => $line) {
+                        $this->pdf->text(self::LEFT, $y + $index * $lineHeight + 0.75 * $size, $line, 'bold', $size, self::MUTED);
+                    }
+                    $y += count($groupLines) * $lineHeight;
+                }
+
+                foreach ((array) ($group['rows'] ?? []) as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $values = array_values((array) ($row['values'] ?? []));
+                    $labelLines = $this->wrap((string) ($row['label'] ?? ''), $labelWidth - 2 * self::CELL_PAD, 'regular', $size);
+                    $cells = [];
+                    $lines = count($labelLines);
+                    foreach ($columns as $index => $column) {
+                        $cell = $this->wrap((string) ($values[$index] ?? ''), $valueWidth - 2 * self::CELL_PAD, 'regular', $size);
+                        $cells[] = $cell;
+                        $lines = max($lines, count($cell));
+                    }
+                    $height = $lines * $lineHeight + 2 * self::CELL_PAD;
+                    if ($y + $height + 1.5 > self::BOTTOM_LIMIT) {
+                        $this->pdf->addPage();
+                        $y = $drawHead(self::NEXT_TOP);
+                        $first = true;
+                    }
+                    if (!$first) {
+                        $this->pdf->line(self::LEFT, $y, self::RIGHT, $y, self::RULE, 0.25);
+                        $y += 1.5;
+                    }
+                    $first = false;
+                    foreach ($labelLines as $index => $line) {
+                        $this->pdf->text(self::LEFT + self::CELL_PAD, $y + self::CELL_PAD + $index * $lineHeight + 0.75 * $size, $line, 'regular', $size, self::INK);
+                    }
+                    $x = self::LEFT + $labelWidth;
+                    foreach ($cells as $cell) {
+                        foreach ($cell as $index => $line) {
+                            $this->pdf->text(
+                                $x + max(0.0, ($valueWidth - PdfDocument::textWidth($line, 'regular', $size)) / 2),
+                                $y + self::CELL_PAD + $index * $lineHeight + 0.75 * $size,
+                                $line,
+                                'regular',
+                                $size,
+                                self::INK,
+                            );
+                        }
+                        $x += $valueWidth;
+                    }
+                    $y += $height;
+                }
             }
         }
         return $y + 3.0;

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Letter\LetterPdfGenerator;
+use App\Letter\LetterTemplate;
+
 /**
  * Baut einen vollstaendigen Brief-Snapshot (Struktur aus LetterService::snapshot()), damit der
  * PDF-Generator ohne Datenbank getestet werden kann.
@@ -43,6 +46,82 @@ final class LetterFactory
             $base[$key] = $value;
         }
         return $base;
+    }
+
+    /**
+     * Brief der aktuellen Fassung (3) mit eingefrorener Standardvorlage und Messwerttabelle.
+     *
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    public static function current(array $overrides = []): array
+    {
+        $content = LetterTemplate::default();
+        return self::snapshot($overrides + [
+            'letter_version' => LetterPdfGenerator::SUPPORTED_LETTER_VERSION,
+            'letter_template_version' => '1',
+            'template' => [
+                'version_id' => 1,
+                'version_no' => 1,
+                'name' => $content['name'],
+                'content_sha256' => '',
+                'content' => $content,
+            ],
+            'measurements' => self::measurements(),
+        ]);
+    }
+
+    /**
+     * Messwerttabelle mit drei Spalten (zwei fruehere Untersuchungen, aktuelle ganz rechts).
+     *
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    public static function measurements(array $overrides = []): array
+    {
+        return self::merge([
+            'include' => true,
+            'present' => true,
+            'template_version' => '1.0',
+            'previous_count' => 2,
+            'column_count' => 3,
+            'columns' => [
+                ['report_id' => 7, 'date' => '2025-04-15', 'date_display' => '15.04.2025', 'current' => false],
+                ['report_id' => 8, 'date' => '2026-02-03', 'date_display' => '03.02.2026', 'current' => false],
+                ['report_id' => 1, 'date' => '2026-10-07', 'date_display' => '07.10.2026', 'current' => true],
+            ],
+            'sections' => [
+                [
+                    'key' => '0',
+                    'label' => 'Sondenmessung',
+                    'groups' => [
+                        [
+                            'key' => '0.0',
+                            'label' => 'Vorhofsonde (RA)',
+                            'rows' => [
+                                ['key' => '0.0.0', 'label' => 'Reizschwelle', 'chamber' => 'RA', 'values' => ['0,6 V', '0,5 V', '0,5 V']],
+                                ['key' => '0.0.1', 'label' => 'Impedanz', 'chamber' => 'RA', 'values' => ['480 Ohm', '510 Ohm', '512 Ohm']],
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'key' => '1',
+                    'label' => 'Batterie',
+                    'groups' => [
+                        [
+                            'key' => '1.0',
+                            'label' => '',
+                            'rows' => [
+                                ['key' => '1.0.0', 'label' => 'Restlaufzeit', 'chamber' => '', 'values' => ['24 Monate', '18 Monate', '12 Monate']],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'available' => ['0.0.0', '0.0.1', '1.0.0'],
+            'selected' => ['0.0.0', '0.0.1', '1.0.0'],
+        ], $overrides);
     }
 
     /**

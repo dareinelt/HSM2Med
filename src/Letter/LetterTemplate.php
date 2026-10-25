@@ -162,6 +162,26 @@ final class LetterTemplate
                     'notes_heading' => ['label' => 'Überschrift Bemerkungen', 'multiline' => false, 'default' => 'Bemerkungen'],
                 ],
             ],
+            'measurement_table' => [
+                'label' => 'Messwerttabelle',
+                'description' => 'Tabellarische Darstellung der Messwerte auf der letzten Seite. Die erste Spalte enthält die Messwertbezeichner, die erste Zeile die Untersuchungsdaten. Die aktuelle Untersuchung steht ganz rechts; links davon stehen die letzten früheren Untersuchungen. Welche Messwerte erscheinen, wird beim Erstellen des Briefes per Auswahlliste festgelegt.',
+                'options' => [
+                    'show' => ['label' => 'Messwerttabelle drucken (wenn Messwerte vorliegen)', 'type' => 'bool', 'default' => true],
+                    'previous' => [
+                        'label' => 'Frühere Untersuchungen als Spalten',
+                        'type' => 'select',
+                        'default' => (string) LetterMeasurements::DEFAULT_PREVIOUS,
+                        'choices' => self::previousChoices(),
+                    ],
+                ],
+                'texts' => [
+                    'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Messwerte im Verlauf'],
+                    'intro' => ['label' => 'Einleitung', 'multiline' => false, 'default' => 'Messwerte aus den Untersuchungen des Nachsorgezentrums'],
+                    'column_parameter' => ['label' => 'Spalte Messwert', 'multiline' => false, 'default' => 'Messwert'],
+                    'current_label' => ['label' => 'Zusatz zur aktuellen Untersuchung', 'multiline' => false, 'default' => 'aktuelle Untersuchung'],
+                    'empty' => ['label' => 'Hinweis ohne Messwerte', 'multiline' => false, 'default' => 'Es liegen keine Messwerte aus Untersuchungen vor.'],
+                ],
+            ],
             'general' => [
                 'label' => 'Allgemein',
                 'description' => 'Texte, die an mehreren Stellen verwendet werden.',
@@ -576,5 +596,15 @@ final class LetterTemplate
             return mb_check_encoding($value, 'UTF-8') ? $value : '';
         }
         return is_int($value) || is_float($value) ? (string) $value : '';
+    }
+
+    /** @return array<string, string> */
+    private static function previousChoices(): array
+    {
+        $choices = ['0' => 'keine frühere Untersuchung'];
+        for ($count = 1; $count <= LetterMeasurements::MAX_PREVIOUS; $count++) {
+            $choices[(string) $count] = $count === 1 ? '1 frühere Untersuchung' : $count . ' frühere Untersuchungen';
+        }
+        return $choices;
     }
 }

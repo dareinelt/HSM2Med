@@ -13,6 +13,7 @@ use App\Import\ImportValidator;
 use App\Import\ParserChain;
 use App\Import\PendingUploadStore;
 use App\Letter\DeviceCheckAppendix;
+use App\Letter\LetterMeasurements;
 use App\Letter\LetterPdfGenerator;
 use App\Letter\LetterRepository;
 use App\Letter\LetterService;
@@ -251,6 +252,7 @@ final class Application
             new LetterPdfGenerator(),
             $this->clock,
             $this->letterTemplateService(),
+            new LetterMeasurements($this->measurementTemplate(), $this->patientCardRepository()),
         );
     }
 

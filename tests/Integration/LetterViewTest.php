@@ -225,6 +225,8 @@ final class LetterViewTest extends DatabaseTestCase
             'confirm_data' => '1',
             'confirm_letter' => '1',
             'recipients' => ['family_doctor'],
+            'include_appendix' => '1',
+            'include_measurements' => '1',
         ]));
     }
 
@@ -300,7 +302,7 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('ab Nr. 1 für diesen Patienten', $response->body);
         $this->assertNotContains('Noch nicht erfasst', $response->body);
         // Empfaenger: Patient mit Anschrift aus dem Ausweis waehlbar, Aerzte ohne Anschrift gesperrt.
-        $this->assertContains('4 · Empfänger wählen', $response->body);
+        $this->assertContains('5 · Empfänger wählen', $response->body);
         foreach (['patient', 'family_doctor', 'referring_physician'] as $type) {
             $this->assertContains('id="recipient-' . $type . '" name="recipients[]" value="' . $type . '"', $response->body);
         }
@@ -333,7 +335,7 @@ final class LetterViewTest extends DatabaseTestCase
         $none = $this->createLetter(['recipients' => []]);
         $this->assertSame(422, $none->status);
         $this->assertContains('Bitte mindestens einen Empfänger auswählen', $none->body);
-        $this->assertContains('data-step="4"', $none->body, 'Der Assistent oeffnet den Schritt mit dem Fehler.');
+        $this->assertContains('data-step="5"', $none->body, 'Der Assistent oeffnet den Schritt mit dem Fehler.');
         $this->assertSame(0, $this->rowCount('patient_letters'));
 
         $created = $this->createLetter(['recipients' => ['patient', 'family_doctor', 'referring_physician']]);
@@ -527,6 +529,56 @@ final class LetterViewTest extends DatabaseTestCase
             HttpException::class,
             fn (): Response => $this->letters()->pdf(new Request('GET', '/letters/999/pdf'), ['id' => '999']),
         );
+    }
+
+    /** Der Assistent bietet die Messwerte per Checkbox-Liste an; die Briefansicht zeigt die Tabelle. */
+    public function testMeasurementChoicesInWizardAndTableInShow(): void
+    {
+        $reportId = $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+
+        $wizard = $this->letters()->newLetter(new Request('GET', '/letters/new', ['patient' => (string) $this->patientId]));
+        $this->assertSame(200, $wizard->status);
+        $this->assertContains('4 · Messwerte wählen', $wizard->body);
+        $this->assertContains('data-step="4"', $wizard->body);
+        $this->assertContains('Messwerttabelle auf der letzten Seite mitdrucken', $wizard->body);
+        $this->assertContains('name="measurements_present" value="1"', $wizard->body);
+        $this->assertContains('name="measurements[]"', $wizard->body);
+        $this->assertContains('1 Untersuchung(en)', $wizard->body);
+        $this->assertContains('kein Wert in den Untersuchungen', $wizard->body);
+        $this->assertContains('data-toggle-group="measurement-choices"', $wizard->body);
+
+        // Ohne Auswahl lehnt der Assistent ab und oeffnet Schritt 4.
+        $empty = $this->createLetter([
+            'report_id' => (string) $reportId,
+            'measurements_present' => '1',
+            'measurements' => [],
+        ]);
+        $this->assertSame(422, $empty->status);
+        $this->assertContains('Bitte mindestens einen Messwert für die Messwerttabelle auswählen.', $empty->body);
+        $this->assertContains('data-step="4"', $empty->body);
+        $this->assertSame(0, $this->rowCount('patient_letters'));
+
+        $created = $this->createLetter(['report_id' => (string) $reportId]);
+        $this->assertSame(303, $created->status);
+
+        $show = $this->letters()->show(new Request('GET', '/letters/1'), ['id' => '1']);
+        $this->assertSame(200, $show->status);
+        $this->assertContains('Messwerttabelle (letzte Seite)', $show->body);
+        $this->assertContains('die aktuelle Untersuchung steht ganz rechts', $show->body);
+        $this->assertContains('aktuelle Untersuchung', $show->body);
+        $this->assertContains('07.10.2026', $show->body);
+        $this->assertContains('1 Untersuchung(en), aktuelle Untersuchung ganz rechts', $show->body);
+        $this->assertContains('<th>Messwert</th>', $show->body);
+        $this->assertNotContains('abgewählt – keine Messwerttabelle', $show->body);
+
+        // Ohne Messwerttabelle weist die Ansicht darauf hin.
+        $without = $this->createLetter(['report_id' => (string) $reportId, 'include_measurements' => '0']);
+        $this->assertSame(303, $without->status);
+        $plain = $this->letters()->show(new Request('GET', '/letters/2'), ['id' => '2']);
+        $this->assertContains('abgewählt – keine Messwerttabelle', $plain->body);
+        $this->assertContains('Für diesen Brief wurde die Messwerttabelle abgewählt', $plain->body);
     }
 
     /** Neuausfertigung und Reproduktion ueber die Briefansicht; die aktuelle Vorlage nur per Opt-in. */

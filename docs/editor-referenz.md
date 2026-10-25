@@ -128,7 +128,20 @@ Anrede ebenfalls.
 | `info_block` | Informationsblock | `show_reference`, `show_patient`, `show_birth`, `show_identifier`, `show_sequence`, `show_settings`, `show_reissue`, `show_date` (Häkchen je Zeile) | `label_reference`, `label_patient`, `label_birth`, `label_identifier`, `label_sequence`, `label_settings`, `label_reissue`, `label_date` (leer = Zeile ausgeblendet) |
 | `footer` | Fußzeile und Seitenränder | `fold_marks` | `disclaimer` (mehrzeilig), `page_label` (erlaubt `{page}`, `{pages}`), `continuation` |
 | `appendix` | Anhang | `show` | `heading`, `intro`, `column_parameter`, `column_value`, `notes_heading` |
+| `measurement_table` | Messwerttabelle (letzte Seite) | `show`, `previous` (`select`, `0`–`10`, Standard `4`) | `heading`, `intro`, `column_parameter`, `current_label`, `empty` |
 | `general` | Allgemein | – | `empty` (Ersatztext für fehlende Angaben) |
+
+**Messwerttabelle:** Die Zone `measurement_table` druckt die Tabelle der Messwerte **immer auf
+einer neuen Seite am Ende des Briefes** – nach dem Anhang, also auf der letzten Seite. Erste
+Spalte sind die Messwertbezeichner (`column_parameter`), erste Zeile die Untersuchungsdaten; ganz
+rechts steht die aktuelle Untersuchung (`current_label` als Zusatz unter dem Datum), links davon
+bis zu `previous` frühere Untersuchungen (0 = keine, Standard 4, Höchstwert 10 – die Grenze
+`LetterMeasurements::MAX_PREVIOUS`). Fehlende Untersuchungen ergeben entsprechend weniger
+Spalten. Welche Messwertzeilen gedruckt werden, wählt der Anwender beim Erstellen des Briefes in
+Schritt 4 des Assistenten aus dem festen Katalog der Vorlage (`MeasurementTemplate`) aus; die
+Auswahl wird mit dem Brief eingefroren (`snapshot.measurements.selected`). Liegen keine Werte vor,
+druckt die Seite den Text `empty`. Mit `show: false` bzw. abgewählter Checkbox entfällt die Seite
+vollständig.
 
 **Anschriftfeld:** Wählt der Brief-Assistent einen Empfänger (Patient, Hausarzt, Überweisender
 Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` und hat Vorrang.
@@ -260,7 +273,9 @@ flowchart LR
 - **Wiederherstellen** einer alten Fassung = in den Editor laden und als neue Fassung speichern.
 - **Einfrieren:** `LetterService::create()` schreibt Fassungs-ID, -nummer, Name, Prüfsumme und
   den vollständigen Inhalt in `snapshot.template` und setzt `patient_letters.template_version_id`.
-  `letter_version` (Brief-Fassung) ist `2`.
+  `letter_version` (Brief-Fassung) ist `3`. Die Messwerttabelle (`snapshot.measurements`) wird
+  dabei mit eingefrorenen Spalten, Zeilen und Auswahl abgelegt; Briefe der Fassungen 1 und 2
+  bleiben unverändert (`COMPATIBLE_LETTER_VERSIONS`/`LEGACY_LETTER_VERSIONS`).
 - **Reproduzieren** (`/letters/{id}/reproduce`, `LetterService::reproducePdf()`) erzeugt das
   PDF allein aus dem Snapshot neu. `LetterTest::testReproduceYieldsIdenticalPdf` sichert ab, dass
   es dem gespeicherten PDF entspricht.

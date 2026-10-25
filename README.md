@@ -77,7 +77,11 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   Anhang unter der Grußformel auf einer neuen Seite (nur wenn ein Bericht zugeordnet wurde) –
   und als Anhang die
   vollständige Tabelle der Schrittmacher-/ICD-Abfrage samt MRT-Tauglichkeit aus dem
-  Patientenausweis. Assistent in sechs Schritten, zwei ausdrückliche Bestätigungen,
+  Patientenausweis. Die **letzte Seite** zeigt die **Messwerttabelle**: erste Spalte die
+  Messwertbezeichner, erste Zeile die Untersuchungsdaten, die aktuelle Untersuchung ganz rechts
+  und davor die letzten früheren Untersuchungen (Anzahl in der Briefvorlage einstellbar); welche
+  Messwerte erscheinen, wird je Brief per Checkbox-Liste aus den vorhandenen Werten gewählt und
+  mit dem Brief eingefroren. Assistent in sieben Schritten, zwei ausdrückliche Bestätigungen,
   unveränderlicher Snapshot mit SHA-256-geprüftem PDF. Der Brief darf mehrseitig sein –
   die Zwei-Seiten-Grenze gilt ausschließlich für den Patientenausweis. Briefe folgen
   **DIN 5008 (Form B)**. Empfänger per Checkbox: **Patient**, **Hausarzt** und
@@ -673,8 +677,9 @@ abhängigkeitsfreien PDF-Writer.
 Der Brief wird **automatisch aus der Patientenakte** erzeugt – aus den versionierten
 Bausteinen Anamnese, Vormedikation, Befund und Epikrise, dem Befundteil der gewählten
 Untersuchung als Anhang unter der Grußformel (Baustein **Berichte**, immer auf einer neuen
-Seite) und der vollständigen Schrittmacher-/ICD-Abfrage als Anhang. Er enthält keine medizinische
-Bewertung und keine Diagnose; übernommen wird ausschließlich, was erfasst wurde.
+Seite), der vollständigen Schrittmacher-/ICD-Abfrage als Anhang und der **Messwerttabelle auf der
+letzten Seite**. Er enthält keine medizinische Bewertung und keine Diagnose; übernommen wird
+ausschließlich, was erfasst wurde.
 
 ![Briefübersicht](docs/screenshots/43-brief-uebersicht.png)
 
@@ -695,7 +700,15 @@ erfassender Person und Zeitpunkt sowie die Hinweise, die der Brief enthalten wir
 
 ![Bausteine prüfen](docs/screenshots/39-brief-assistent-bausteine.png)
 
-**4. Empfänger wählen** – Checkboxen für **Patient**, **Hausarzt** und **Überweisender Arzt**
+**4. Messwerte wählen** – Checkbox-Liste der Messwerte, die in der Tabelle auf der letzten Seite
+erscheinen (siehe [Messwerttabelle auf der letzten Seite](#messwerttabelle-auf-der-letzten-seite)).
+Angeboten wird der feste Katalog der Briefvorlage, gegliedert nach Abschnitt und Gruppe; Zeilen
+ohne Wert in den Untersuchungen sind deaktiviert und als „kein Wert in den Untersuchungen"
+gekennzeichnet. Die Checkbox **Messwerttabelle auf der letzten Seite mitdrucken** blendet die
+Seite für diesen Brief ab. Mindestens ein Messwert ist Pflicht, solange Werte vorliegen – sonst
+antwortet der Server mit HTTP 422 und öffnet Schritt 4.
+
+**5. Empfänger wählen** – Checkboxen für **Patient**, **Hausarzt** und **Überweisender Arzt**
 mit der Anschrift aus den Stammdaten. Für **jeden** gewählten Empfänger entsteht ein eigener
 Brief (eigene Briefnummer, Dokumentnummer und PDF) mit dessen Anschrift im Anschriftfeld,
 seiner Anrede aus den Stammdaten und der **Vorlage seiner Empfängerart**; Inhalt und
@@ -715,12 +728,12 @@ fehlenden Empfänger.
 
 ![Empfänger wählen](docs/screenshots/50-brief-assistent-empfaenger.png)
 
-**5. Zusammenfassung** – Patient, Briefnummer(n), Empfänger, Baustein *Berichte*, Textteile,
-Anhang und MRT-Tauglichkeit vor dem Erzeugen:
+**6. Zusammenfassung** – Patient, Briefnummer(n), Empfänger, Baustein *Berichte*, Textteile,
+Anhang, Messwerttabelle und MRT-Tauglichkeit vor dem Erzeugen:
 
 ![Zusammenfassung](docs/screenshots/40-brief-assistent-zusammenfassung.png)
 
-**6. Bestätigen und erzeugen** – ohne **beide** Bestätigungen wird kein Brief gespeichert.
+**7. Bestätigen und erzeugen** – ohne **beide** Bestätigungen wird kein Brief gespeichert.
 Alle Briefe eines Vorgangs werden in einer Transaktion gespeichert; bei einem Brief führt die
 Anwendung auf dessen Detailseite, bei mehreren auf die Briefe des Patienten.
 Bei fehlender Bestätigung antwortet der Server mit HTTP 422 und zeigt die Meldungen am Feld:
@@ -743,6 +756,28 @@ Spalte *Empfänger* zeigt, an wen er gerichtet ist. Eine Neuausfertigung behält
 ![Briefe am Patienten](docs/screenshots/44-brief-patient.png)
 
 ![Akte mit Brief](docs/screenshots/45-akte-mit-brief.png)
+
+### Messwerttabelle auf der letzten Seite
+
+Die letzte Seite des Briefes zeigt die Messwerte als Tabelle: **erste Spalte** sind die
+Messwertbezeichner, **erste Zeile** die Untersuchungsdaten. Gibt es noch keine frühere
+Untersuchung des Patienten, steht die heutige Untersuchung in der zweiten Spalte. Gibt es frühere
+Untersuchungen, stehen links davon die letzten *N* Untersuchungen, die des aktuellen Datums folgt
+**ganz rechts**; unter ihrem Datum steht der Zusatz „aktuelle Untersuchung". *N* ist in der
+Briefvorlage einstellbar (Standard 4, Werte 0–10; Zone `measurement_table`, Option `previous`).
+Die Seite wird immer auf einer neuen Seite am Ende des Briefes gedruckt – nach dem Anhang.
+
+Welche Messwerte erscheinen, wird beim Erstellen des Briefes in **Schritt 4** per Checkbox-Liste
+aus dem festen Katalog der Vorlage (derselbe Katalog wie im Patientenausweis,
+`MeasurementTemplate`) angewählt; angeboten werden nur Werte, die in den Untersuchungen des
+Patienten tatsächlich vorliegen (übrige Zeilen sind deaktiviert). Die Auswahl wird mit dem Brief
+**eingefroren** (`snapshot.measurements`): eine geänderte Auswahl ergibt einen neuen Brief mit
+neuer Briefnummer – der bestehende Brief bleibt unverändert. Liegen für den Patienten keine
+Messwerte vor, druckt die Seite den Hinweis der Vorlage; mit abgewählter Checkbox bzw. `show:
+false` in der Vorlage entfällt sie vollständig. Die Kopftexte (Überschrift, Einleitung,
+Spaltenkopf, Zusatz zur aktuellen Untersuchung, Hinweis ohne Messwerte) pflegt der
+[Vorlageneditor](#briefvorlage-und-vorlageneditor). Briefe der Fassungen 1 und 2 haben keine
+Messwerttabelle und bleiben unverändert.
 
 ### Aufbau des Briefes (DIN 5008)
 
@@ -777,10 +812,11 @@ Tachykardie (VT1, VT2, VF mit Erkennung und Therapie) sowie Bemerkungen. Die
 MRT-Tauglichkeit stammt aus dem neuesten Patientenausweis; fehlt sie dort, wird die Angabe der
 Abfrage gedruckt.
 
-Die folgenden Seiten zeigen einen Brief der aktuellen Fassung (2), erzeugt mit der
-Standardvorlage: Seite 1 mit den Textteilen **Anamnese**, **Vormedikation**, **Befund** und
-**Epikrise**, Seite 2 mit der Grußformel, Seite 3 der Anhang **Berichte** (Befundteil des
-zugeordneten Berichts) und Seite 4 der Anhang mit der vollständigen Abfragetabelle.
+Die folgenden Seiten zeigen einen Brief der Fassung 2, erzeugt mit der Standardvorlage:
+Seite 1 mit den Textteilen **Anamnese**, **Vormedikation**, **Befund** und **Epikrise**, Seite 2
+mit der Grußformel, Seite 3 der Anhang **Berichte** (Befundteil des zugeordneten Berichts) und
+Seite 4 der Anhang mit der vollständigen Abfragetabelle. Briefe ab Fassung 3 führen zusätzlich die
+**Messwerttabelle** als letzte Seite (im Bild oben noch nicht enthalten).
 
 ![Brief Seite 1](docs/screenshots/46-brief-pdf-seite-1.png)
 
@@ -801,8 +837,8 @@ Brief-Fassung sowie „Seite n von m". Die Dokumentnummer hat die Form
 |---|---|---|
 | GET | `/letters` | Übersicht mit Suche (Patient, Patienten-ID, Bericht-Nr.) |
 | GET | `/letters/new` | Patient für einen neuen Brief wählen |
-| GET | `/letters/new?patient={id}&report={id}` | Assistent (Schritte 2–6) |
-| POST | `/letters` | Briefe erzeugen, je Eintrag in `recipients[]` (`patient`, `family_doctor`, `referring_physician`, `generic`) einer (CSRF, beide Bestätigungen) |
+| GET | `/letters/new?patient={id}&report={id}` | Assistent (Schritte 2–7) |
+| POST | `/letters` | Briefe erzeugen, je Eintrag in `recipients[]` (`patient`, `family_doctor`, `referring_physician`, `generic`) einer; Felder `include_appendix`, `include_measurements` und `measurements[]`/`measurements_present` (CSRF, beide Bestätigungen) |
 | GET | `/letters/patients/{patient}` | Alle Briefe eines Patienten |
 | GET | `/letters/{id}` | Briefdetail mit Snapshot |
 | GET | `/letters/{id}/pdf` | Brief-PDF (inline, `?download=1` als Download) |
@@ -849,8 +885,8 @@ Der Editor öffnet sich über **System → Briefvorlage bearbeiten** in einem ne
 der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
 
 - **Aufbau** (links): Name der Vorlage, feste Bereiche nach DIN 5008 (Briefkopf,
-  Rücksendeangabe, Anschriftfeld, Informationsblock, Fußzeile und Seitenränder, Anhang) und die
-  Bausteine des Brieftextes. Bausteine werden **per Drag and Drop** (am Griff, in der Liste oder
+  Rücksendeangabe, Anschriftfeld, Informationsblock, Fußzeile und Seitenränder, Anhang,
+  Messwerttabelle) und die Bausteine des Brieftextes. Bausteine werden **per Drag and Drop** (am Griff, in der Liste oder
   direkt auf der Seitenvorschau), mit den Pfeil-Schaltflächen oder mit `Alt`+`↑`/`↓`
   verschoben und per Häkchen ein- oder ausgeblendet. Eigene Textbausteine (Überschrift + Text)
   lassen sich hinzufügen und löschen.
@@ -1063,7 +1099,8 @@ erDiagram
 - **patient_letters** ist ein unveränderliches Dokument: `snapshot` (JSON) friert Patientendaten,
   die Fassung der globalen Stammdaten (`settings_version_id`), die Fassungen der Bausteine
   (Anamnese, Vormedikation, Befund, Epikrise, Schrittmacher-/ICD-Abfrage), die Befunddaten des
-  gewählten Berichts und die aufgelösten Anhangsabschnitte ein. `pdf_content` (MEDIUMBLOB) und
+  gewählten Berichts, die aufgelösten Anhangsabschnitte sowie die Messwerttabelle
+  (`measurements`: Spalten, Zeilen und die getroffene Auswahl) ein. `pdf_content` (MEDIUMBLOB) und
   `pdf_sha256` werden gemeinsam mit dem Snapshot in einer Transaktion gespeichert und nie
   überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
   (`NULL` = kein Baustein „Berichte"). `sequence_no` ist die laufende Nummer je Patient,
@@ -1262,8 +1299,16 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   Reiter, Beschriftungen, interne Ziele, auflösbare Symbole, die Zuordnung von `$active`-Schlüsseln
   zu Reitern, die unveränderten Routen der Ziele sowie die patientenbezogenen Ziele, die einen
   aktiven Patienten voraussetzen.
+- **Messwerttabelle des Briefes (Unit/Integration):** `tests/Unit/LetterMeasurementsTest.php`
+  (Auflösung des Katalogs gegen die Untersuchungen, aktuelle Untersuchung ganz rechts, Auswahl,
+  Kürzen auf die in der Vorlage eingestellte Spaltenzahl, leere Teile, Grenzen von `previous`),
+  `tests/Unit/LetterPdfTest.php` (Tabelle als letzte Seite, Hinweis ohne Werte, Abwählen je Brief,
+  Vorlagenoption `show`, Briefe der Fassung 2 ohne Tabelle) sowie die Integrationstests in
+  `tests/Integration/LetterTest.php` und `tests/Integration/LetterViewTest.php` (Checkbox-Liste im
+  Assistenten, Spalten mit früherer und aktueller Untersuchung, eingefrorene Auswahl, Pflicht zur
+  Auswahl, Anzeige in der Detailansicht).
 - **Brief zur Schrittmacher-/ICD-Abfrage:** Assistent (`prepare()`) mit Warnungen für fehlende
-  Bausteine, Anhang und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
+  Bausteine, Anhang, Messwerte und Bericht, Erzeugung mit beiden Bestätigungen, Ablehnung ohne Bestätigung
   (HTTP 422, kein Datensatz), Snapshot und Unveränderlichkeit (Patientendaten, Bausteinfassungen
   und Stammdaten bleiben nach späteren Änderungen unverändert), Übernahme der Praxis-Informationen
   und Rücksendeangaben in Snapshot und PDF, laufende Briefnummer je Patient,

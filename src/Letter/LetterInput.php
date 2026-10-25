@@ -12,11 +12,16 @@ namespace App\Letter;
  * Freitextfelder; geprueft werden Auswahl, Empfaenger und die beiden Bestaetigungen vor dem
  * Erzeugen. Je ausgewaehltem Empfaenger (Patient, Hausarzt, ueberweisender Arzt) entsteht ein
  * eigener Brief.
+ *
+ * Zusaetzlich waehlt der Anwender je Brief, ob der Geraeteanhang und die Messwerttabelle
+ * mitgedruckt werden und welche Messwerte in der Tabelle erscheinen (Checkbox-Liste).
  */
 final class LetterInput
 {
     /**
      * @param list<string> $recipients Empfaenger in fester Reihenfolge (LetterRecipient::TYPES)
+     * @param list<string>|null $measurements Schluessel der gewaehlten Messwerte; null = alle
+     *        verfuegbaren (Formular ohne Messwertliste)
      */
     private function __construct(
         public readonly int $patientId,
@@ -24,6 +29,9 @@ final class LetterInput
         public readonly bool $confirmData,
         public readonly bool $confirmLetter,
         public readonly array $recipients = [],
+        public readonly bool $includeAppendix = true,
+        public readonly bool $includeMeasurements = true,
+        public readonly ?array $measurements = null,
     ) {
     }
 
@@ -56,6 +64,16 @@ final class LetterInput
             static fn (string $type): bool => in_array($type, $chosen, true),
         ));
 
+        $measurements = null;
+        if (($post['measurements_present'] ?? '') === '1') {
+            $list = $post['measurements'] ?? [];
+            $list = is_array($list) ? array_filter($list, 'is_string') : [];
+            $measurements = array_values(array_unique(array_filter(
+                array_map('trim', $list),
+                static fn (string $key): bool => $key !== '',
+            )));
+        }
+
         if ($errors !== []) {
             throw LetterException::validation($errors);
         }
@@ -66,13 +84,18 @@ final class LetterInput
             ($post['confirm_data'] ?? '') === '1',
             ($post['confirm_letter'] ?? '') === '1',
             $recipients,
+            ($post['include_appendix'] ?? '') === '1',
+            ($post['include_measurements'] ?? '') === '1',
+            $measurements,
         );
     }
 
     /**
      * Auswahlzustand fuer die erneute Anzeige nach einem Fehler.
      *
-     * @return array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool, recipients: list<string>}
+     * @return array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool,
+     *     recipients: list<string>, include_appendix: bool, include_measurements: bool,
+     *     measurements: list<string>|null}
      */
     public function selection(): array
     {
@@ -82,6 +105,9 @@ final class LetterInput
             'report_id' => $this->reportId,
             'confirm_data' => $this->confirmData,
             'confirm_letter' => $this->confirmLetter,
+            'include_appendix' => $this->includeAppendix,
+            'include_measurements' => $this->includeMeasurements,
+            'measurements' => $this->measurements,
         ];
     }
 }
