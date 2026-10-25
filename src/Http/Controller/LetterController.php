@@ -30,9 +30,10 @@ final class LetterController extends Controller
         1 => 'Patient wählen',
         2 => 'Bericht zuordnen',
         3 => 'Bausteine prüfen',
-        4 => 'Empfänger wählen',
-        5 => 'Zusammenfassung',
-        6 => 'Bestätigen und erzeugen',
+        4 => 'Messwerte wählen',
+        5 => 'Empfänger wählen',
+        6 => 'Zusammenfassung',
+        7 => 'Bestätigen und erzeugen',
     ];
 
     public function index(Request $request): Response
@@ -113,7 +114,7 @@ final class LetterController extends Controller
 
         if (count($result['letters']) === 1) {
             SessionManager::flash('success', sprintf(
-                'Brief Nr. %d an %s wurde erstellt und unveränderlich gespeichert (Anhang mit der vollständigen Abfrage).',
+                'Brief Nr. %d an %s wurde erstellt und unveränderlich gespeichert.',
                 $result['letter_id'],
                 $result['letters'][0]['recipient_label'],
             ));
@@ -267,7 +268,9 @@ final class LetterController extends Controller
      * Bestaetigung. Nach einem Fehler oeffnet der Assistent den ersten Schritt mit Fehler.
      *
      * @param array<string, string> $errors
-     * @param array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool, recipients: list<string>}|null $selection
+     * @param array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool,
+     *     recipients: list<string>, include_appendix?: bool, include_measurements?: bool,
+     *     measurements?: list<string>|null}|null $selection
      */
     private function renderWizard(
         int $patientId,
@@ -294,9 +297,19 @@ final class LetterController extends Controller
             // Vorauswahl: die Aerzte, deren Anschrift vollstaendig ist; gibt es keinen, der
             // generische Arztbrief (nur waehlbar, wenn keine Arztanschrift vorliegt).
             'recipients' => self::defaultRecipients($recipients),
+            // Anhang und Messwerttabelle sind voreingestellt; die Messwerte sind vollstaendig
+            // vorausgewaehlt (null = alle Werte, die in den Untersuchungen vorliegen).
+            'include_appendix' => true,
+            'include_measurements' => true,
+            'measurements' => null,
         ];
         $startStep = 2;
-        foreach ([2 => ['report_id'], 4 => ['recipients'], 6 => ['patient_id', 'confirm_data', 'confirm_letter']] as $step => $keys) {
+        foreach ([
+            2 => ['report_id'],
+            4 => ['measurements'],
+            5 => ['recipients'],
+            7 => ['patient_id', 'confirm_data', 'confirm_letter'],
+        ] as $step => $keys) {
             if (array_intersect($keys, array_keys($errors)) !== []) {
                 $startStep = $step;
                 break;
@@ -311,6 +324,9 @@ final class LetterController extends Controller
             'records' => $prepared['records'],
             'mrt' => $prepared['mrt'],
             'appendix' => $prepared['appendix'],
+            'measurements' => $prepared['measurements'],
+            'measurementChoices' => $prepared['measurement_choices'],
+            'measurementPrevious' => $prepared['measurement_previous'],
             'warnings' => $prepared['warnings'],
             'nextSequence' => $prepared['next_sequence'],
             'errors' => $errors,

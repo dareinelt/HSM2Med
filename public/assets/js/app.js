@@ -82,6 +82,22 @@ document.addEventListener('DOMContentLoaded', () => {
         update();
     });
 
+    // Kontrollkaestchen, das einen zugehoerigen Abschnitt ein- und ausblendet (z. B. Anhang und
+    // Messwerttabelle im Brief-Assistenten). Ohne JavaScript bleibt der Abschnitt sichtbar.
+    document.querySelectorAll('[data-toggle-target]').forEach((checkbox) => {
+        const group = document.querySelectorAll(`[data-toggle-group="${checkbox.dataset.toggleTarget}"]`);
+        if (group.length === 0) {
+            return;
+        }
+        const update = () => {
+            group.forEach((element) => {
+                element.hidden = !checkbox.checked;
+            });
+        };
+        checkbox.addEventListener('change', update);
+        update();
+    });
+
     // Assistent zur Ausweiserstellung: Schritte umschalten (ohne JavaScript bleiben alle sichtbar)
     document.querySelectorAll('form[data-wizard]').forEach((form) => {
         const steps = Array.from(form.querySelectorAll('.wizard-step'));

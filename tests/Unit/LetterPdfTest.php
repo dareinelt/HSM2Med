@@ -443,4 +443,113 @@ final class LetterPdfTest extends TestCase
         $this->assertContains('SN-123456', $text);
         $this->assertContains('Bericht Nr. 1 vom 07.10.2026', $text);
     }
+
+    /** Test 22: Die Messwerttabelle steht auf der letzten Seite: Bezeichner je Zeile, Daten je Spalte. */
+    public function testMeasurementTableIsTheLastPage(): void
+    {
+        $pages = PdfText::pages((new LetterPdfGenerator())->generate(LetterFactory::current(), null, $this->generatedAt()));
+        $last = $pages[count($pages) - 1];
+
+        // Die Tabelle ist die letzte Seite – nach dem Anhang.
+        $this->assertNotContains('Messwerte im Verlauf', $pages[0]);
+        foreach ([
+            'Messwerte im Verlauf',
+            'Messwerte aus den Untersuchungen des Nachsorgezentrums',
+            'Messwert',
+            // Erste Zeile: die Untersuchungsdaten, die aktuelle Untersuchung ganz rechts.
+            '15.04.2025',
+            '03.02.2026',
+            '07.10.2026',
+            'aktuelle Untersuchung',
+            // Zeilen: Messwertbezeichner mit den Werten der Untersuchungen.
+            'Sondenmessung',
+            'Vorhofsonde (RA)',
+            'Reizschwelle',
+            '0,5 V',
+            'Impedanz',
+            '512 Ohm',
+            'Batterie',
+            'Restlaufzeit',
+            '12 Monate',
+        ] as $needle) {
+            $this->assertContains($needle, $last);
+        }
+        // Die Messwerte stehen in der Reihenfolge der Untersuchungen (alt -> neu).
+        $this->assertTrue(
+            mb_strpos($last, '480 Ohm') < mb_strpos($last, '512 Ohm'),
+            'Die aktuelle Untersuchung steht rechts der frueheren.',
+        );
+    }
+
+    /** Test 23: Ohne gewaehlte Messwerte erscheint die Seite nur mit dem Hinweis der Vorlage. */
+    public function testMeasurementTableShowsTemplateHintWithoutValues(): void
+    {
+        $snapshot = LetterFactory::current(['measurements' => LetterFactory::measurements([
+            'present' => false,
+            'column_count' => 0,
+            'columns' => [],
+            'sections' => [],
+            'available' => [],
+            'selected' => [],
+        ])]);
+        $text = PdfText::text((new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt()));
+
+        $this->assertContains('Messwerte im Verlauf', $text);
+        $this->assertContains('Es liegen keine Messwerte aus Untersuchungen vor.', $text);
+        $this->assertNotContains('Restlaufzeit', $text);
+    }
+
+    /** Test 24: Waehlt der Anwender die Tabelle nicht, fehlt die Seite vollstaendig. */
+    public function testMeasurementTableIsOmittedWhenNotChosen(): void
+    {
+        $snapshot = LetterFactory::current(['measurements' => LetterFactory::measurements(['include' => false])]);
+        $pdf = (new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt());
+        $text = PdfText::text($pdf);
+
+        $this->assertNotContains('Messwerte im Verlauf', $text);
+        $this->assertNotContains('Restlaufzeit', $text);
+        $this->assertSame(
+            PdfText::pageCount((new LetterPdfGenerator())->generate(
+                LetterFactory::current(['measurements' => LetterFactory::measurements(['include' => false])]),
+                null,
+                $this->generatedAt(),
+            )),
+            PdfText::pageCount($pdf),
+            'Ohne Messwerttabelle bleibt der Brief reproduzierbar.',
+        );
+    }
+
+    /** Test 25: Die Vorlage kann die Messwerttabelle abschalten; Briefe der Fassung 2 haben sie nicht. */
+    public function testMeasurementTableFollowsTemplateAndLetterVersion(): void
+    {
+        $snapshot = LetterFactory::current();
+        $snapshot['template']['content']['zones']['measurement_table']['options']['show'] = false;
+        $text = PdfText::text((new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt()));
+        $this->assertNotContains('Messwerte im Verlauf', $text);
+
+        // Fassung 2 kennt den Teil "measurements" nicht und bleibt unveraendert.
+        $v2 = LetterFactory::snapshot(['letter_version' => 2, 'letter_template_version' => '1']);
+        $content = LetterTemplate::default();
+        $v2['template'] = [
+            'version_id' => 1,
+            'version_no' => 1,
+            'name' => $content['name'],
+            'content_sha256' => '',
+            'content' => $content,
+        ];
+        $v2Text = PdfText::text((new LetterPdfGenerator())->generate($v2, null, $this->generatedAt()));
+        $this->assertNotContains('Messwerte im Verlauf', $v2Text);
+        $this->assertContains('Anhang: Schrittmacher-/ICD-Abfrage', $v2Text, 'Fassung 2 druckt den Anhang wie bisher.');
+    }
+
+    /** Test 26: Der Anhang ist je Brief abwaehlbar, die Messwerttabelle bleibt davon unberuehrt. */
+    public function testAppendixIsOptionalPerLetter(): void
+    {
+        $snapshot = LetterFactory::current(['appendix' => ['include' => false]]);
+        $text = PdfText::text((new LetterPdfGenerator())->generate($snapshot, null, $this->generatedAt()));
+
+        $this->assertNotContains('Anhang: Schrittmacher-/ICD-Abfrage', $text);
+        $this->assertNotContains('Programmierung – Bradykardie', $text);
+        $this->assertContains('Messwerte im Verlauf', $text);
+    }
 }

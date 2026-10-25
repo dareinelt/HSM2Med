@@ -1,7 +1,8 @@
 <?php
 /**
- * Brief erstellen – Schritte 2 bis 6: Bericht zuordnen, Bausteine pruefen, Empfaenger waehlen,
- * Zusammenfassung, bestaetigen und erzeugen. Je ausgewaehltem Empfaenger entsteht ein Brief.
+ * Brief erstellen – Schritte 2 bis 7: Bericht zuordnen, Bausteine pruefen, Messwerte waehlen,
+ * Empfaenger waehlen, Zusammenfassung, bestaetigen und erzeugen. Je ausgewaehltem Empfaenger
+ * entsteht ein Brief.
  *
  * Die Berichtzuordnung erfolgt ueber Links (serverseitig, ohne JavaScript). Alle Schritte liegen
  * in einem Formular; JavaScript schaltet die Schritte um (CSP-konform, keine Inline-Skripte).
@@ -16,11 +17,16 @@
  * @var array<string, array<string, mixed>> $records
  * @var array<string, mixed> $mrt
  * @var array<string, mixed> $appendix
+ * @var array<string, mixed> $measurements
+ * @var list<array{key: string, label: string, available: bool, values: list<string>}> $measurementChoices
+ * @var int $measurementPrevious
  * @var list<string> $warnings
  * @var int $nextSequence
  * @var array<string, string> $errors
  * @var string|null $message
- * @var array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool, recipients: list<string>} $selection
+ * @var array{patient_id: int, report_id: ?int, confirm_data: bool, confirm_letter: bool,
+ *     recipients: list<string>, include_appendix?: bool, include_measurements?: bool,
+ *     measurements?: list<string>|null} $selection
  * @var array<string, array<string, mixed>> $recipients
  * @var int $startStep
  * @var array<int, string> $steps
@@ -49,6 +55,27 @@ $selectedRecipients = array_values(array_filter(
     $selection['recipients'],
     static fn (string $type): bool => ($recipients[$type]['available'] ?? false) === true,
 ));
+$appendixChosen = ($selection['include_appendix'] ?? true) === true;
+$includeAppendix = $appendixChosen && $appendixSections !== [];
+$measurementChosen = ($selection['include_measurements'] ?? true) === true;
+$includeMeasurements = $measurementChosen;
+$measurementSelected = $selection['measurements'] ?? null;
+$measurementAvailable = array_values(array_filter(
+    $measurementChoices,
+    static fn (array $choice): bool => $choice['available'] === true,
+));
+$isMeasurementChecked = static function (string $key) use ($measurementSelected, $measurementAvailable): bool {
+    if ($measurementSelected === null) {
+        foreach ($measurementAvailable as $choice) {
+            if ($choice['key'] === $key) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return in_array($key, $measurementSelected, true);
+};
+$measurementColumns = (array) ($measurements['columns'] ?? []);
 ?>
 <div class="page-head">
     <div>
@@ -93,7 +120,7 @@ $selectedRecipients = array_values(array_filter(
         <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> 2 · Bericht zuordnen (optional)</h2>
         <p class="muted">Der Bericht liefert den Baustein „Berichte" – Geräte-, Sonden- und Messwerte des Befundteils,
             der als Anhang unter der Grußformel auf einer neuen Seite steht. Ohne Bericht entfällt dieser Baustein;
-            der Brief enthält dann Anamnese, Vormedikation, Befund, Epikrise und den Anhang.</p>
+            der Brief enthält dann Anamnese, Vormedikation, Befund, Epikrise, Anhang und Messwerttabelle.</p>
         <?= $err('report_id') ?>
         <?php if ($reports === []): ?>
             <p class="muted">Für diesen Patienten ist kein Bericht importiert.</p>
@@ -180,16 +207,29 @@ $selectedRecipients = array_values(array_filter(
                 <?= $e((string) ($deviceCheck['device_check']['filled'] ?? 0)) ?> Angabe(n) ·
                 <?= $e(count($appendixSections)) ?> Abschnitt(e)
             </p>
-            <?php foreach ($appendixSections as $section): ?>
-                <details>
-                    <summary><?= $e($section['label']) ?> (<?= $e(count($section['rows'])) ?>)</summary>
-                    <table class="kv">
-                        <?php foreach ($section['rows'] as $row): ?>
-                            <tr><th><?= $e($row['label']) ?></th><td><?= $e($row['value']) ?></td></tr>
-                        <?php endforeach; ?>
-                    </table>
-                </details>
-            <?php endforeach; ?>
+            <?php if ($appendixSections !== []): ?>
+                <div class="field">
+                    <label class="check" for="include_appendix">
+                        <input type="checkbox" id="include_appendix" name="include_appendix" value="1"
+                            data-toggle-target="appendix-details" <?= $appendixChosen ? ' checked' : '' ?>>
+                        <span>Anhang mit der vollständigen Abfrage in diesen Brief aufnehmen</span>
+                    </label>
+                    <small class="muted">Ohne Anhang enthält der Brief nur den Brieftext
+                        (Anamnese, Vormedikation, Befund, Epikrise) und die Messwerttabelle.</small>
+                </div>
+            <?php endif; ?>
+            <div data-toggle-group="appendix-details"<?= $appendixChosen ? '' : ' hidden' ?>>
+                <?php foreach ($appendixSections as $section): ?>
+                    <details>
+                        <summary><?= $e($section['label']) ?> (<?= $e(count($section['rows'])) ?>)</summary>
+                        <table class="kv">
+                            <?php foreach ($section['rows'] as $row): ?>
+                                <tr><th><?= $e($row['label']) ?></th><td><?= $e($row['value']) ?></td></tr>
+                            <?php endforeach; ?>
+                        </table>
+                    </details>
+                <?php endforeach; ?>
+            </div>
         <?php endif; ?>
 
         <h3>MRT-Tauglichkeit</h3>
@@ -209,7 +249,87 @@ $selectedRecipients = array_values(array_filter(
     </section>
 
     <section class="card wizard-step" data-step="4" id="schritt-4">
-        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> 4 · Empfänger wählen</h2>
+        <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> 4 · Messwerte wählen</h2>
+        <p class="muted">Die letzte Seite des Briefes zeigt eine Tabelle der Messwerte: je Zeile ein
+            Messwertbezeichner, je Spalte eine Untersuchung. Ganz rechts steht die aktuelle
+            Untersuchung, davor die letzten früheren Untersuchungen des Patienten (die Anzahl ist in
+            der Briefvorlage eingestellt). Angekreuzt werden nur Messwerte, die in den Untersuchungen
+            tatsächlich vorliegen; die Auswahl wird mit dem Brief eingefroren – eine geänderte Auswahl
+            ergibt einen neuen Brief.</p>
+        <?= $err('measurements') ?>
+        <div class="field">
+            <label class="check" for="include_measurements">
+                <input type="checkbox" id="include_measurements" name="include_measurements" value="1"
+                    data-toggle-target="measurement-choices" <?= $measurementChosen ? ' checked' : '' ?>>
+                <span>Messwerttabelle auf der letzten Seite mitdrucken</span>
+            </label>
+        </div>
+        <div data-toggle-group="measurement-choices"<?= $measurementChosen ? '' : ' hidden' ?>>
+            <?php if (($measurements['present'] ?? false) !== true): ?>
+                <p class="field-error">Zu diesem Patienten liegen keine Messwerte aus Untersuchungen vor.
+                    Im Brief erscheint an dieser Stelle der Hinweis der Briefvorlage.
+                    <?php if ($selectedReportId === null): ?>
+                        <a href="#schritt-2" data-wizard-goto="2">Bericht zuordnen</a>
+                    <?php endif; ?>
+                </p>
+            <?php else: ?>
+                <p>
+                    <span class="badge"><?= $e(count($measurementColumns)) ?> Untersuchung(en)</span>
+                    <?= $e(count($measurementAvailable)) ?> Messwert(e) mit Werten ·
+                    dargestellt werden die aktuelle Untersuchung und bis zu
+                    <?= $e($measurementPrevious) ?> frühere Untersuchung(en)
+                    (Vorgabe der Briefvorlage)
+                </p>
+                <input type="hidden" name="measurements_present" value="1">
+                <?php foreach ((array) ($measurements['sections'] ?? []) as $section): ?>
+                    <?php
+                    $sectionChoices = array_values(array_filter(
+                        $measurementChoices,
+                        static fn (array $choice): bool => str_starts_with($choice['key'], (string) $section['key'] . '.'),
+                    ));
+                    if ($sectionChoices === []) {
+                        continue;
+                    }
+                    ?>
+                    <fieldset class="choice-box">
+                        <legend><?= $e($section['label']) ?></legend>
+                        <?php foreach ((array) ($section['groups'] ?? []) as $group): ?>
+                            <?php
+                            $groupChoices = array_values(array_filter(
+                                $sectionChoices,
+                                static fn (array $choice): bool => str_starts_with($choice['key'], (string) $group['key'] . '.'),
+                            ));
+                            if ($groupChoices === []) {
+                                continue;
+                            }
+                            ?>
+                            <h4><?= $e($group['label']) ?></h4>
+                            <?php foreach ($groupChoices as $choice): ?>
+                                <div class="field">
+                                    <label class="check" for="measurement-<?= $e($choice['key']) ?>">
+                                        <input type="checkbox" id="measurement-<?= $e($choice['key']) ?>"
+                                            name="measurements[]" value="<?= $e($choice['key']) ?>"
+                                            <?= $isMeasurementChecked($choice['key']) ? ' checked' : '' ?>
+                                            <?= $choice['available'] ? '' : ' disabled' ?>>
+                                        <span><?= $e($choice['label']) ?>
+                                            <?php if ($choice['available']): ?>
+                                                <small class="muted"><?= $e(implode(' · ', array_filter($choice['values'], static fn (string $value): bool => trim($value) !== ''))) ?></small>
+                                            <?php else: ?>
+                                                <small class="muted">kein Wert in den Untersuchungen</small>
+                                            <?php endif; ?>
+                                        </span>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    </fieldset>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <section class="card wizard-step" data-step="5" id="schritt-5">
+        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> 5 · Empfänger wählen</h2>
         <p class="muted">Für jeden ausgewählten Empfänger wird ein eigener Brief mit dessen Anschrift im
             Anschriftfeld erzeugt. Inhalt und Datengrundlage sind bei allen Briefen gleich. Ist keine
             Arztanschrift hinterlegt, steht der generische Arztbrief zur Wahl: Er wird an „An die
@@ -260,8 +380,8 @@ $selectedRecipients = array_values(array_filter(
             Patienten</a> gepflegt (Kontakt, Hausarzt, Überweisender Arzt).</p>
     </section>
 
-    <section class="card wizard-step" data-step="5" id="schritt-5">
-        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 5 · Zusammenfassung</h2>
+    <section class="card wizard-step" data-step="6" id="schritt-6">
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 6 · Zusammenfassung</h2>
         <table class="kv">
             <tr><th>Patient</th><td><?= $e($patient['patient_name']) ?>,
                 geboren am <?= $e($view::dateTime($patient['date_of_birth'], true)) ?></td></tr>
@@ -283,7 +403,18 @@ $selectedRecipients = array_values(array_filter(
             <tr><th>Brieftext</th><td>Anamnese, Vormedikation, Befund, Epikrise (jeweils aktuelle Fassung)</td></tr>
             <tr><th>Anhang</th><td><?= $appendixSections === []
                 ? 'kein Anhang (keine Abfrage vorhanden)'
-                : $e(count($appendixSections)) . ' Abschnitt(e), mehrseitig mit wiederholter Kopfzeile' ?></td></tr>
+                : ($appendixChosen
+                    ? $e(count($appendixSections)) . ' Abschnitt(e), mehrseitig mit wiederholter Kopfzeile'
+                    : 'abgewählt – der Brief enthält keinen Anhang') ?></td></tr>
+            <tr><th>Messwerttabelle</th><td><?= !$measurementChosen
+                ? 'abgewählt – der Brief enthält keine Messwerttabelle'
+                : (($measurements['present'] ?? false) !== true
+                    ? 'letzte Seite mit dem Hinweis der Briefvorlage (keine Messwerte vorhanden)'
+                    : 'letzte Seite: ' . $e(count(array_filter(
+                        $measurementChoices,
+                        static fn (array $choice): bool => $choice['available'] === true
+                            && $isMeasurementChecked($choice['key']),
+                    ))) . ' Messwert(e), ' . $e(count($measurementColumns)) . ' Untersuchung(en) – aktuelle Untersuchung ganz rechts') ?></td></tr>
             <tr><th>MRT-Tauglichkeit</th><td><?= ($mrt['available'] ?? false) === true
                 ? $e($mrtLabel) . ' (aus Patientenausweis)'
                 : 'keine Angabe im Patientenausweis' ?></td></tr>
@@ -293,8 +424,8 @@ $selectedRecipients = array_values(array_filter(
             ausschließlich aus dem Snapshot reproduzierbar.</p>
     </section>
 
-    <section class="card wizard-step" data-step="6" id="schritt-6">
-        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 6 · Bestätigen und erzeugen</h2>
+    <section class="card wizard-step" data-step="7" id="schritt-7">
+        <h2><?= $icon('check', 'app-icon app-icon--sm') ?> 7 · Bestätigen und erzeugen</h2>
         <?= $err('patient_id') ?>
         <fieldset class="choice-box">
             <legend>Bestätigungen</legend>

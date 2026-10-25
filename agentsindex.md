@@ -50,11 +50,14 @@ Bericht-Snapshot speichert und daraus PDF-Berichte erzeugt – ausschließlich a
    mehreren Treffern entscheidet der Benutzer.
 10. **Ausweise und Stammdatenfassungen sind unveränderlich.** Bestehende Ausweis-PDFs werden nie
     neu berechnet; jede Änderung erzeugt eine neue `card_version` bzw. Stammdatenfassung.
-11. **Briefe betten ihre Vorlage ein.** Der Snapshot eines Briefes (`letter_version` 2) enthält die
-    vollständige Vorlagenfassung (`template.content`); gerendert wird nur daraus, nie aus der
-    aktuellen Vorlage. Vorlagenfassungen (`letter_template_versions`) werden nie geändert –
-    Speichern legt immer eine neue Fassung an. Briefe der Fassung 1 laufen über
-    `LegacyLetterPdfGenerator` und behalten ihren Aufbau.
+11. **Briefe betten ihre Vorlage ein.** Der Snapshot eines Briefes (`letter_version` 3) enthält die
+    vollständige Vorlagenfassung (`template.content`) und die Messwerttabelle
+    (`measurements`, siehe `LetterMeasurements`); gerendert wird nur daraus, nie aus der
+    aktuellen Vorlage oder den aktuellen Untersuchungen. Vorlagenfassungen
+    (`letter_template_versions`) werden nie geändert – Speichern legt immer eine neue Fassung an.
+    Briefe der Fassung 1 laufen über `LegacyLetterPdfGenerator`, Briefe der Fassung 2 rendert
+    `LetterPdfGenerator` ohne Messwerttabelle (`COMPATIBLE_LETTER_VERSIONS`); beide behalten ihren
+    Aufbau.
 12. **Jede Anfrage ist angemeldet und berechtigt.** Neue Routen bekommen in `Kernel::router()`
     ein Recht aus `App\User\Permission`; die Oberfläche leitet dasselbe Recht über
     `View::permitted()` ab, damit Sperre und Anzeige nie auseinanderlaufen. Kennwörter liegen
@@ -248,7 +251,7 @@ src/                 Anwendungscode (Namespace App\)
   Letter/            LetterService, LetterRepository, LetterPdfGenerator (DIN 5008),
                      LegacyLetterPdfGenerator (Fassung 1), LetterTemplate,
                      LetterTemplateRepository, LetterTemplateService, LetterSample,
-                     LetterRecipient
+                     LetterRecipient, LetterMeasurements (Messwerttabelle)
   Mapping/           ParameterMapping, CategoryAssignment
   PatientCard/       PatientCardService, PatientCardInput, PatientCardRepository,
                      PatientCardSettingsService, PatientCardPdfGenerator,
@@ -329,7 +332,8 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `LetterService` | Assistent, Erzeugen (ein Brief je gewähltem Empfänger in einer Transaktion, Snapshot mit eingebetteter Vorlage), `reproducePdf()` (damalige Vorlage, nichts speichern), `regenerate()` (Neuausfertigung `original`/`current`, `current` nur mit Bestätigung), `previewPdf()` (Editor-Vorschau mit Beispieldaten) |
 | `LetterTemplate` | Vorlagenschema: Zonen, Bausteintypen, Platzhalter, `default()`, `normalize()` (Prüfung mit Feldpfaden wie `blocks.3.texts.text`), `fill()`, `editorDefinition()` für den JS-Editor |
 | `LetterTemplateService` / `LetterTemplateRepository` | Versionierung: `current()`, `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
-| `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter |
+| `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter, Fassung 2 druckt ohne Messwerttabelle, Fassung 3 mit |
+| `LetterMeasurements` | Messwerttabelle des Briefes: löst den festen Katalog (`App\PatientCard\MeasurementTemplate`) gegen die Untersuchungen des Patienten auf (aktuelle Untersuchung ganz rechts, davor bis zu `MAX_PREVIOUS` frühere), friert die Tabelle samt Auswahl in den Snapshot ein (`freeze()`) und liefert die Checkbox-Liste des Assistenten (`choices()`, `previousCount()`) |
 | `LetterSample` | Beispieldaten für Editor-Vorschau |
 | `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`, `generic`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben; der generische Arztbrief hat eine feste Anschrift und ist nur ohne Arztanschrift wählbar |
 
@@ -629,6 +633,27 @@ Berichte bleiben unverändert, weil Kategorie und Bezeichnung im Snapshot liegen
   Stammdaten- oder Patientendatenänderungen verändern bestehende Ausweise nicht.
 - Dateiname: `Patientenausweis_<Nachname>_<Vorname>_<Datum>[_Nr<n>].pdf`.
 
+### Brief (DIN 5008, letzte Seite Messwerttabelle)
+
+- `LetterPdfGenerator` rendert **nur** aus dem Brief-Snapshot (Vorlage, Empfänger, Bausteine,
+  Bericht, Anhang, Messwerte). `SUPPORTED_LETTER_VERSION` = 3; `COMPATIBLE_LETTER_VERSIONS`
+  enthält 2 (Fassung 2 druckt wie bisher ohne Messwerttabelle), `LEGACY_LETTER_VERSIONS`
+  enthält 1 (`LegacyLetterPdfGenerator`).
+- Zonen fester Lage (`letterhead`, `return_address`, `recipient`, `info_block`, `footer`,
+  `appendix`, `measurement_table`, `general`) und Bausteine in Listenreihenfolge; die Zone
+  `measurement_table` druckt die Messwerttabelle **immer auf einer neuen Seite am Ende**.
+- Messwerttabelle: erste Spalte Messwertbezeichner, erste Zeile Untersuchungsdaten, die
+  aktuelle Untersuchung **ganz rechts** (`current_label` als Zusatz), davor bis zu `previous`
+  frühere Untersuchungen (Option der Vorlage, 0–10, Standard 4). Zeilen und Spalten liegen
+  eingefroren im Snapshot (`measurements`); die Auswahl trifft der Anwender im Assistenten
+  (Schritt 4) aus dem Katalog `config/patient_card_measurements.php`. Ohne Werte druckt die
+  Seite den Vorlagentext `empty`; `show: false` oder abgewählte Checkbox lassen sie entfallen.
+- `include_appendix`/`include_measurements` sind **strikte** `=== '1'`-Prüfungen: Helfer und
+  Tests, die Briefe über `LetterInput::fromPost()` erzeugen, müssen beide Felder senden, sonst
+  fehlen Anhang und Messwerttabelle.
+- Die Messwerttabelle lässt sich nicht nachträglich ändern; eine andere Auswahl ergibt einen
+  neuen Brief (neue Briefnummer, neue Fassung des Snapshots).
+
 ---
 
 ## 12. Sicherheits- und Datenschutzmodell
@@ -768,7 +793,8 @@ Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht
 | Ausweis-Layout ändern | `PatientCardPdfGenerator` anpassen (Vorlage `.reference/idcard_ann.png` beachten); bei strukturellen Snapshot-Änderungen `PatientCardService::CARD_VERSION` und `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` erhöhen; bestehende Ausweise bleiben unverändert |
 | Messzeile auf Ausweis-Seite 2 ergänzen | `config/patient_card_measurements.php` (`sections` → `groups` → `rows` mit `label`, `chamber`, `sources.ids`/`sources.names`, `glue`) anpassen, `version` erhöhen; Generator und Tests bleiben unberührt, bestehende Ausweise unverändert |
 | Briefvorlage erweitern (neuer Baustein/Text/Platzhalter) | `LetterTemplate` (Definition + `default()`), Darstellung in `LetterPdfGenerator`, Editor-Vorschau in `template-editor.js`; bestehende Vorlagenfassungen müssen weiterhin `normalize()` bestehen; Tests in `tests/Unit/LetterTemplateTest.php` |
-| Brief-Layout strukturell ändern | `LetterService::LETTER_VERSION` und `LetterPdfGenerator::SUPPORTED_LETTER_VERSION` erhöhen, alten Zweig erhalten (wie `LegacyLetterPdfGenerator`) |
+| Brief-Layout strukturell ändern | `LetterService::LETTER_VERSION` und `LetterPdfGenerator::SUPPORTED_LETTER_VERSION` erhöhen, alten Zweig erhalten (wie `LegacyLetterPdfGenerator`); die Vorversion in `COMPATIBLE_LETTER_VERSIONS` aufnehmen und im Generator verzweigen (so geschah es für die Messwerttabelle in Fassung 3) |
+| Messwertzeilen der Brief-Messwerttabelle ändern | nur `config/patient_card_measurements.php` (gemeinsamer Katalog mit dem Patientenausweis) anpassen und `version` erhöhen; Spaltenzahl je Vorlage über die Zone `measurement_table` (Option `previous`), Auswahl je Brief über `measurements[]` |
 | Ausweisvorlage erweitern (neuer Baustein/Text/Platzhalter) | `PatientCardTemplate` (Definition + `default()`), Darstellung in `PatientCardPdfGenerator`, Editor-Vorschau in `template-editor.js`; bestehende Vorlagenfassungen müssen weiterhin `normalize()` bestehen; Tests in `tests/Unit/PatientCardTemplateTest.php` |
 | Template ändern | Rendering im Browser **und** über `tests/Integration/PatientCardViewTest.php` (echter Controller + `View`) prüfen – `php -l` erkennt Template-Fehler nicht |
 | Neues CLI-Werkzeug | `bin/<name>.php` mit `require __DIR__ . '/../src/bootstrap.php'`, `PHP_SAPI !== 'cli'`-Guard, definierte Exit-Codes, README-Abschnitt aktualisieren |

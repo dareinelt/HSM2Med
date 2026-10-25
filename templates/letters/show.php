@@ -22,6 +22,16 @@ $report = $snapshot['report'] ?? null;
 $appendix = (array) ($snapshot['appendix'] ?? []);
 $mrt = (array) ($snapshot['mrt'] ?? []);
 $sections = (array) ($appendix['sections'] ?? []);
+$measurements = is_array($snapshot['measurements'] ?? null) ? $snapshot['measurements'] : null;
+$measurementColumns = (array) ($measurements['columns'] ?? []);
+$measurementSections = (array) ($measurements['sections'] ?? []);
+$measurementShown = $measurements !== null && ($measurements['include'] ?? false) === true;
+$measurementRows = 0;
+foreach ($measurementSections as $section) {
+    foreach ((array) ($section['groups'] ?? []) as $group) {
+        $measurementRows += count((array) ($group['rows'] ?? []));
+    }
+}
 $frozenTemplate = is_array($snapshot['template'] ?? null) ? $snapshot['template'] : null;
 $reissue = is_array($snapshot['reissue'] ?? null) ? $snapshot['reissue'] : null;
 $recipient = is_array($snapshot['recipient'] ?? null) ? $snapshot['recipient'] : null;
@@ -78,10 +88,20 @@ $textParts = [
                     <br><small class="muted"><?= $e($report['meta'] ?? '') ?></small>
                 <?php endif; ?>
             </td></tr>
-            <tr><th>Anhang</th><td><?= $sections === []
-                ? '<span class="muted">kein Anhang</span>'
-                : $e(count($sections)) . ' Abschnitt(e)' . (($appendix['device_type_label'] ?? '') !== ''
-                    ? ', ' . $e($appendix['device_type_label']) : '') ?></td></tr>
+            <tr><th>Anhang</th><td><?= ($appendix['include'] ?? true) !== true
+                ? '<span class="muted">abgewählt – kein Anhang</span>'
+                : ($sections === []
+                    ? '<span class="muted">kein Anhang</span>'
+                    : $e(count($sections)) . ' Abschnitt(e)' . (($appendix['device_type_label'] ?? '') !== ''
+                        ? ', ' . $e($appendix['device_type_label']) : '')) ?></td></tr>
+            <tr><th>Messwerttabelle</th><td><?= $measurements === null
+                ? '<span class="muted">Fassung ohne Messwerttabelle</span>'
+                : (!$measurementShown
+                    ? '<span class="muted">abgewählt – keine Messwerttabelle</span>'
+                    : ($measurementRows === 0
+                        ? '<span class="muted">letzte Seite mit dem Hinweis der Vorlage (keine Messwerte)</span>'
+                        : $e($measurementRows) . ' Messwert(e) in ' . $e(count($measurementColumns))
+                            . ' Untersuchung(en), aktuelle Untersuchung ganz rechts')) ?></td></tr>
             <tr><th>MRT-Tauglichkeit</th><td><?= ($mrt['available'] ?? false) === true
                 ? $e($mrt['value']) . (trim((string) ($mrt['note'] ?? '')) !== '' ? ' · ' . $e($mrt['note']) : '')
                     . '<br><small class="muted">' . $e($mrt['source_label'] ?? '') . '</small>'
@@ -238,7 +258,9 @@ $textParts = [
 
 <section class="card">
     <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Anhang: vollständige Schrittmacher-/ICD-Abfrage</h2>
-    <?php if ($sections === []): ?>
+    <?php if (($appendix['include'] ?? true) !== true): ?>
+        <p class="muted">Für diesen Brief wurde der Anhang abgewählt; das PDF enthält ihn nicht.</p>
+    <?php elseif ($sections === []): ?>
         <p class="muted">Kein Anhang – zum Zeitpunkt der Erstellung lag keine Abfrage vor.</p>
     <?php else: ?>
         <p class="muted"><?= $e(count($sections)) ?> Abschnitt(e), im PDF mehrseitig mit wiederholter Kopfzeile.</p>
@@ -259,5 +281,55 @@ $textParts = [
                 <?php if (trim($note) !== ''): ?><li><?= $e(trim($note)) ?></li><?php endif; ?>
             <?php endforeach; ?></ul>
         <?php endif; ?>
+    <?php endif; ?>
+</section>
+
+<section class="card">
+    <h2><?= $icon('reports', 'app-icon app-icon--sm') ?> Messwerttabelle (letzte Seite)</h2>
+    <?php if ($measurements === null): ?>
+        <p class="muted">Dieser Brief stammt aus einer Fassung ohne Messwerttabelle.</p>
+    <?php elseif (!$measurementShown): ?>
+        <p class="muted">Für diesen Brief wurde die Messwerttabelle abgewählt; das PDF enthält sie nicht.</p>
+    <?php elseif ($measurementRows === 0): ?>
+        <p class="muted">Es liegen keine Messwerte aus Untersuchungen vor; im PDF steht an dieser Stelle der
+            Hinweis der Briefvorlage.</p>
+    <?php else: ?>
+        <p class="muted"><?= $e($measurementRows) ?> Messwert(e) in <?= $e(count($measurementColumns)) ?>
+            Untersuchung(en); die aktuelle Untersuchung steht ganz rechts. Die Auswahl ist mit dem Brief
+            eingefroren – eine andere Auswahl ergibt einen neuen Brief.</p>
+        <div class="table-scroll">
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th>Messwert</th>
+                        <?php foreach ($measurementColumns as $column): ?>
+                            <th><?= $e($column['date_display'] ?? '') ?>
+                                <?php if (($column['current'] ?? false) === true): ?>
+                                    <br><small class="muted">aktuelle Untersuchung</small>
+                                <?php endif; ?>
+                            </th>
+                        <?php endforeach; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($measurementSections as $section): ?>
+                    <tr><th colspan="<?= $e(count($measurementColumns) + 1) ?>"><?= $e($section['label']) ?></th></tr>
+                    <?php foreach ((array) ($section['groups'] ?? []) as $group): ?>
+                        <?php if (trim((string) ($group['label'] ?? '')) !== ''): ?>
+                            <tr><th colspan="<?= $e(count($measurementColumns) + 1) ?>"><em><?= $e($group['label']) ?></em></th></tr>
+                        <?php endif; ?>
+                        <?php foreach ((array) ($group['rows'] ?? []) as $row): ?>
+                            <tr>
+                                <td><?= $e($row['label']) ?></td>
+                                <?php foreach ($measurementColumns as $index => $column): ?>
+                                    <td><?= $e((string) (((array) ($row['values'] ?? []))[$index] ?? '')) ?></td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     <?php endif; ?>
 </section>

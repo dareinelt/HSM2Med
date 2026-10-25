@@ -36,8 +36,10 @@ use RuntimeException;
  */
 final class LetterService
 {
-    /** Fassung des Brief-Snapshots (2: mit eingefrorener Briefvorlage, DIN 5008). */
-    public const int LETTER_VERSION = 2;
+    /**
+     * Fassung des Brief-Snapshots (3: mit Messwerttabelle und Wahl von Anhang/Messwerttabelle).
+     */
+    public const int LETTER_VERSION = 3;
 
     /** Vorlage einer Neuausfertigung: die des Ausgangsbriefes oder die aktuelle Fassung. */
     public const string TEMPLATE_ORIGINAL = 'original';
@@ -46,7 +48,7 @@ final class LetterService
     /** Datenteile eines Snapshots, die eine Neuausfertigung unveraendert uebernimmt. */
     private const array DATA_PARTS = [
         'master', 'patient', 'anamnesis', 'premedication', 'epicrisis', 'befund', 'device_check',
-        'report', 'appendix', 'mrt', 'source', 'recipient',
+        'report', 'appendix', 'measurements', 'mrt', 'source', 'recipient',
     ];
 
     /** Bausteine, die in den Brieftext einfliessen. */
@@ -67,6 +69,7 @@ final class LetterService
         private readonly LetterPdfGenerator $generator,
         private readonly Clock $clock,
         private readonly LetterTemplateService $templates,
+        private readonly LetterMeasurements $measurements,
     ) {
     }
 
@@ -119,6 +122,9 @@ final class LetterService
      *     mrt: array<string, mixed>,
      *     appendix: array<string, mixed>,
      *     appendix_lines: list<string>,
+     *     measurements: array<string, mixed>,
+     *     measurement_choices: list<array{key: string, label: string, available: bool, values: list<string>}>,
+     *     measurement_previous: int,
      *     warnings: list<string>,
      *     next_sequence: int
      * }
@@ -132,6 +138,7 @@ final class LetterService
         $records = $this->records->overview($patientId);
         $mrt = $this->mrtFromCard($patientId);
         $appendix = $this->appendixFor($records, $mrt);
+        $measurements = $this->measurements->resolve($patientId, $report);
 
         $warnings = [];
         $identityError = self::identityError($patient);
@@ -149,6 +156,9 @@ final class LetterService
         if (($appendix['sections'] ?? []) === []) {
             $warnings[] = 'Es liegt keine Schrittmacher-/ICD-Abfrage vor; der Brief erhält keinen Anhang.';
         }
+        if (($measurements['present'] ?? false) !== true) {
+            $warnings[] = 'Es liegen keine Messwerte aus Untersuchungen vor; die Messwerttabelle enthält nur den Hinweis der Vorlage.';
+        }
         if ($report === null) {
             $warnings[] = 'Es ist kein Bericht ausgewählt; der Baustein „Berichte" (Befundteil des Berichts) entfällt.';
         }
@@ -164,6 +174,11 @@ final class LetterService
             'mrt' => $mrt,
             'appendix' => $appendix,
             'appendix_lines' => DeviceCheckAppendix::lines($appendix),
+            'measurements' => $measurements,
+            'measurement_choices' => LetterMeasurements::choices($measurements),
+            'measurement_previous' => LetterMeasurements::previousCount(
+                $this->templates->current(LetterRecipient::PATIENT)['content'],
+            ),
             'warnings' => $warnings,
             'recipients' => LetterRecipient::all($patient, $masterData),
             'next_sequence' => $this->repository->nextSequence($patientId),
@@ -211,6 +226,10 @@ final class LetterService
         if ($identityError !== null) {
             throw LetterException::rule('patient_id', $identityError);
         }
+        $measurementError = self::measurementError($input, $prepared['measurements']);
+        if ($measurementError !== null) {
+            throw LetterException::validation(['measurements' => $measurementError]);
+        }
         $recipients = [];
         foreach ($input->recipients as $type) {
             $recipient = $prepared['recipients'][$type];
@@ -248,6 +267,13 @@ final class LetterService
                 $snapshot = $this->snapshot($prepared, $settings, $settingsVersionId, $sequence, $letterVersion, $documentNumber, $generatedAt);
                 $snapshot['recipient'] = LetterRecipient::snapshotPart($recipient);
                 $snapshot = self::withTemplate($snapshot, $template);
+                $snapshot['appendix']['include'] = $input->includeAppendix;
+                $snapshot['measurements'] = LetterMeasurements::freeze(
+                    $prepared['measurements'],
+                    LetterMeasurements::previousCount($template['content']),
+                    $input->measurements,
+                    $input->includeMeasurements,
+                );
                 $pdf = $this->generator->generate($snapshot, $logo, $generatedAt);
 
                 $letterId = $this->repository->insertLetter([
@@ -404,6 +430,15 @@ final class LetterService
             }
             if ($template !== null) {
                 $snapshot = self::withTemplate($snapshot, $template);
+                if (is_array($snapshot['measurements'] ?? null)) {
+                    $frozen = $snapshot['measurements'];
+                    $snapshot['measurements'] = LetterMeasurements::freeze(
+                        $frozen,
+                        LetterMeasurements::previousCount($template['content']),
+                        array_map('strval', (array) ($frozen['selected'] ?? [])),
+                        ($frozen['include'] ?? true) === true,
+                    );
+                }
             }
             $snapshot['reissue'] = [
                 'source_letter_id' => (int) $source['id'],
@@ -938,6 +973,24 @@ final class LetterService
     private function documentNumber(int $patientId, int $sequence, \DateTimeImmutable $generatedAt): string
     {
         return sprintf('HSM2Med-Brief-%s-%06d-%03d', $generatedAt->format('Ymd'), $patientId, $sequence);
+    }
+
+    /**
+     * Die Messwerttabelle braucht mindestens einen ankreuzbaren Wert, sobald Werte vorliegen.
+     *
+     * @param array<string, mixed> $measurements Ergebnis von LetterMeasurements::resolve()
+     */
+    private static function measurementError(LetterInput $input, array $measurements): ?string
+    {
+        if (!$input->includeMeasurements) {
+            return null;
+        }
+        $available = array_values(array_map('strval', (array) ($measurements['available'] ?? [])));
+        if ($available === []) {
+            return null;
+        }
+        $selected = array_intersect($available, $input->measurements ?? $available);
+        return $selected === [] ? 'Bitte mindestens einen Messwert für die Messwerttabelle auswählen.' : null;
     }
 
     private function ensureSettingsVersion(string $now): int

@@ -100,6 +100,7 @@ final class LetterSample
                 'groups' => [],
             ],
             'appendix' => [
+                'include' => true,
                 'device_type_label' => 'Herzschrittmacher',
                 'sections' => [
                     ['key' => 'basis', 'label' => 'Grundeinstellungen', 'rows' => [
@@ -113,7 +114,77 @@ final class LetterSample
                 'mrt_label' => 'MRT-Tauglichkeit: Beispielangabe',
             ],
             'mrt' => ['available' => false],
+            'measurements' => self::measurements($generatedAt),
             'source' => ['patient_id' => 0, 'report_id' => null, 'settings_version_id' => 0, 'card_id' => null, 'record_versions' => []],
+        ];
+    }
+
+    /**
+     * Beispiel-Messwerttabelle: drei Untersuchungen (zwei fruehere, die aktuelle ganz rechts) mit
+     * erfundenen Werten, damit der Vorlageneditor die Tabelle zeigen kann.
+     *
+     * @return array<string, mixed> Snapshot-Teil „measurements"
+     */
+    private static function measurements(DateTimeImmutable $generatedAt): array
+    {
+        $dates = [
+            $generatedAt->modify('-12 months')->format('d.m.Y'),
+            $generatedAt->modify('-6 months')->format('d.m.Y'),
+            $generatedAt->format('d.m.Y'),
+        ];
+        $columns = [];
+        foreach ($dates as $index => $date) {
+            $columns[] = [
+                'report_id' => $index + 1,
+                'date' => $generatedAt->modify(sprintf('%+d months', ($index - 2) * 6))->format('Y-m-d'),
+                'date_display' => $date,
+                'current' => $index === count($dates) - 1,
+            ];
+        }
+        $row = static fn (string $key, string $label, array $values): array => [
+            'key' => $key,
+            'label' => $label,
+            'chamber' => '',
+            'values' => $values,
+        ];
+        return [
+            'include' => true,
+            'present' => true,
+            'template_version' => '1.0.0',
+            'previous_count' => 2,
+            'column_count' => count($columns),
+            'columns' => $columns,
+            'sections' => [
+                [
+                    'key' => '0',
+                    'label' => 'Beispielabschnitt: Schrittmacher',
+                    'groups' => [
+                        [
+                            'key' => '0.0',
+                            'label' => 'Beispielgruppe: Stimulation',
+                            'rows' => [
+                                $row('0.0.0', 'Reizschwelle', ['0,90 V', '0,80 V', '0,75 V']),
+                                $row('0.0.1', 'Impedanz', ['560 Ohm', '540 Ohm', '520 Ohm']),
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'key' => '1',
+                    'label' => 'Beispielabschnitt: Wahrnehmung',
+                    'groups' => [
+                        [
+                            'key' => '1.0',
+                            'label' => 'Beispielgruppe: Vorhof',
+                            'rows' => [
+                                $row('1.0.0', 'Amplitude', ['2,4 mV', '2,2 mV', '2,1 mV']),
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'available' => ['0.0.0', '0.0.1', '1.0.0'],
+            'selected' => ['0.0.0', '0.0.1', '1.0.0'],
         ];
     }
 
