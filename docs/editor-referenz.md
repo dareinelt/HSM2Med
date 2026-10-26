@@ -155,6 +155,7 @@ Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` u
 | `subject` | Betreff | ja | – | `title`, `line2` |
 | `salutation` | Anrede | ja | – | `text` (Standard: `{salutation}`, siehe 4.3) |
 | `patient` | Patientendaten | ja | – | `heading`, `label_name`, `label_birth`, `label_identifier`, `label_address`, `label_phone` |
+| `aggregat` | Aggregat | ja | – | `heading`, `heading_leads`, `leads_empty`, `label_manufacturer`, `label_model`, `label_serial`, `label_status`, `label_implant_date`, `label_implant_location`, `label_mode` |
 | `anamnesis` | Anamnese | ja | `show_meta` | `heading` |
 | `premedication` | Vormedikation | ja | `show_meta` | `heading`, `col_substance`, `col_dose`, `col_schedule`, `col_reason`, `col_period` |
 | `befund` | Befund | ja | `show_meta` | `heading` |
@@ -163,9 +164,18 @@ Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` u
 | `text` | Freier Textbaustein | **nein** | – | `heading`, `text` (mehrzeilig) |
 | `reports` | Berichte | ja | `show_meta` | `heading` |
 
-Standardreihenfolge: `subject, salutation, patient, anamnesis, premedication, befund, epicrisis, closing, reports`.
+Standardreihenfolge: `subject, salutation, patient, aggregat, anamnesis, premedication, befund, epicrisis, closing, reports`.
 Eindeutige Bausteine lassen sich aus-, aber nicht löschen (`enabled: false`). Freie Textbausteine
 können beliebig oft ergänzt und gelöscht werden.
+
+Der Baustein `aggregat` steht direkt unter den Patientendaten und druckt die Gerätedaten des
+**letzten Imports** des Patienten (Hersteller, Modell, Seriennummer, Status, Implantationsdatum,
+Implantationsort, Betriebsart) **zweispaltig** – links Hersteller/Modell/Seriennummer/Status,
+rechts die zugehörigen Werte – und darunter die Sonden (Elektroden) derselben Abfrage, je Sonde
+**eine Zeile** (`Kammer` als Beschriftung, dahinter Hersteller, Modell, Seriennummer, Typ und
+Implantationsdatum durch `·` getrennt). Fehlt der Import, druckt der Baustein „nicht angegeben“;
+ohne Sonden erscheint der Text `leads_empty`. Status ist immer „aktiv“ (der Import kennt kein
+Statusfeld), Betriebsart ist der programmierte Modus des letzten Imports.
 
 Der Baustein `reports` steht als Anhang am Ende des Briefes: Er druckt den Befundteil des
 zugeordneten Berichts (Geräte-, Sonden- und Messwerte) **immer auf einer neuen Seite** unter der
@@ -275,8 +285,9 @@ flowchart LR
 - **Wiederherstellen** einer alten Fassung = in den Editor laden und als neue Fassung speichern.
 - **Einfrieren:** `LetterService::create()` schreibt Fassungs-ID, -nummer, Name, Prüfsumme und
   den vollständigen Inhalt in `snapshot.template` und setzt `patient_letters.template_version_id`.
-  `letter_version` (Brief-Fassung) ist `3`. Die Messwerttabelle (`snapshot.measurements`) wird
-  dabei mit eingefrorenen Spalten, Zeilen und Auswahl abgelegt; Briefe der Fassungen 1 und 2
+  `letter_version` (Brief-Fassung) ist `4`. Die Messwerttabelle (`snapshot.measurements`) wird
+  dabei mit eingefrorenen Spalten, Zeilen und Auswahl abgelegt, der Baustein `aggregat` mit den
+  Gerätedaten und Sonden des letzten Imports (`snapshot.aggregat`); Briefe der Fassungen 1 bis 3
   bleiben unverändert (`COMPATIBLE_LETTER_VERSIONS`/`LEGACY_LETTER_VERSIONS`).
 - **Reproduzieren** (`/letters/{id}/reproduce`, `LetterService::reproducePdf()`) erzeugt das
   PDF allein aus dem Snapshot neu. `LetterTest::testReproduceYieldsIdenticalPdf` sichert ab, dass
@@ -392,7 +403,9 @@ Der Editor erzeugt das Steuerelement automatisch.
 **Neuer Bausteintyp**
 1. In `blockDefinitions()` eintragen; `unique` festlegen.
 2. Optional in `DEFAULT_ORDER` aufnehmen. Das ändert die Standardvorlage, aber keine
-   gespeicherten Fassungen.
+   gespeicherten Fassungen. Soll der Baustein auch in **bereits gespeicherten** Fassungen
+   erscheinen, ist eine Migration nötig, die ihn per `JSON_ARRAY_INSERT` einfügt (Vorbild:
+   `016_letter_template_aggregat.sql`; Texte/Optionen ergänzt `normalize()` beim Lesen).
 3. Im `match` in `LetterPdfGenerator::body()` umsetzen.
 4. Vorschau in `blockPreview()` (JS).
 5. Daten, die der Baustein braucht, müssen im Snapshot stehen (`LetterService::DATA_PARTS`),

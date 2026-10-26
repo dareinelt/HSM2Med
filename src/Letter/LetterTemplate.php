@@ -235,6 +235,24 @@ final class LetterTemplate
                     'label_phone' => ['label' => 'Vorsatz Telefon', 'multiline' => false, 'default' => 'Telefon:'],
                 ],
             ],
+            'aggregat' => [
+                'label' => 'Aggregat',
+                'description' => 'Gerätedaten aus dem letzten Import des Patienten in zwei Spalten (Hersteller, Modell, Seriennummer und Status links, Implantationsdatum, Implantationsort und Betriebsart rechts) und darunter die Sonden als je eine Zeile.',
+                'unique' => true,
+                'options' => [],
+                'texts' => [
+                    'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Aggregat'],
+                    'label_manufacturer' => ['label' => 'Beschriftung Hersteller', 'multiline' => false, 'default' => 'Hersteller'],
+                    'label_model' => ['label' => 'Beschriftung Modell', 'multiline' => false, 'default' => 'Modell'],
+                    'label_serial' => ['label' => 'Beschriftung Seriennummer', 'multiline' => false, 'default' => 'Seriennummer'],
+                    'label_status' => ['label' => 'Beschriftung Status', 'multiline' => false, 'default' => 'Status'],
+                    'label_implant_date' => ['label' => 'Beschriftung Implantationsdatum', 'multiline' => false, 'default' => 'Implantationsdatum'],
+                    'label_implant_location' => ['label' => 'Beschriftung Implantationsort', 'multiline' => false, 'default' => 'Implantationsort'],
+                    'label_mode' => ['label' => 'Beschriftung Betriebsart', 'multiline' => false, 'default' => 'Betriebsart (intraoperativ)'],
+                    'heading_leads' => ['label' => 'Überschrift Sonden', 'multiline' => false, 'default' => 'Sonden (Elektroden)'],
+                    'leads_empty' => ['label' => 'Hinweis ohne Sonden', 'multiline' => false, 'default' => 'Im letzten Import sind keine Sonden erfasst.'],
+                ],
+            ],
             'anamnesis' => [
                 'label' => 'Anamnese',
                 'description' => 'Eingefrorene Fassung des Bausteins Anamnese.',
@@ -313,7 +331,7 @@ final class LetterTemplate
      * und wird als Anhang unter der Grussformel auf einer neuen Seite gedruckt.
      */
     private const array DEFAULT_ORDER = [
-        'subject', 'salutation', 'patient', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports',
+        'subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports',
     ];
 
     /**

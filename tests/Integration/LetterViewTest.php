@@ -770,7 +770,7 @@ final class LetterViewTest extends DatabaseTestCase
 
         // Fassungen laufen je Empfaengerart eigenstaendig.
         $content = $data['current']['content'];
-        $content['blocks'][7]['texts']['text'] = 'Mit kollegialen Grüßen, wir berichten über {patient_name}.';
+        $content['blocks'][8]['texts']['text'] = 'Mit kollegialen Grüßen, wir berichten über {patient_name}.';
         $saved = $controller->save(new Request('POST', '/system/letter-templates', [], [
             'content' => json_encode($content),
             'comment' => 'Hausarzt angepasst',
@@ -808,7 +808,7 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertSame("An die weiterbehandelnden\nÄrztinnen und Ärzte", $genericData['current']['content']['zones']['recipient']['texts']['text']);
 
         $genericContent = $genericData['current']['content'];
-        $genericContent['blocks'][7]['texts']['text'] = 'Mit kollegialen Grüßen, wir bitten um Weiterbehandlung.';
+        $genericContent['blocks'][8]['texts']['text'] = 'Mit kollegialen Grüßen, wir bitten um Weiterbehandlung.';
         $genericSaved = $controller->save(new Request('POST', '/system/letter-templates', [], [
             'content' => json_encode($genericContent),
             'comment' => 'Generisch angepasst',

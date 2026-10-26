@@ -72,7 +72,11 @@ historische Auslesungen, ausschließlich aus der Datenbank.
 - Globale Stammdaten für den Ausweis (Logo, Nachsorgezentrum, Hinweis- und
   Flugsicherheitstexte) mit eigener Fassung je Ausweis.
 - **Brief zur Schrittmacher-/ICD-Abfrage**: automatisch erzeugter Brief aus der Patientenakte.
-  Er enthält Anamnese, Vormedikation, Befund und Epikrise als Textteile, den Baustein
+  Er enthält Anamnese, Vormedikation, Befund und Epikrise als Textteile, direkt unter den
+  Patientendaten den Baustein **Aggregat** – Hersteller, Modell, Seriennummer, Status,
+  Implantationsdatum, Implantationsort und Betriebsart des **letzten Imports** zweispaltig,
+  darunter die **Sonden (Elektroden)** derselben Abfrage je Sonde in einer Zeile (Kammer,
+  Hersteller, Modell, Seriennummer, Typ, Implantationsdatum) –, den Baustein
   **Berichte** – den Befundteil „Schrittmacher-/ICD-Abfrage" des zugeordneten Berichts als
   Anhang unter der Grußformel auf einer neuen Seite (nur wenn ein Bericht zugeordnet wurde) –
   und als Anhang die
@@ -684,13 +688,36 @@ abhängigkeitsfreien PDF-Writer.
 ## Brief zur Schrittmacher-/ICD-Abfrage
 
 Der Brief wird **automatisch aus der Patientenakte** erzeugt – aus den versionierten
-Bausteinen Anamnese, Vormedikation, Befund und Epikrise, dem Befundteil der gewählten
+Bausteinen Anamnese, Vormedikation, Befund und Epikrise, dem Baustein **Aggregat** direkt unter
+den Patientendaten (Gerätedaten des letzten Imports und die Sonden der Schrittmacher-/ICD-Abfrage,
+siehe [Aggregat und Sonden](#aggregat-und-sonden)), dem Befundteil der gewählten
 Untersuchung als Anhang unter der Grußformel (Baustein **Berichte**, immer auf einer neuen
 Seite), auf Wunsch der vollständigen Schrittmacher-/ICD-Abfrage als Anhang (Opt-in im
 Assistenten) und der **Messwerttabelle auf der letzten Seite**. Er enthält keine medizinische
 Bewertung und keine Diagnose; übernommen wird ausschließlich, was erfasst wurde.
 
 ![Briefübersicht](docs/screenshots/43-brief-uebersicht.png)
+
+### Aggregat und Sonden
+
+Der Baustein **Aggregat** steht in der Standardvorlage direkt unter den Patientendaten und
+druckt die Daten des **letzten Imports** des Patienten:
+
+| Angabe | Quelle |
+| --- | --- |
+| Hersteller | Geräteherkunft des letzten Berichts |
+| Modell | Modell und Modellnummer (`HSM Zweikammer … 407155`) |
+| Seriennummer | Seriennummer des Geräts |
+| Status | immer „aktiv" (der Import kennt kein Statusfeld) |
+| Implantationsdatum | Implantationsdatum des Geräts |
+| Implantationsort | Implantationsort aus den Stammdaten |
+| Betriebsart (intraoperativ) | programmierter Modus des letzten Imports |
+
+Die Angaben stehen **zweispaltig** (links die Bezeichnung, rechts der Wert), damit der Block
+wenig Platz braucht. Darunter folgen die **Sonden (Elektroden)** derselben Abfrage – je Sonde
+**eine Zeile** mit Kammer, Hersteller, Modell, Seriennummer, Typ und Implantationsdatum. Fehlt
+ein Import, druckt der Block „nicht angegeben"; sind keine Sonden erfasst, erscheint ein
+entsprechender Hinweis. Beide Angaben sind im Vorlageneditor ein- und ausblendbar.
 
 ### Ablauf
 
@@ -1136,7 +1163,8 @@ erDiagram
 - **patient_letters** ist ein unveränderliches Dokument: `snapshot` (JSON) friert Patientendaten,
   die Fassung der globalen Stammdaten (`settings_version_id`), die Fassungen der Bausteine
   (Anamnese, Vormedikation, Befund, Epikrise, Schrittmacher-/ICD-Abfrage), die Befunddaten des
-  gewählten Berichts, die aufgelösten Anhangsabschnitte sowie die Messwerttabelle
+  gewählten Berichts, die aufgelösten Anhangsabschnitte, das **Aggregat** samt Sonden
+  (`aggregat`: Gerätedaten und Elektroden des letzten Imports) sowie die Messwerttabelle
   (`measurements`: Spalten, Zeilen und die getroffene Auswahl) ein. `pdf_content` (MEDIUMBLOB) und
   `pdf_sha256` werden gemeinsam mit dem Snapshot in einer Transaktion gespeichert und nie
   überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
