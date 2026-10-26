@@ -77,7 +77,7 @@ final class PdfGenerator
 
         return $this->pdf->output([
             'Title' => sprintf('Herzschrittmacher – Auslesebericht Nr. %d', $data->id()),
-            'Subject' => 'Automatisch erzeugter Datenbericht (keine originale Abbott-/Merlin-Dokumentation)',
+            'Subject' => 'Automatisch erzeugter Datenbericht',
             'Creator' => 'HSM2Med',
             'Producer' => 'HSM2Med PdfDocument',
         ], $generatedAt);
@@ -97,9 +97,7 @@ final class PdfGenerator
         $this->pdf->text(self::MARGIN_X, $this->y, 'HERZSCHRITTMACHER – AUSLESEBERICHT', 'bold', 17, self::PRIMARY);
         $this->y += 16;
         $this->pdf->text(self::MARGIN_X, $this->y, 'Automatisch erzeugter Datenbericht', 'regular', 10, self::TEXT);
-        $this->y += 13;
-        $this->pdf->text(self::MARGIN_X, $this->y, 'Keine originale Abbott-/Merlin-Dokumentation', 'regular', 10, self::TEXT);
-        $this->y += 12;
+        $this->y += 25;
 
         $notice = 'Dieser Bericht stellt die importierten Gerätedaten strukturiert und unverändert dar. '
             . 'Er enthält keine medizinische Bewertung, Diagnose oder Empfehlung. '
@@ -305,7 +303,7 @@ final class PdfGenerator
             $this->pdf->setPage($page);
             $lineY = PdfDocument::PAGE_HEIGHT - 44;
             $this->pdf->line(self::MARGIN_X, $lineY, PdfDocument::PAGE_WIDTH - self::MARGIN_X, $lineY, self::GRID, 0.6);
-            $this->pdf->text(self::MARGIN_X, $lineY + 12, 'Automatisch erzeugter Datenbericht – keine medizinische Bewertung oder Diagnose. Keine originale Abbott-/Merlin-Dokumentation.', 'regular', 7, self::MUTED);
+            $this->pdf->text(self::MARGIN_X, $lineY + 12, 'Automatisch erzeugter Datenbericht – keine medizinische Bewertung oder Diagnose.', 'regular', 7, self::MUTED);
             $this->pdf->text(self::MARGIN_X, $lineY + 22, sprintf('%s · Bericht Nr. %d · Berichtsversion %d', $created, $this->data->id(), $this->data->reportVersion()), 'regular', 7, self::MUTED);
             $pageLabel = sprintf('Seite %d von %d', $page + 1, $total);
             $width = PdfDocument::textWidth($pageLabel, 'bold', 8);

@@ -33,7 +33,6 @@ final class PdfGeneratorTest extends TestCase
         foreach ([
             'HERZSCHRITTMACHER – AUSLESEBERICHT',
             'Automatisch erzeugter Datenbericht',
-            'Keine originale Abbott-/Merlin-Dokumentation',
             'LASTNAME, FIRSTNAME', '10358141', '21.10.1938',
             'Endurity Core', '2152', '5809481',
             'nicht in den Quelldaten enthalten', // Geraetehersteller fehlt in der Datei

@@ -652,7 +652,6 @@ Beispiel:
 ```text
 HERZSCHRITTMACHER – AUSLESEBERICHT
 Automatisch erzeugter Datenbericht
-Keine originale Abbott-/Merlin-Dokumentation
 ```
 
 Danach:
