@@ -9,7 +9,12 @@
  * @var list<array<string, mixed>> $cards
  * @var list<array<string, mixed>> $past
  * @var array<int, string> $physicians
+ * @var int|null $activePatientId
  */
+$activePatientId = $activePatientId ?? null;
+// Nur beim aktiven Patienten springt "Ausweis erstellen" direkt in den Assistenten; sonst
+// bleibt die Berichtsauswahl vorgeschaltet, damit nicht stillschweigend ein anderer Patient gilt.
+$createCardHref = $activePatientId === (int) $patient['id'] ? '/patient-cards/new' : '/patient-cards/new?select=1';
 ?>
 <div class="page-head">
     <div>
@@ -22,7 +27,7 @@
         </p>
     </div>
     <div class="actions">
-        <a class="button primary" href="/patient-cards/new"><?= $icon('card-plus') ?> <span>Patientenausweis erstellen</span></a>
+        <a class="button primary" href="<?= $e($createCardHref) ?>"><?= $icon('card-plus') ?> <span>Patientenausweis erstellen</span></a>
         <a class="button" href="/patient-cards"><?= $icon('cards') ?> <span>Übersicht</span></a>
     </div>
 </div>

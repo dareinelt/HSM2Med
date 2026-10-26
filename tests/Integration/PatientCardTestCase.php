@@ -31,7 +31,14 @@ abstract class PatientCardTestCase extends DatabaseTestCase
     public function setUp(): void
     {
         parent::setUp();
+        $_SESSION = [];
         $this->app = new Application(Config::fromEnvironment(), dirname(__DIR__, 2), $this->clock);
+    }
+
+    public function tearDown(): void
+    {
+        $_SESSION = [];
+        parent::tearDown();
     }
 
     protected function cards(): PatientCardController

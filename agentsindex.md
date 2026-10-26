@@ -412,7 +412,7 @@ angemeldete Anfrage mit Hinweis zurück auf `/`.
 | POST | `/patients/{id}/records/{slug}/prefill` | `PatientController::prefillRecord` | Baustein aus einem Bericht vorbelegen | `patients` |
 | GET | `/patients/{id}` | `PatientController::show` | Patientenakte | `patients` |
 | GET | `/patient-cards` | `PatientCardController::index` | Ausweisübersicht + Suche | `patient_cards` |
-| GET | `/patient-cards/new` | `PatientCardController::selectReport` | Bericht für neuen Ausweis wählen (Patientenvorgang) | `patient_cards` |
+| GET | `/patient-cards/new` | `PatientCardController::selectReport` | Bericht für neuen Ausweis wählen; mit aktivem Patienten direkt in den Assistenten (`?select=1` erzwingt die Auswahl) | `patient_cards` |
 | GET | `/patient-cards/settings` | `PatientCardSettingsController::index` | Stammdaten (Logo, Zentrum, Texte) | `patient_card_settings` |
 | GET | `/patient-cards/settings/logo` | `PatientCardSettingsController::logo` | Logo ausliefern | `patient_card_settings` |
 | POST | `/patient-cards/settings` | `PatientCardSettingsController::save` | Stammdaten speichern (neue Fassung) | `patient_card_settings` |

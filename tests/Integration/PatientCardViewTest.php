@@ -6,6 +6,7 @@ namespace Tests\Integration;
 
 use App\Http\Request;
 use App\Http\Response;
+use App\Patient\PatientInput;
 use App\PatientCard\PatientCardInput;
 use Tests\Support\Images;
 
@@ -50,6 +51,58 @@ final class PatientCardViewTest extends PatientCardTestCase
         $this->assertSame(200, $response->status);
         $this->assertContains('/patient-cards/reports/' . $outcome->reportId, $response->body);
         $this->assertContains('Ausweis erstellen', $response->body);
+    }
+
+    /** "Ausweis erstellen" springt mit aktivem Patienten direkt in den Assistenten. */
+    public function testReportSelectionJumpsToWizardForActivePatient(): void
+    {
+        $outcome = $this->importSample();
+        $patientId = $this->app->patientCardRepository()->reportPatientId($outcome->reportId);
+        $this->assertTrue($patientId !== null);
+        $this->app->activePatient()->select((int) $patientId);
+
+        $response = $this->cards()->selectReport(new Request('GET', '/patient-cards/new'));
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('Schritt 1: Patient identifizieren', $response->body);
+        $this->assertContains('action="/patient-cards/reports/' . $outcome->reportId . '"', $response->body);
+        $this->assertNotContains('Schritt 1: den Bericht auswählen', $response->body);
+        // Der Wechsel zu einem anderen Bericht bleibt erreichbar.
+        $this->assertContains('href="/patient-cards/new?select=1"', $response->body);
+    }
+
+    /** Die Berichtsauswahl bleibt mit ?select=1 erreichbar. */
+    public function testReportSelectionStaysReachable(): void
+    {
+        $outcome = $this->importSample();
+        $patientId = $this->app->patientCardRepository()->reportPatientId($outcome->reportId);
+        $this->app->activePatient()->select((int) $patientId);
+
+        $response = $this->cards()->selectReport(new Request('GET', '/patient-cards/new', ['select' => '1']));
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('Schritt 1: den Bericht auswählen', $response->body);
+        $this->assertContains('/patient-cards/reports/' . $outcome->reportId, $response->body);
+    }
+
+    /** Ohne Bericht des aktiven Patienten bleibt die Auswahl vorgeschaltet. */
+    public function testReportSelectionWithoutReportOfActivePatient(): void
+    {
+        $outcome = $this->importSample();
+        $patientId = (int) $this->app->patientService()->create(PatientInput::fromPost([
+            'last_name' => 'OHNE',
+            'first_name' => 'BERICHT',
+            'date_of_birth' => '01.01.1940',
+            'patient_identifier' => 'P-900',
+        ]))['patient_id'];
+        $this->app->activePatient()->select($patientId);
+
+        $response = $this->cards()->selectReport(new Request('GET', '/patient-cards/new'));
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('Schritt 1: den Bericht auswählen', $response->body);
+        $this->assertContains('Für diesen Patienten liegt noch kein', $response->body);
+        $this->assertContains('/patient-cards/reports/' . $outcome->reportId, $response->body);
     }
 
     /** Assistent: alle sechs Schritte, CSRF-Feld und Vorbelegung aus dem Bericht. */

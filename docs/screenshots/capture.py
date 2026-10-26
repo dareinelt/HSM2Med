@@ -334,7 +334,7 @@ def main() -> int:
         page.wait_for_load_state()
         shot(page, "13-ausweis-stammdaten")
 
-        page.goto(f"{BASE_URL}/patient-cards/new")
+        page.goto(f"{BASE_URL}/patient-cards/new?select=1")
         shot(page, "14-ausweis-bericht-waehlen")
 
         page.locator("a[href^='/patient-cards/reports/']").first.click()

@@ -319,7 +319,11 @@ Patientenübersicht über *Auswählen* oder in der Akte über *Als aktiven Patie
 *Auswahl aufheben* entfernt die Zuordnung wieder. **Das Anlegen eines Patienten wählt ihn
 automatisch als aktiven Patienten** – nach dem Anlegen kann der Import also sofort erfolgen.
 Ebenso führt *Brief erstellen* mit aktivem Patienten direkt in den Briefassistenten; die
-Patientenauswahl ist dort über *Anderen Patienten wählen* weiterhin erreichbar.
+Patientenauswahl ist dort über *Anderen Patienten wählen* weiterhin erreichbar. Auch
+*Ausweis erstellen* springt mit aktivem Patienten direkt in den Ausweis-Assistenten des
+neuesten, mit ihm verknüpften Berichts; die Berichtsauswahl bleibt über *Anderen Bericht
+wählen* bzw. `/patient-cards/new?select=1` erreichbar. Liegt für den aktiven Patienten noch
+kein Bericht vor, erscheint die Berichtsauswahl mit einem entsprechenden Hinweis.
 
 ![Aktiver Patient in der Patientenübersicht](docs/screenshots/48-patient-aktiv.png)
 
@@ -531,7 +535,10 @@ mitgespeichert.
 ![Stammdaten des Patientenausweises](docs/screenshots/13-ausweis-stammdaten.png)
 
 **2. Bericht wählen** (`/patient-cards/new` bzw. Schaltfläche *Patientenausweis erstellen* in
-der Berichtsansicht):
+der Berichtsansicht) – mit aktivem Patienten entfällt dieser Schritt: *Ausweis erstellen*
+öffnet direkt den Assistenten des neuesten, mit dem Patienten verknüpften Berichts. Die
+Auswahl erscheint über *Anderen Bericht wählen* im Assistenten oder über
+`/patient-cards/new?select=1`:
 
 ![Bericht auswählen](docs/screenshots/14-ausweis-bericht-waehlen.png)
 
@@ -637,7 +644,7 @@ vorgegeben haben es *Admin* und *Arzt*.
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/patient-cards` | Übersicht mit Suche (Patient, Dateiname, Seriennummer) |
-| GET | `/patient-cards/new` | Bericht für einen neuen Ausweis wählen |
+| GET | `/patient-cards/new` | Bericht für einen neuen Ausweis wählen; mit aktivem Patienten direkt in den Assistenten (`?select=1` erzwingt die Auswahl) |
 | GET | `/patient-cards/reports/{id}` | Assistent (Schritt über `?step=1..6`) |
 | POST | `/patient-cards/reports/{id}` | Ausweis erzeugen (CSRF, beide Bestätigungen) |
 | GET | `/patient-cards/{id}` | Ausweisdetail mit Verlauf |

@@ -11,6 +11,8 @@
  * @var int $total
  * @var int $page
  * @var int $pages
+ * @var array{id:int,name:string,birth:string,identifier:string}|null $activePatient
+ * @var int $activeReports
  */
 $query = static fn (array $extra): string => http_build_query(array_filter(
     $extra + $filters,
@@ -29,15 +31,23 @@ $hasFilter = array_filter($filters, static fn (string $v): bool => $v !== '') !=
     </div>
 </div>
 
+<?php if ($activePatient !== null && $activeReports === 0): ?>
+    <div class="alert alert-info" role="status">
+        Aktiver Patient: <strong><?= $e($activePatient['name']) ?></strong>. Für diesen Patienten liegt noch kein
+        Bericht vor – wählen Sie den Bericht, dessen Daten in den Ausweis übernommen werden.
+    </div>
+<?php endif; ?>
+
 <section class="card">
     <form method="get" action="/patient-cards/new" class="filters">
+        <input type="hidden" name="select" value="1">
         <div class="field wide"><label for="q">Suche (alle Felder)</label><input type="search" id="q" name="q" value="<?= $e($filters['q']) ?>" maxlength="200"></div>
         <div class="field"><label for="patient">Patient</label><input id="patient" name="patient" value="<?= $e($filters['patient']) ?>" maxlength="200"></div>
         <div class="field"><label for="patient_id">Patient-ID</label><input id="patient_id" name="patient_id" value="<?= $e($filters['patient_id']) ?>" maxlength="200"></div>
         <div class="field"><label for="serial">Geräte-Seriennummer</label><input id="serial" name="serial" value="<?= $e($filters['serial']) ?>" maxlength="200"></div>
         <div class="field"><label for="model">Modell</label><input id="model" name="model" value="<?= $e($filters['model']) ?>" maxlength="200"></div>
         <div class="field"><label for="filename">Importdatei</label><input id="filename" name="filename" value="<?= $e($filters['filename']) ?>" maxlength="200"></div>
-        <div class="field buttons"><button type="submit" class="primary">Suchen</button><?php if ($hasFilter): ?> <a class="button" href="/patient-cards/new">Zurücksetzen</a><?php endif; ?></div>
+        <div class="field buttons"><button type="submit" class="primary">Suchen</button><?php if ($hasFilter): ?> <a class="button" href="/patient-cards/new?select=1">Zurücksetzen</a><?php endif; ?></div>
     </form>
 </section>
 
