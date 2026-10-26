@@ -64,6 +64,36 @@ final class PatientRecordInputTest extends TestCase
         $this->assertSame('Zusätzlich Vitamin D.', $input->text);
     }
 
+    public function testMedicationDatesAcceptCompactAndMonthOnlyFormats(): void
+    {
+        $input = PatientRecordInput::fromPost(PatientRecordType::Premedication, [
+            'medication' => [
+                ['substance' => 'Bisoprolol', 'from' => '01102026', 'to' => '10/2026'],
+                ['substance' => 'Ramipril', 'from' => '10.2026', 'to' => '2026-11'],
+                ['substance' => 'Amlodipin', 'from' => '20260112', 'to' => '2026/03'],
+            ],
+        ]);
+
+        $this->assertSame('2026-10-01', $input->entries[0]['from'], 'TTMMJJJJ wird erkannt.');
+        $this->assertSame('2026-10-01', $input->entries[0]['to'], 'MM/JJJJ gilt ab dem Monatsersten.');
+        $this->assertSame('2026-10-01', $input->entries[1]['from'], 'MM.JJJJ gilt ab dem Monatsersten.');
+        $this->assertSame('2026-11-01', $input->entries[1]['to'], 'JJJJ-MM gilt ab dem Monatsersten.');
+        $this->assertSame('2026-01-12', $input->entries[2]['from'], 'JJJJMMTT wird erkannt.');
+        $this->assertSame('2026-03-01', $input->entries[2]['to'], 'JJJJ/MM gilt ab dem Monatsersten.');
+    }
+
+    public function testMonthOnlyEndBeforeStartIsRejected(): void
+    {
+        $e = $this->assertThrows(
+            PatientException::class,
+            fn () => PatientRecordInput::fromPost(PatientRecordType::Premedication, [
+                'medication' => [['substance' => 'Bisoprolol', 'from' => '11/2026', 'to' => '10/2026']],
+            ]),
+        );
+
+        $this->assertContains('darf nicht vor', (string) $e->fieldErrors()['medication']);
+    }
+
     public function testEntryWithoutSubstanceIsRejected(): void
     {
         $e = $this->assertThrows(
