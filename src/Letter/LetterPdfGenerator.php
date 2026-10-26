@@ -6,6 +6,7 @@ namespace App\Letter;
 
 use App\Report\Pdf\ImageData;
 use App\Report\Pdf\PdfDocument;
+use App\Support\BlockStyle;
 use App\Support\DateInput;
 use DateTimeImmutable;
 use RuntimeException;
@@ -125,6 +126,9 @@ final class LetterPdfGenerator
     private array $values = [];
 
     private string $empty = 'nicht angegeben';
+
+    /** Schriftgroesse des aktuellen Bausteins, relativ zur Grundgroesse. */
+    private float $scale = 1.0;
 
     public function __construct(private readonly bool $compress = true)
     {
@@ -477,6 +481,7 @@ final class LetterPdfGenerator
             if (!is_array($block) || ($block['enabled'] ?? true) !== true) {
                 continue;
             }
+            $this->scale = self::scaleOf($block);
             $y = match ((string) $block['type']) {
                 'subject' => $this->subjectBlock($y, $block),
                 'salutation' => $this->plainBlock($y, $this->blockValue($block, 'text')),
@@ -491,8 +496,31 @@ final class LetterPdfGenerator
                 'reports' => $this->reportsBlock($y, $block),
                 default => $y,
             };
+            $this->scale = 1.0;
         }
     }
+
+    /**
+     * Schriftgroesse eines Bausteins (Faktor zur Grundgroesse des Bausteins).
+     *
+     * @param array<string, mixed> $block
+     */
+    private static function scaleOf(array $block): float
+    {
+        return BlockStyle::scale($block);
+    }
+
+    /**
+     * Fettdarstellung einer Zeile: [Beschriftung, Wert].
+     *
+     * @param array<string, mixed> $block
+     * @return array{0: string, 1: string}
+     */
+    private static function emphasisOf(array $block, string $key): array
+    {
+        return BlockStyle::emphasis($block, $key);
+    }
+
 
     /**
      * Betreff in Fettschrift ohne Leitwort; danach zwei Leerzeilen (DIN 5008).
@@ -547,14 +575,15 @@ final class LetterPdfGenerator
         }
         $rows = [];
         foreach ([
-            ['label_name', $this->orEmpty((string) ($patient['patient_name'] ?? ''))],
-            ['label_birth', $this->displayDate((string) ($patient['date_of_birth'] ?? ''))],
-            ['label_identifier', $this->orEmpty((string) ($patient['patient_identifier'] ?? ''))],
-            ['label_address', $lines === [] ? $this->empty : implode("\n", $lines)],
-        ] as [$key, $value]) {
+            ['label_name', 'bold_name', $this->orEmpty((string) ($patient['patient_name'] ?? ''))],
+            ['label_birth', 'bold_birth', $this->displayDate((string) ($patient['date_of_birth'] ?? ''))],
+            ['label_identifier', 'bold_identifier', $this->orEmpty((string) ($patient['patient_identifier'] ?? ''))],
+            ['label_address', 'bold_address', $lines === [] ? $this->empty : implode("\n", $lines)],
+        ] as [$key, $boldKey, $value]) {
             $label = $this->blockValue($block, $key);
             if ($label !== '') {
-                $rows[] = [$label, $value];
+                [$labelFont, $valueFont] = self::emphasisOf($block, $boldKey);
+                $rows[] = [$label, $value, $labelFont, $valueFont];
             }
         }
         $y = $this->sectionStart($y, $this->blockValue($block, 'heading'), '');
@@ -578,17 +607,19 @@ final class LetterPdfGenerator
         $value = static fn (string $key): string => trim((string) ($aggregat[$key] ?? ''));
         $rows = [];
         foreach ([
-            ['label_manufacturer', 'manufacturer', 'label_implant_date', 'implant_date'],
-            ['label_model', 'model', 'label_implant_location', 'implant_location'],
-            ['label_serial', 'serial_number', 'label_mode', 'mode'],
-            ['label_status', 'status', '', ''],
-        ] as [$leftLabel, $leftKey, $rightLabel, $rightKey]) {
+            ['label_manufacturer', 'manufacturer', 'bold_manufacturer', 'label_implant_date', 'implant_date', 'bold_implant_date'],
+            ['label_model', 'model', 'bold_model', 'label_implant_location', 'implant_location', 'bold_implant_location'],
+            ['label_serial', 'serial_number', 'bold_serial', 'label_mode', 'mode', 'bold_mode'],
+            ['label_status', 'status', 'bold_status', '', '', ''],
+        ] as [$leftLabel, $leftKey, $leftBold, $rightLabel, $rightKey, $rightBold]) {
             $left = [$leftLabel === '' ? '' : $this->blockValue($block, $leftLabel), $this->orEmpty($value($leftKey))];
             $right = [$rightLabel === '' ? '' : $this->blockValue($block, $rightLabel), $rightKey === '' ? '' : $this->orEmpty($value($rightKey))];
             if ($left[0] === '' && $right[0] === '') {
                 continue;
             }
-            $rows[] = [$left, $right];
+            $leftFonts = $leftBold === '' ? null : self::emphasisOf($block, $leftBold);
+            $rightFonts = $rightBold === '' ? null : self::emphasisOf($block, $rightBold);
+            $rows[] = [$left, $right, $leftFonts, $rightFonts];
         }
         $y = $this->sectionStart($y, $this->blockValue($block, 'heading'), '');
         if ($rows !== []) {
@@ -628,7 +659,8 @@ final class LetterPdfGenerator
             if ($label === '' && $parts === []) {
                 continue;
             }
-            $rows[] = [$label, $parts === [] ? $this->empty : implode(' · ', $parts)];
+            [$leadLabelFont, $leadValueFont] = self::emphasisOf($block, 'bold_leads');
+            $rows[] = [$label, $parts === [] ? $this->empty : implode(' · ', $parts), $leadLabelFont, $leadValueFont];
         }
 
         if ($rows === []) {
@@ -760,9 +792,9 @@ final class LetterPdfGenerator
                 if ($groupRows === []) {
                     continue;
                 }
-                $y = $this->ensureSpace($y, self::SIZE_FIELD * self::LINE * 2.0);
-                $this->pdf->text(self::LEFT, $y + 0.75 * self::SIZE_FIELD, (string) ($group['label'] ?? ''), 'bold', self::SIZE_FIELD, self::INK);
-                $y += self::SIZE_FIELD * self::LINE;
+                $y = $this->ensureSpace($y, self::SIZE_FIELD * $this->scale * self::LINE * 2.0);
+                $this->pdf->text(self::LEFT, $y + 0.75 * self::SIZE_FIELD * $this->scale, (string) ($group['label'] ?? ''), 'bold', self::SIZE_FIELD * $this->scale, self::INK);
+                $y += self::SIZE_FIELD * $this->scale * self::LINE;
                 $y = $this->fieldRows($y, $groupRows);
             }
         }
@@ -1179,7 +1211,8 @@ final class LetterPdfGenerator
 
     private function sectionStart(float $y, string $title, string $meta): float
     {
-        $y = $this->ensureSpace($y, self::SIZE_SECTION * self::LINE + 3.0 * self::SIZE_TEXT * self::LINE);
+        $sectionSize = self::SIZE_SECTION * $this->scale;
+        $y = $this->ensureSpace($y, $sectionSize * self::LINE + 3.0 * self::SIZE_TEXT * self::LINE);
         if ($title !== '') {
             $y = $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $title, 'bold', self::SIZE_SECTION);
         }
@@ -1237,21 +1270,24 @@ final class LetterPdfGenerator
     /**
      * Beschriftung links, Wert rechts daneben; Seitenumbruch vor jeder Zeile.
      *
-     * @param list<array{0: string, 1: string}> $rows
+     * @param list<array{0: string, 1: string, 2?: string, 3?: string}> $rows
      */
-    private function fieldRows(float $y, array $rows): float
+    private function fieldRows(float $y, array $rows, string $labelFont = 'regular', string $valueFont = 'bold'): float
     {
-        $lineHeight = self::SIZE_FIELD * self::LINE;
+        $size = self::SIZE_FIELD * $this->scale;
+        $lineHeight = $size * self::LINE;
         foreach ($rows as $row) {
-            $labelLines = $this->wrap($row[0], self::LABEL_WIDTH - 4.0, 'regular', self::SIZE_FIELD);
-            $valueLines = $this->wrap($row[1], self::CONTENT_WIDTH - self::LABEL_WIDTH, 'bold', self::SIZE_FIELD);
+            $rowLabelFont = $row[2] ?? $labelFont;
+            $rowValueFont = $row[3] ?? $valueFont;
+            $labelLines = $this->wrap($row[0], self::LABEL_WIDTH - 4.0, $rowLabelFont, $size);
+            $valueLines = $this->wrap($row[1], self::CONTENT_WIDTH - self::LABEL_WIDTH, $rowValueFont, $size);
             $height = max(count($labelLines), count($valueLines)) * $lineHeight;
             $y = $this->ensureSpace($y, $height);
             foreach ($labelLines as $index => $line) {
-                $this->pdf->text(self::LEFT, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'regular', self::SIZE_FIELD, self::INK);
+                $this->pdf->text(self::LEFT, $y + $index * $lineHeight + 0.75 * $size, $line, $rowLabelFont, $size, self::INK);
             }
             foreach ($valueLines as $index => $line) {
-                $this->pdf->text(self::LEFT + self::LABEL_WIDTH, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'bold', self::SIZE_FIELD, self::INK);
+                $this->pdf->text(self::LEFT + self::LABEL_WIDTH, $y + $index * $lineHeight + 0.75 * $size, $line, $rowValueFont, $size, self::INK);
             }
             $y += $height;
         }
@@ -1262,31 +1298,36 @@ final class LetterPdfGenerator
      * Zwei Spalten mit Beschriftung und Wert; die Zeilenhoehe richtet sich nach der laengeren
      * Seite eines Paares. Seitenumbruch vor jedem Paar.
      *
-     * @param list<array{0: array{0: string, 1: string}, 1: array{0: string, 1: string}}> $rows
+     * @param list<array{0: array{0: string, 1: string}, 1: array{0: string, 1: string}, 2?: array{0: string, 1: string}|null, 3?: array{0: string, 1: string}|null}> $rows
      */
     private function fieldPairs(float $y, array $rows): float
     {
-        $lineHeight = self::SIZE_FIELD * self::LINE;
+        $size = self::SIZE_FIELD * $this->scale;
+        $lineHeight = $size * self::LINE;
         $valueWidth = self::AGGREGAT_COLUMN - self::AGGREGAT_LABEL_WIDTH - 6.0;
-        foreach ($rows as [$left, $right]) {
+        foreach ($rows as $row) {
+            [$left, $right] = $row;
+            $fonts = [$row[2] ?? null, $row[3] ?? null];
             $cells = [];
             $height = 0.0;
-            foreach ([[self::LEFT, $left], [self::LEFT + self::AGGREGAT_COLUMN, $right]] as [$x, $cell]) {
+            foreach ([[self::LEFT, $left], [self::LEFT + self::AGGREGAT_COLUMN, $right]] as $index => [$x, $cell]) {
                 if ($cell[0] === '') {
                     continue;
                 }
-                $labelLines = $this->wrap($cell[0], self::AGGREGAT_LABEL_WIDTH - 4.0, 'regular', self::SIZE_FIELD);
-                $valueLines = $this->wrap($cell[1], $valueWidth, 'bold', self::SIZE_FIELD);
+                $labelFont = $fonts[$index][0] ?? 'regular';
+                $valueFont = $fonts[$index][1] ?? 'bold';
+                $labelLines = $this->wrap($cell[0], self::AGGREGAT_LABEL_WIDTH - 4.0, $labelFont, $size);
+                $valueLines = $this->wrap($cell[1], $valueWidth, $valueFont, $size);
                 $height = max($height, max(count($labelLines), count($valueLines)) * $lineHeight);
-                $cells[] = [$x, $labelLines, $valueLines];
+                $cells[] = [$x, $labelLines, $labelFont, $valueLines, $valueFont];
             }
             $y = $this->ensureSpace($y, $height);
-            foreach ($cells as [$x, $labelLines, $valueLines]) {
+            foreach ($cells as [$x, $labelLines, $labelFont, $valueLines, $valueFont]) {
                 foreach ($labelLines as $index => $line) {
-                    $this->pdf->text($x, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'regular', self::SIZE_FIELD, self::INK);
+                    $this->pdf->text($x, $y + $index * $lineHeight + 0.75 * $size, $line, $labelFont, $size, self::INK);
                 }
                 foreach ($valueLines as $index => $line) {
-                    $this->pdf->text($x + self::AGGREGAT_LABEL_WIDTH, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'bold', self::SIZE_FIELD, self::INK);
+                    $this->pdf->text($x + self::AGGREGAT_LABEL_WIDTH, $y + $index * $lineHeight + 0.75 * $size, $line, $valueFont, $size, self::INK);
                 }
             }
             $y += $height;
@@ -1299,6 +1340,7 @@ final class LetterPdfGenerator
      */
     private function paragraph(float $x, float $y, float $width, string $text, string $font, float $size, array $color = self::INK): float
     {
+        $size *= $this->scale;
         $lineHeight = $size * self::LINE;
         foreach ($this->wrap($text, $width, $font, $size) as $line) {
             $y = $this->ensureSpace($y, $lineHeight);
@@ -1334,7 +1376,7 @@ final class LetterPdfGenerator
      */
     private function flowTable(float $y, array $columns, array $rows): float
     {
-        $size = self::SIZE_TABLE;
+        $size = self::SIZE_TABLE * $this->scale;
         $lineHeight = $size * self::LINE;
         $header = function (float $lineY) use ($columns, $size, $lineHeight): float {
             $cellX = self::LEFT;

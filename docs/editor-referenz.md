@@ -152,21 +152,42 @@ Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` u
 
 | Typ | Bezeichnung | eindeutig | Optionen | Texte |
 | --- | --- | --- | --- | --- |
-| `subject` | Betreff | ja | – | `title`, `line2` |
-| `salutation` | Anrede | ja | – | `text` (Standard: `{salutation}`, siehe 4.3) |
-| `patient` | Patientendaten | ja | – | `heading`, `label_name`, `label_birth`, `label_identifier`, `label_address`, `label_phone` |
-| `aggregat` | Aggregat | ja | – | `heading`, `heading_leads`, `leads_empty`, `label_manufacturer`, `label_model`, `label_serial`, `label_status`, `label_implant_date`, `label_implant_location`, `label_mode` |
-| `anamnesis` | Anamnese | ja | `show_meta` | `heading` |
-| `premedication` | Vormedikation | ja | `show_meta` | `heading`, `col_substance`, `col_dose`, `col_schedule`, `col_reason`, `col_period` |
-| `befund` | Befund | ja | `show_meta` | `heading` |
-| `epicrisis` | Epikrise | ja | `show_meta` | `heading` |
-| `closing` | Grußformel | ja | – | `text`, `signature` (mehrzeilig) |
-| `text` | Freier Textbaustein | **nein** | – | `heading`, `text` (mehrzeilig) |
-| `reports` | Berichte | ja | `show_meta` | `heading` |
+| `subject` | Betreff | ja | `font_size` | `title`, `line2` |
+| `salutation` | Anrede | ja | `font_size` | `text` (Standard: `{salutation}`, siehe 4.3) |
+| `patient` | Patientendaten | ja | `font_size`, `bold_name`, `bold_birth`, `bold_identifier`, `bold_address` | `heading`, `label_name`, `label_birth`, `label_identifier`, `label_address`, `label_phone` |
+| `aggregat` | Aggregat | ja | `font_size`, `bold_manufacturer`, `bold_implant_date`, `bold_model`, `bold_implant_location`, `bold_serial`, `bold_mode`, `bold_status`, `bold_leads` | `heading`, `heading_leads`, `leads_empty`, `label_manufacturer`, `label_model`, `label_serial`, `label_status`, `label_implant_date`, `label_implant_location`, `label_mode` |
+| `anamnesis` | Anamnese | ja | `font_size`, `show_meta` | `heading` |
+| `premedication` | Vormedikation | ja | `font_size`, `show_meta` | `heading`, `col_substance`, `col_dose`, `col_schedule`, `col_reason`, `col_period` |
+| `befund` | Befund | ja | `font_size`, `show_meta` | `heading` |
+| `epicrisis` | Epikrise | ja | `font_size`, `show_meta` | `heading` |
+| `closing` | Grußformel | ja | `font_size` | `text`, `signature` (mehrzeilig) |
+| `text` | Freier Textbaustein | **nein** | `font_size` | `heading`, `text` (mehrzeilig) |
+| `reports` | Berichte | ja | `font_size`, `show_meta` | `heading` |
 
 Standardreihenfolge: `subject, salutation, patient, aggregat, anamnesis, premedication, befund, epicrisis, closing, reports`.
 Eindeutige Bausteine lassen sich aus-, aber nicht löschen (`enabled: false`). Freie Textbausteine
 können beliebig oft ergänzt und gelöscht werden.
+
+#### Schriftgröße je Baustein (`font_size`)
+
+Jeder Baustein hat als erste Option `font_size` (Auswahl *Klein*, *Normal*, *Groß*, *Sehr groß*).
+Der Faktor aus `App\Support\BlockStyle::FONT_SIZES` (0,85 / 1,0 / 1,15 / 1,3) multipliziert alle
+Schriftgrößen des Bausteins – Überschrift, Beschriftungen, Werte und Tabellen des Bausteins.
+Die Überschriften skalieren mit, bleiben aber **immer fett**. Vorgabe ist `normal`; damit ist die
+Ausgabe einer Vorlage ohne diese Angabe unverändert. Auf dem Patientenausweis (Seite 1) kann
+*Sehr groß* den verfügbaren Platz überschreiten; der Generator meldet das dann als Fehler
+(`PatientCardException`, siehe 11.6).
+
+#### Fettdruck je Zeile (`bold_*`)
+
+Für die Zeilen mit Beschriftung und Wert lässt sich zusätzlich je Zeile festlegen, was fett
+gedruckt wird: `label` (nur die Beschriftung, z. B. *Name*), `value` (nur der Wert, Vorgabe),
+`both` (beides) oder `none` (nichts). Betroffen sind die Zeilen der Patientendaten
+(`bold_name`, `bold_birth`, `bold_identifier`, `bold_address`), des Aggregats
+(`bold_manufacturer`, `bold_implant_date`, `bold_model`, `bold_implant_location`, `bold_serial`,
+`bold_mode`, `bold_status`) und die Sondenzeilen (`bold_leads`). Die Auswahl gilt nur für die
+betreffende Zeile; alle übrigen Bausteine behalten ihre feste Darstellung.
+
 
 Der Baustein `aggregat` steht direkt unter den Patientendaten und druckt die Gerätedaten des
 **letzten Imports** des Patienten (Hersteller, Modell, Seriennummer, Status, Implantationsdatum,
@@ -384,6 +405,11 @@ Verhalten im Detail:
   sonst geht es zurück zu `/system`.
 - **Seitenvorschau:** `PAGE`-Geometrie (mm) entspricht `LetterPdfGenerator`. Die Darstellung ist
   vereinfacht; verbindlich ist die **PDF-Vorschau** (`LetterSample`).
+- **Schriftgröße und Fettdruck:** `previewBlockNode()` setzt zusätzlich die Klasse
+  `te-pblock--fs-<font_size>`; die Vorschau ist `em`-basiert und skaliert damit den ganzen
+  Baustein (`template-editor.css`). Die Zeilen der Patienten- und Aggregatdaten entstehen über
+  `rowPair(label, value, bold)` und erhalten `is-bold` an Beschriftung (`te-p-label`) oder Wert
+  (`te-p-value`) – abhängig von der jeweiligen `bold_*`-Option.
 
 ## 8. Erweiterung (Checkliste)
 
@@ -398,7 +424,15 @@ Verhalten im Detail:
 Bestehende Fassungen müssen nicht migriert werden: `normalize()` ergänzt den Standardwert.
 
 **Neue Option:** wie oben unter `options`, mit `type: 'bool'` oder `type: 'select'` und `choices`.
-Der Editor erzeugt das Steuerelement automatisch.
+Der Editor erzeugt das Steuerelement automatisch. Für Schriftgröße (`font_size`) und Fettdruck je
+Zeile (`bold_*`) sind Definition und Auswertung in `App\Support\BlockStyle` gebündelt:
+`fontSizeOption()`/`boldOption()` für die Definition, `scale()`/`emphasis()` für die Ausgabe.
+Neue Bausteine erhalten `font_size` automatisch, weil `blockDefinitions()` die Option vor dem
+Zurückgeben in jeden Baustein einsetzt.
+
+**Neue Zeile mit wählbarem Fettdruck:** im Generator `BlockStyle::emphasis($block, 'bold_…')`
+bzw. `emphasisedRow()` verwenden und die Zeile als `[label, value, labelFont, valueFont]` an
+`fieldRows()`/`fieldPairs()` geben (ohne Angabe gilt weiterhin „Wert fett").
 
 **Neuer Bausteintyp**
 1. In `blockDefinitions()` eintragen; `unique` festlegen.
@@ -524,21 +558,27 @@ Die **Reihenfolge** in der Vorlage steuert die Ausgabe innerhalb eines Bereichs;
 
 | Typ | Bezeichnung | Bereich | eindeutig | Optionen |
 | --- | --- | --- | --- | --- |
-| `patient_data` | Patientendaten | `left` | ja | `show_indication` |
-| `emergency_contact` | Notfallkontakt | `left` | ja | – |
-| `physician` | Hausarzt | `left` | ja | – |
-| `center` | Betreuendes Nachsorgezentrum | `left` | ja | – |
-| `implants` | Implantate | `right` | ja | `show_leads` |
-| `mrt` | MRT-Tauglichkeit | `right` | ja | – |
-| `notice` | Hinweise | `right` | ja | `show_flight` |
-| `summary` | Abschlussblock | `bottom` | ja | `show_barcode` |
-| `measurements` | Messwerttabelle | `page2` | ja | `show_notes` |
-| `text` | Freier Textbaustein | `page2` | **nein** | – |
+| `patient_data` | Patientendaten | `left` | ja | `font_size`, `show_indication`, `bold_name`, `bold_birth`, `bold_street`, `bold_city`, `bold_phone`, `bold_indication` |
+| `emergency_contact` | Notfallkontakt | `left` | ja | `font_size` |
+| `physician` | Hausarzt | `left` | ja | `font_size` |
+| `center` | Betreuendes Nachsorgezentrum | `left` | ja | `font_size` |
+| `implants` | Implantate | `right` | ja | `font_size`, `show_leads` |
+| `mrt` | MRT-Tauglichkeit | `right` | ja | `font_size` |
+| `notice` | Hinweise | `right` | ja | `font_size`, `show_flight` |
+| `summary` | Abschlussblock | `bottom` | ja | `font_size`, `show_barcode`, `bold_other`, `bold_remark`, `bold_physician`, `bold_next_control` |
+| `measurements` | Messwerttabelle | `page2` | ja | `font_size`, `show_notes` |
+| `text` | Freier Textbaustein | `page2` | **nein** | `font_size` |
 
 Bereiche: `left` und `right` sind die Spalten auf Seite 1, `bottom` der Abschlussblock am Fuß von
 Seite 1, `page2` die Blöcke untereinander auf Seite 2. Die Standardreihenfolge
 (`DEFAULT_ORDER`) ist `patient_data, emergency_contact, physician, center, implants, mrt, notice,
 summary, measurements`.
+
+Wie im Briefeditor gilt auch hier: `font_size` (Klein/Normal/Groß/Sehr groß) skaliert alle
+Schriftgrößen des Bausteins, die Überschriften bleiben fett; `bold_*` legt je Zeile fest, ob
+Beschriftung (`label`), Wert (`value`, Vorgabe), beides (`both`) oder nichts (`none`) fett
+gedruckt wird. Ein sehr großer Baustein kann den Platz auf Seite 1 überschreiten; der Generator
+bricht dann mit `PatientCardException` ab, statt eine dritte Seite anzuhängen.
 
 ### 11.5 Platzhalter
 

@@ -394,8 +394,9 @@
 
     /** Baustein in der Vorschau (Klick- und Ziehziel wie in der Bausteinliste). */
     function previewBlockNode(block) {
+        const fontClass = ' te-pblock--fs-' + String(block.options.font_size || 'normal');
         const node = h('div', {
-            class: 'te-pblock te-pblock--' + block.type + (isSelected('block', block.id) ? ' is-selected' : '') + (block.enabled ? '' : ' is-off') + (hasErrors(blockPath(block.id)) ? ' has-error' : ''),
+            class: 'te-pblock te-pblock--' + block.type + fontClass + (isSelected('block', block.id) ? ' is-selected' : '') + (block.enabled ? '' : ' is-off') + (hasErrors(blockPath(block.id)) ? ' has-error' : ''),
             draggable: 'true',
             dataset: { blockId: block.id },
             title: blockTitle(block) + ' – zum Bearbeiten klicken, zum Verschieben ziehen',
@@ -599,6 +600,18 @@
         return block.options.show_meta ? h('span', { class: 'te-p-meta', text }) : null;
     }
 
+    /**
+     * Zeile aus Beschriftung und Wert mit der im Baustein gewaehlten Fettdarstellung
+     * (label = Beschriftung fett, value = Wert fett, both, none).
+     */
+    function rowPair(label, value, bold) {
+        const choice = String(bold || 'value');
+        return [
+            h('dt', { class: 'te-p-label' + (choice === 'label' || choice === 'both' ? ' is-bold' : ''), text: fill(label) }),
+            h('dd', { class: 'te-p-value' + (choice === 'value' || choice === 'both' ? ' is-bold' : ''), text: value }),
+        ];
+    }
+
     function blockPreview(block) {
         const t = block.texts;
         const empty = fill(state.content.zones.general.texts.empty);
@@ -612,25 +625,27 @@
                 return [textNode(t.text, 'Keine Anrede')];
             case 'patient':
                 return [headingNode(t.heading), h('dl', { class: 'te-p-rows' },
-                    ...[[t.label_name, sample.patient_name], [t.label_birth, sample.date_of_birth], [t.label_identifier, sample.patient_identifier],
-                        [t.label_address, 'Musterstraße 1, 12345 Beispielstadt · ' + fill(t.label_phone) + ' 01234 567890']]
+                    ...[[t.label_name, 'bold_name', sample.patient_name], [t.label_birth, 'bold_birth', sample.date_of_birth],
+                        [t.label_identifier, 'bold_identifier', sample.patient_identifier],
+                        [t.label_address, 'bold_address', 'Musterstraße 1, 12345 Beispielstadt · ' + fill(t.label_phone) + ' 01234 567890']]
                         .filter(([label]) => label.trim() !== '')
-                        .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })]))];
+                        .flatMap(([label, boldKey, value]) => rowPair(label, value, block.options[boldKey])))];
             case 'aggregat':
                 return [headingNode(t.heading), h('dl', { class: 'te-p-pairs' },
-                    ...[[[t.label_manufacturer, 'Beispielhersteller'], [t.label_implant_date, todayText]],
-                        [[t.label_model, 'Beispielmodell DR 123456'], [t.label_implant_location, 'Pectoral subcutan rechts']],
-                        [[t.label_serial, 'SN-123456'], [t.label_mode, 'DDD']],
-                        [[t.label_status, 'aktiv'], ['', '']]]
-                        .flatMap((pair) => pair.flatMap(([label, value]) => [
-                            h('dt', { text: fill(label) }),
-                            h('dd', { text: String(label).trim() === '' ? '' : value }),
-                        ]))),
+                    ...[[[t.label_manufacturer, 'bold_manufacturer', 'Beispielhersteller'], [t.label_implant_date, 'bold_implant_date', todayText]],
+                        [[t.label_model, 'bold_model', 'Beispielmodell DR 123456'], [t.label_implant_location, 'bold_implant_location', 'Pectoral subcutan rechts']],
+                        [[t.label_serial, 'bold_serial', 'SN-123456'], [t.label_mode, 'bold_mode', 'DDD']],
+                        [[t.label_status, 'bold_status', 'aktiv'], ['', '', '']]]
+                        .flatMap((pair) => pair.flatMap(([label, boldKey, value]) => rowPair(
+                            label,
+                            String(label).trim() === '' ? '' : value,
+                            block.options[boldKey],
+                        )))),
                     headingNode(t.heading_leads),
                     h('dl', { class: 'te-p-rows' },
                         ...[['RA', 'Beispielhersteller Beispielsonde 1234 · SN 1001 · Schraubsonde · implantiert ' + todayText],
                             ['RV', 'Beispielhersteller Beispielsonde 5678 · SN 1002 · Schraubsonde · implantiert ' + todayText]]
-                            .flatMap(([label, value]) => [h('dt', { text: label }), h('dd', { text: value })]))];
+                            .flatMap(([label, value]) => rowPair(label, value, block.options.bold_leads)))];
             case 'anamnesis':
             case 'befund':
             case 'epicrisis':
@@ -659,15 +674,18 @@
         const rows = (pairs) => h('dl', { class: 'te-p-rows' }, ...pairs
             .filter(([label]) => String(label).trim() !== '')
             .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })]));
+        const boldRows = (pairs) => h('dl', { class: 'te-p-rows' }, ...pairs
+            .filter(([label]) => String(label).trim() !== '')
+            .flatMap(([label, boldKey, value]) => rowPair(label, value, block.options[boldKey])));
         switch (block.type) {
             case 'patient_data':
-                return [headingNode(t.title), rows([
-                    [t.label_name, sample.patient_name],
-                    [t.label_birth, sample.date_of_birth],
-                    [t.label_street, 'Musterstraße 1'],
-                    [t.label_city, '12345 Beispielstadt'],
-                    [t.label_phone, '01234 567890'],
-                    [block.options.show_indication ? t.label_indication : '', 'Beispielindikation'],
+                return [headingNode(t.title), boldRows([
+                    [t.label_name, 'bold_name', sample.patient_name],
+                    [t.label_birth, 'bold_birth', sample.date_of_birth],
+                    [t.label_street, 'bold_street', 'Musterstraße 1'],
+                    [t.label_city, 'bold_city', '12345 Beispielstadt'],
+                    [t.label_phone, 'bold_phone', '01234 567890'],
+                    [block.options.show_indication ? t.label_indication : '', 'bold_indication', 'Beispielindikation'],
                 ])];
             case 'emergency_contact':
                 return [headingNode(t.title), rows([[t.label_name, 'Max Mustermann'], [t.label_phone, '0170 1234567']])];
@@ -702,9 +720,12 @@
                         : null,
                     h('span', { class: 'te-p-sample', text: 'Weitere Hinweise aus dem Gerätepass (Beispiel).' })];
             case 'summary':
-                return [h('dl', { class: 'te-p-rows' },
-                    ...[[t.label_other, ''], [t.label_remark, ''], [t.label_physician, 'Dr. med. Beispiel'], [t.label_next_control, '6 Monate']]
-                        .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value !== '' ? value : empty })])),
+                return [boldRows([
+                    [t.label_other, 'bold_other', empty],
+                    [t.label_remark, 'bold_remark', empty],
+                    [t.label_physician, 'bold_physician', 'Dr. med. Beispiel'],
+                    [t.label_next_control, 'bold_next_control', '6 Monate'],
+                ]),
                     block.options.show_barcode ? h('span', { class: 'te-barcode', 'aria-hidden': 'true' }) : null];
             case 'measurements':
                 return [h('strong', { class: 'te-p-heading', text: 'Messwerttabelle' }),

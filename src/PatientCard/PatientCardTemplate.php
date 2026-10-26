@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\PatientCard;
 
+use App\Support\BlockStyle;
 use DateTimeImmutable;
 
 /**
@@ -136,13 +137,19 @@ final class PatientCardTemplate
      */
     public static function blockDefinitions(): array
     {
-        return [
+        $definitions = [
             'patient_data' => [
                 'label' => 'Patientendaten',
-                'description' => 'Name, Geburtsdatum, Anschrift, Telefon und Indikation des Patienten (Seite 1, linke Spalte).',
+                'description' => 'Name, Geburtsdatum, Anschrift, Telefon und Indikation des Patienten (Seite 1, linke Spalte). Je Zeile lässt sich einstellen, ob die Beschriftung oder der Wert fett erscheint; die Überschrift bleibt fett.',
                 'unique' => true,
                 'options' => [
                     'show_indication' => ['label' => 'Indikation anzeigen', 'type' => 'bool', 'default' => true],
+                    'bold_name' => BlockStyle::boldOption('Fett: Name'),
+                    'bold_birth' => BlockStyle::boldOption('Fett: Geburtsdatum'),
+                    'bold_street' => BlockStyle::boldOption('Fett: Straße'),
+                    'bold_city' => BlockStyle::boldOption('Fett: PLZ/Wohnort'),
+                    'bold_phone' => BlockStyle::boldOption('Fett: Telefon'),
+                    'bold_indication' => BlockStyle::boldOption('Fett: Indikation'),
                 ],
                 'texts' => [
                     'title' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Patientendaten:'],
@@ -230,10 +237,14 @@ final class PatientCardTemplate
             ],
             'summary' => [
                 'label' => 'Abschlussblock',
-                'description' => 'Abschlussblock am Fuß von Seite 1 mit Bericht, Bemerkung, Arzt, nächster Kontrolle und dem Barcode der Patientenkennung.',
+                'description' => 'Abschlussblock am Fuß von Seite 1 mit Bericht, Bemerkung, Arzt, nächster Kontrolle und dem Barcode der Patientenkennung. Je Zeile lässt sich einstellen, ob die Beschriftung oder der Wert fett erscheint.',
                 'unique' => true,
                 'options' => [
                     'show_barcode' => ['label' => 'Barcode anzeigen', 'type' => 'bool', 'default' => true],
+                    'bold_other' => BlockStyle::boldOption('Fett: Sonstiges'),
+                    'bold_remark' => BlockStyle::boldOption('Fett: Bemerkung'),
+                    'bold_physician' => BlockStyle::boldOption('Fett: Arzt'),
+                    'bold_next_control' => BlockStyle::boldOption('Fett: nächste Kontrolle'),
                 ],
                 'texts' => [
                     'label_other' => ['label' => 'Beschriftung Sonstiges', 'multiline' => false, 'default' => 'Sonstiges'],
@@ -271,6 +282,11 @@ final class PatientCardTemplate
                 ],
             ],
         ];
+        // Jeder Baustein erhält die Schriftgröße als erste Option; vorhandene Optionen bleiben.
+        foreach ($definitions as $type => $definition) {
+            $definitions[$type]['options'] = ['font_size' => BlockStyle::fontSizeOption()] + $definition['options'];
+        }
+        return $definitions;
     }
 
     /**

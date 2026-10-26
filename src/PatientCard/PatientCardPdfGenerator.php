@@ -6,6 +6,7 @@ namespace App\PatientCard;
 
 use App\Report\Pdf\ImageData;
 use App\Report\Pdf\PdfDocument;
+use App\Support\BlockStyle;
 use DateTimeImmutable;
 use RuntimeException;
 
@@ -145,6 +146,9 @@ final class PatientCardPdfGenerator
     /** @var array<string, string> Werte der Platzhalter des Ausweises */
     private array $values = [];
 
+    /** Schriftgroesse des aktuellen Bausteins, relativ zur Grundgroesse. */
+    private float $scale = 1.0;
+
     public function __construct(private readonly bool $compress = true)
     {
     }
@@ -261,7 +265,9 @@ final class PatientCardPdfGenerator
 
         $bottom = max($y['left'], $y['right']);
         if ($summary !== null) {
+            $this->scale = BlockStyle::scale($summary);
             $bottom = $this->summaryBlock($summary, $bottom + self::SUMMARY_GAP);
+            $this->scale = 1.0;
         }
         if ($bottom > self::BOTTOM_LIMIT) {
             throw new RuntimeException(
@@ -316,7 +322,8 @@ final class PatientCardPdfGenerator
      */
     private function blockOne(array $block, float $x, float $y, float $width): float
     {
-        return match ((string) $block['type']) {
+        $this->scale = BlockStyle::scale($block);
+        $y = match ((string) $block['type']) {
             'patient_data' => $this->patientDataBlock($block, $x, $y, $width),
             'emergency_contact' => $this->emergencyContactBlock($block, $x, $y, $width),
             'physician' => $this->physicianBlock($block, $x, $y, $width),
@@ -326,6 +333,8 @@ final class PatientCardPdfGenerator
             'notice' => $this->noticeBlock($block, $x, $y, $width),
             default => $y,
         };
+        $this->scale = 1.0;
+        return $y;
     }
 
     /**
@@ -338,15 +347,25 @@ final class PatientCardPdfGenerator
         $patient = $this->card['patient'];
 
         $y = $this->sectionTitle($x, $y, $width, $this->text($block, 'title'));
-        $rows = [
-            [$this->text($block, 'label_name'), $this->orEmpty((string) $patient['patient_name'])],
-            [$this->text($block, 'label_birth'), $this->orEmpty((string) $patient['date_of_birth_display'])],
-            [$this->text($block, 'label_street'), $this->orEmpty((string) $patient['street'])],
-            [$this->text($block, 'label_city'), $this->orEmpty(trim((string) $patient['postal_code'] . ' ' . (string) $patient['city']))],
-            [$this->text($block, 'label_phone'), $this->orEmpty((string) $patient['phone'])],
-        ];
+        $rows = [];
+        foreach ([
+            ['label_name', 'bold_name', $this->orEmpty((string) $patient['patient_name'])],
+            ['label_birth', 'bold_birth', $this->orEmpty((string) $patient['date_of_birth_display'])],
+            ['label_street', 'bold_street', $this->orEmpty((string) $patient['street'])],
+            ['label_city', 'bold_city', $this->orEmpty(trim((string) $patient['postal_code'] . ' ' . (string) $patient['city']))],
+            ['label_phone', 'bold_phone', $this->orEmpty((string) $patient['phone'])],
+        ] as [$labelKey, $boldKey, $value]) {
+            [$labelFont, $valueFont] = BlockStyle::emphasis($block, $boldKey);
+            $rows[] = [$this->text($block, $labelKey), $value, $labelFont, $valueFont];
+        }
         if (PatientCardTemplate::blockOption($block, 'show_indication')) {
-            $rows[] = [$this->text($block, 'label_indication'), $this->orEmpty((string) $patient['indication'])];
+            [$labelFont, $valueFont] = BlockStyle::emphasis($block, 'bold_indication');
+            $rows[] = [
+                $this->text($block, 'label_indication'),
+                $this->orEmpty((string) $patient['indication']),
+                $labelFont,
+                $valueFont,
+            ];
         }
         return $this->fieldRows($x, $y, $width, $rows);
     }
@@ -503,16 +522,28 @@ final class PatientCardPdfGenerator
         $this->pdf->line($x, $y, $x + $width, $y, self::RULE, 0.9);
 
         $y = $this->fieldRows($x, $y + 11.0, $width, [
-            [$this->text($block, 'label_other'), $this->orEmpty((string) $followUp['report_label'])],
-            [$this->text($block, 'label_remark'), ''],
-            [$this->text($block, 'label_physician'), $this->orEmpty((string) $followUp['control_physician'])],
-            [$this->text($block, 'label_next_control'), $this->orEmpty((string) $followUp['next_control_display'])],
+            $this->emphasisedRow($block, 'bold_other', $this->text($block, 'label_other'), $this->orEmpty((string) $followUp['report_label'])),
+            $this->emphasisedRow($block, 'bold_remark', $this->text($block, 'label_remark'), ''),
+            $this->emphasisedRow($block, 'bold_physician', $this->text($block, 'label_physician'), $this->orEmpty((string) $followUp['control_physician'])),
+            $this->emphasisedRow($block, 'bold_next_control', $this->text($block, 'label_next_control'), $this->orEmpty((string) $followUp['next_control_display'])),
         ], self::SUMMARY_LABEL_WIDTH, self::SIZE_SUMMARY, self::LINE_SUMMARY);
 
         if (!PatientCardTemplate::blockOption($block, 'show_barcode')) {
             return $y;
         }
         return $this->barcode($x, $y, (string) $this->card['patient']['patient_identifier']);
+    }
+
+    /**
+     * Zeile aus Beschriftung und Wert mit der im Baustein gewaehlten Fettdarstellung.
+     *
+     * @param array<string, mixed> $block
+     * @return array{0: string, 1: string, 2: string, 3: string}
+     */
+    private function emphasisedRow(array $block, string $option, string $label, string $value): array
+    {
+        [$labelFont, $valueFont] = BlockStyle::emphasis($block, $option);
+        return [$label, $value, $labelFont, $valueFont];
     }
 
     /**
@@ -695,10 +726,12 @@ final class PatientCardPdfGenerator
                 continue;
             }
             $y += 8.0;
+            $this->scale = BlockStyle::scale($block);
             if ($heading !== '') {
                 $y = $this->sectionTitle($x, $y, $width, $heading);
             }
             $y = $this->paragraph($x, $y, $width, $text, 'regular', self::SIZE_NOTICE);
+            $this->scale = 1.0;
         }
 
         if ($y > self::BOTTOM_LIMIT) {
@@ -745,10 +778,11 @@ final class PatientCardPdfGenerator
             return 0.0;
         }
         $height = 8.0;
+        $scale = BlockStyle::scale($block);
         if ($heading !== '') {
-            $height += self::SIZE_SECTION * self::LINE_SECTION;
+            $height += self::SIZE_SECTION * $scale * self::LINE_SECTION;
         }
-        return $height + count($this->wrap($text, $width, 'regular', self::SIZE_NOTICE)) * self::SIZE_NOTICE * self::LINE_TEXT + 1.5;
+        return $height + count($this->wrap($text, $width, 'regular', self::SIZE_NOTICE * $scale)) * self::SIZE_NOTICE * $scale * self::LINE_TEXT + 1.5;
     }
 
     /**
@@ -1076,6 +1110,7 @@ final class PatientCardPdfGenerator
         float $size = self::SIZE_SECTION,
         float $lineHeightRatio = self::LINE_SECTION,
     ): float {
+        $size *= $this->scale;
         $this->pdf->text($x, $y + 0.72 * $size, $title, 'bold', $size, self::INK);
         return $y + $size * $lineHeightRatio;
     }
@@ -1089,7 +1124,7 @@ final class PatientCardPdfGenerator
     /**
      * Beschriftung links, Wert rechts daneben; die Zeilenhoehe richtet sich nach dem laengeren Text.
      *
-     * @param list<array{0: string, 1: string}> $rows
+     * @param list<array{0: string, 1: string, 2?: string, 3?: string}> $rows
      */
     private function fieldRows(
         float $x,
@@ -1100,16 +1135,19 @@ final class PatientCardPdfGenerator
         float $fontSize = self::SIZE_FIELD,
         float $lineHeightRatio = self::LINE_FIELD,
     ): float {
+        $fontSize *= $this->scale;
         $lineHeight = $fontSize * $lineHeightRatio;
         foreach ($rows as $row) {
-            $labelLines = $this->wrap($row[0], $labelWidth - 2.0, 'regular', $fontSize);
-            $valueLines = $this->wrap($row[1], $width - $labelWidth, 'bold', $fontSize);
+            $labelFont = $row[2] ?? 'regular';
+            $valueFont = $row[3] ?? 'bold';
+            $labelLines = $this->wrap($row[0], $labelWidth - 2.0, $labelFont, $fontSize);
+            $valueLines = $this->wrap($row[1], $width - $labelWidth, $valueFont, $fontSize);
             foreach ($labelLines as $index => $line) {
                 $this->pdf->text(
                     $x,
                     $y + $index * $lineHeight + 0.72 * $fontSize,
                     $line,
-                    'regular',
+                    $labelFont,
                     $fontSize,
                     self::INK,
                 );
@@ -1119,7 +1157,7 @@ final class PatientCardPdfGenerator
                     $x + $labelWidth,
                     $y + $index * $lineHeight + 0.72 * $fontSize,
                     $line,
-                    'bold',
+                    $valueFont,
                     $fontSize,
                     self::INK,
                 );
@@ -1168,6 +1206,7 @@ final class PatientCardPdfGenerator
         array $color = self::INK,
         float $lineHeightRatio = self::LINE_TEXT,
     ): float {
+        $size *= $this->scale;
         $text = trim($text) === '' ? self::EMPTY : $text;
         $lineHeight = $size * $lineHeightRatio;
         foreach ($this->wrap($text, $width, $font, $size) as $line) {
@@ -1214,6 +1253,7 @@ final class PatientCardPdfGenerator
         array $rows,
         float $fontSize = self::SIZE_TABLE,
     ): float {
+        $fontSize *= $this->scale;
         $lineHeight = $fontSize * self::LINE_TEXT;
         $cursor = $x;
         foreach ($columns as $column) {

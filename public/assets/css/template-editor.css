@@ -306,6 +306,11 @@
 .te-p-pairs { display: grid; grid-template-columns: calc(var(--mm) * 34) 1fr calc(var(--mm) * 34) 1fr; margin: 0; row-gap: calc(var(--mm) * .4); column-gap: calc(var(--mm) * 2); }
 .te-p-pairs dt { color: #555; }
 .te-p-pairs dd { margin: 0; }
+.te-p-label.is-bold, .te-p-value.is-bold { font-weight: 600; color: inherit; }
+/* Schriftgroesse je Baustein (Vorschau); die Ueberschriften skalieren mit, bleiben aber fett. */
+.te-pblock--fs-small { font-size: .85em; }
+.te-pblock--fs-large { font-size: 1.15em; }
+.te-pblock--fs-xlarge { font-size: 1.3em; }
 .te-p-table { width: 100%; border-collapse: collapse; font-size: .82em; }
 .te-p-table th, .te-p-table td { padding: calc(var(--mm) * .6) calc(var(--mm) * .8); border-bottom: 1px solid #ccc; text-align: left; }
 .te-p-table th { background: #eef1f5; }
