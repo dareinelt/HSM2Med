@@ -160,6 +160,35 @@ body.office {
 .titlebar__patient.is-active { border-left-color: var(--office-accent); background: var(--office-accent-soft); }
 .titlebar__patient.is-active .app-icon { color: var(--office-accent); }
 .titlebar__patient:hover { border-color: var(--office-accent-line); }
+/* Kontextmenü der Patientenwahl (Rechtsklick auf die Kachel bei aktivem Patienten). */
+.contextmenu {
+    position: fixed;
+    z-index: 60;
+    min-width: 15rem;
+    padding: .25rem;
+    border: 1px solid var(--office-line-strong);
+    border-radius: 6px;
+    background: var(--office-ribbon);
+    box-shadow: 0 12px 40px rgba(16, 32, 56, .3);
+}
+.contextmenu__form { margin: 0; }
+.contextmenu__item {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    width: 100%;
+    padding: .45rem .6rem;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--office-ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.contextmenu__item:hover,
+.contextmenu__item:focus-visible { background: var(--office-hover); outline: none; }
+.contextmenu__item .app-icon { color: var(--office-accent); flex: none; }
 
 /* ------------------------------------------------------------- Funktionsband */
 .ribbon { background: var(--office-ribbon); }

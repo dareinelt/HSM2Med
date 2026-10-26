@@ -89,7 +89,8 @@ $permitted = $permitted ?? View::permitted($user);
             </a>
         <?php else: ?>
             <a class="titlebar__patient is-active" href="/patients/<?= $e($activePatient['id']) ?>"
-               title="Aktiver Patient – patientenbezogene Vorgänge beziehen sich auf diesen Patienten">
+               title="Aktiver Patient – patientenbezogene Vorgänge beziehen sich auf diesen Patienten. Rechtsklick öffnet die Patientenauswahl."
+               data-patient-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="patient-context-menu">
                 <?= $icon('patients', 'app-icon app-icon--sm') ?>
                 <span class="titlebar__patient-text">
                     <strong><?= $e($activePatient['name']) ?></strong>
@@ -200,6 +201,19 @@ $permitted = $permitted ?? View::permitted($user);
     <span class="statusbar__grow"></span>
     <span class="statusbar__item statusbar__note">Automatisch erzeugte Datendarstellung – keine medizinische Bewertung, Diagnose oder Empfehlung. Keine originale Abbott-/Merlin-Dokumentation.</span>
 </footer>
+<?php // Kontextmenü der Patientenwahl: nur bei aktivem Patienten, Rechtsklick auf die Kachel. ?>
+<?php if ($activePatient !== null): ?>
+    <div class="contextmenu" id="patient-context-menu" role="menu" aria-label="Patientenauswahl"
+         data-patient-menu-panel<?= $inert ?> hidden>
+        <form method="post" action="/patients/select/clear" class="contextmenu__form" role="none">
+            <?= $csrf() ?>
+            <button type="submit" class="contextmenu__item" role="menuitem">
+                <?= $icon('undo', 'app-icon app-icon--sm') ?>
+                <span>Patientenauswahl zurücksetzen</span>
+            </button>
+        </form>
+    </div>
+<?php endif; ?>
 <dialog class="author-info" aria-label="Autoren-Info" data-author-info-dialog<?= $inert ?>>
     <form method="dialog" class="author-info__head">
         <button type="submit" class="author-info__close" title="Schließen" aria-label="Schließen">
