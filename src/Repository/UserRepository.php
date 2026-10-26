@@ -17,7 +17,8 @@ use PDO;
 final class UserRepository
 {
     private const string COLUMNS = 'id, username, display_name, title, first_name, last_name, signature_id,'
-        . ' is_active, failed_attempts, locked_until, last_login_at, password_changed_at, created_at, updated_at';
+        . ' is_active, failed_attempts, locked_until, last_login_at, password_changed_at, must_change_password,'
+        . ' created_at, updated_at';
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -89,7 +90,7 @@ final class UserRepository
     {
         $rows = $this->pdo->query(
             'SELECT id, username, display_name, title, first_name, last_name, signature_id, is_active,'
-            . ' last_login_at, created_at, updated_at FROM users ORDER BY is_active DESC, username'
+            . ' must_change_password, last_login_at, created_at, updated_at FROM users ORDER BY is_active DESC, username'
         )->fetchAll(PDO::FETCH_ASSOC);
         $groups = $this->groupMap();
         $permissions = $this->permissionMap();
@@ -147,13 +148,15 @@ final class UserRepository
         ?string $title = null,
         ?string $firstName = null,
         ?string $lastName = null,
+        bool $mustChangePassword = false,
     ): int {
         $stmt = $this->pdo->prepare(
             'INSERT INTO users (username, display_name, title, first_name, last_name, password_hash, is_active,'
-            . ' created_at, updated_at, password_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            . ' created_at, updated_at, password_changed_at, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $username, $displayName, $title, $firstName, $lastName, $passwordHash, $isActive ? 1 : 0, $now, $now, $now,
+            $mustChangePassword ? 1 : 0,
         ]);
         return (int) $this->pdo->lastInsertId();
     }
@@ -167,12 +170,15 @@ final class UserRepository
         ?string $title = null,
         ?string $firstName = null,
         ?string $lastName = null,
+        bool $mustChangePassword = false,
     ): void {
         $stmt = $this->pdo->prepare(
             'UPDATE users SET username = ?, display_name = ?, title = ?, first_name = ?, last_name = ?,'
-            . ' is_active = ?, updated_at = ? WHERE id = ?'
+            . ' is_active = ?, must_change_password = ?, updated_at = ? WHERE id = ?'
         );
-        $stmt->execute([$username, $displayName, $title, $firstName, $lastName, $isActive ? 1 : 0, $now, $id]);
+        $stmt->execute([
+            $username, $displayName, $title, $firstName, $lastName, $isActive ? 1 : 0, $mustChangePassword ? 1 : 0, $now, $id,
+        ]);
     }
 
     /** Hinterlegte Unterschrift setzen oder entfernen (null). */
@@ -189,12 +195,17 @@ final class UserRepository
         return $stmt->fetchColumn() !== false;
     }
 
-    public function setPassword(int $id, string $passwordHash, string $now): void
+    /**
+     * Setzt einen neuen Kennwort-Hash. Mit $mustChangePassword = true ist bei der naechsten
+     * Anmeldung zuerst ein eigenes Kennwort zu setzen (Vorgabe der Administration).
+     */
+    public function setPassword(int $id, string $passwordHash, string $now, bool $mustChangePassword = false): void
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?'
+            'UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ?,'
+            . ' must_change_password = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?'
         );
-        $stmt->execute([$passwordHash, $now, $now, $id]);
+        $stmt->execute([$passwordHash, $now, $now, $mustChangePassword ? 1 : 0, $id]);
     }
 
     /**

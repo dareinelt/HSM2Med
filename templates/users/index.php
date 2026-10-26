@@ -102,6 +102,9 @@ foreach ($users as $account) {
                         <?php else: ?>
                             <span class="badge level-warning">deaktiviert</span>
                         <?php endif; ?>
+                        <?php if ($account->mustChangePassword): ?>
+                            <span class="badge level-warning">Kennwortwechsel offen</span>
+                        <?php endif; ?>
                     </td>
                     <td><?= $account->lastLoginAt === null ? '<span class="muted">noch nie</span>' : $e($view::dateTime($account->lastLoginAt)) ?></td>
                     <td class="nowrap">
@@ -113,7 +116,8 @@ foreach ($users as $account) {
         </table>
     </div>
     <p class="muted">Kennwörter werden ausschließlich als Hash gespeichert und sind auch hier nicht
-        lesbar. Ein vergessenes Kennwort setzt die Administration unter „Bearbeiten“ neu.</p>
+        lesbar. Ein vergessenes Kennwort setzt die Administration unter „Bearbeiten“ neu; die
+        betroffene Person muss es bei der nächsten Anmeldung ändern.</p>
 </section>
 
 <section class="card">

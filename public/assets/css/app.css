@@ -137,6 +137,26 @@ label.check input { width: auto; margin-top: .25rem; flex: 0 0 auto; }
 .signature-preview { margin: 0 0 .4rem; }
 .signature-preview img { max-width: 100%; height: auto; max-height: 120px; border: 1px solid var(--border); border-radius: 4px; background: #fff; padding: .3rem; }
 
+/* Kennwortstaerke: Hilfe beim Vergeben, keine Sperre. Die Stufe setzt app.js als data-level. */
+.password-strength { margin-top: .4rem; }
+.strength-bar-wrap { height: 6px; background: var(--primary-light); border-radius: 3px; overflow: hidden; }
+.strength-bar { height: 100%; width: 0; border-radius: 3px; background: var(--muted); transition: width .25s ease, background .25s ease; }
+.password-strength[data-level="1"] .strength-bar { width: 15%; background: var(--error); }
+.password-strength[data-level="2"] .strength-bar { width: 30%; background: #c2410c; }
+.password-strength[data-level="3"] .strength-bar { width: 55%; background: var(--warning); }
+.password-strength[data-level="4"] .strength-bar { width: 80%; background: #15803d; }
+.password-strength[data-level="5"] .strength-bar { width: 100%; background: var(--ok); }
+.strength-label { margin: .25rem 0 0; font-size: .8rem; min-height: 1.1em; color: var(--muted); }
+.password-strength[data-level="1"] .strength-label,
+.password-strength[data-level="2"] .strength-label { color: var(--error); }
+.password-strength[data-level="3"] .strength-label { color: var(--warning); }
+.password-strength[data-level="4"] .strength-label,
+.password-strength[data-level="5"] .strength-label { color: var(--ok); }
+.strength-rules { list-style: none; display: flex; flex-wrap: wrap; gap: .15rem .9rem; margin: .3rem 0 0; padding: 0; font-size: .78rem; color: var(--muted); }
+.strength-rules li::before { content: "○"; margin-right: .3rem; }
+.strength-rules li[data-met="true"] { color: var(--ok); }
+.strength-rules li[data-met="true"]::before { content: "✓"; }
+
 /* Assistent: Schrittumschaltung. Ohne JavaScript bleiben alle Schritte sichtbar. */
 .wizard-form[data-wizard="on"] .wizard-step { display: none; }
 .wizard-form[data-wizard="on"] .wizard-step.is-active { display: block; }

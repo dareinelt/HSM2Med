@@ -8,7 +8,7 @@
  * @var Closure $e
  * @var Closure $icon
  * @var ?\App\User\User $user
- * @var array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>} $values
+ * @var array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,must_change_password:bool,groups:list<int>} $values
  * @var list<array{id:int,code:string,label:string,description:string,is_system:bool,member_count:int,permissions:list<string>}> $groups
  * @var array{id:int,sha256:string,mime_type:string,filename:string,width:int,height:int,created_at:string}|null $signature
  * @var string|null $signerName
@@ -91,6 +91,14 @@ $selected = array_map(static fn (int $id): string => (string) $id, $values['grou
             </span>
         </label>
         <?php if ($isSelf): ?><input type="hidden" name="is_active" value="1"><?php endif; ?>
+        <label class="check">
+            <input type="checkbox" name="must_change_password" value="1"<?= $values['must_change_password'] ? ' checked' : '' ?>>
+            <span>Muss Kennwort beim nächsten Login ändern
+                <span class="muted">(empfohlen, wenn das Kennwort hier vergeben wurde)</span>
+            </span>
+        </label>
+        <p class="muted">Ist die Pflicht gesetzt, führt die nächste Anmeldung zuerst zu „Kennwort ändern“;
+            bis dahin bleiben alle anderen Bereiche gesperrt. Mit dem eigenen Kennwort entfällt die Pflicht.</p>
         <p class="muted">Deaktivierte Konten können sich nicht anmelden; die Zuordnung früherer
             Vorgänge bleibt erhalten. Konten werden nie gelöscht.</p>
     </fieldset>
@@ -128,6 +136,7 @@ $selected = array_map(static fn (int $id): string => (string) $id, $values['grou
                 <label for="password">Kennwort <small class="muted">(mind. <?= $e($minPasswordLength) ?> Zeichen)</small></label>
                 <input type="password" id="password" name="password" autocomplete="new-password" minlength="<?= $e($minPasswordLength) ?>" required>
                 <?php if (isset($errors['password'])): ?><p class="field-error"><?= $e($errors['password']) ?></p><?php endif; ?>
+                <?= $view->renderPartial('partials/password_strength', ['for' => 'password', 'minimum' => $minPasswordLength]) ?>
             </div>
             <div class="field">
                 <label for="repeat_password">Kennwort wiederholen</label>
@@ -189,13 +198,14 @@ $selected = array_map(static fn (int $id): string => (string) $id, $values['grou
     <form method="post" action="/system/users/<?= $e($user->id) ?>/password" class="card" autocomplete="off">
         <?= $csrf() ?>
         <h2><?= $icon('key', 'app-icon app-icon--sm') ?> Kennwort neu setzen</h2>
-        <p class="muted">Für den Fall eines vergessenen Kennworts. Die betroffene Person sollte das
-            Kennwort danach unter „Kennwort ändern“ selbst ersetzen.</p>
+        <p class="muted">Für den Fall eines vergessenen Kennworts. Die Person muss das Kennwort bei der
+            nächsten Anmeldung selbst ersetzen; die Pflicht wird dabei automatisch aufgehoben.</p>
         <div class="field-row">
             <div class="field">
                 <label for="new_password">Neues Kennwort <small class="muted">(mind. <?= $e($minPasswordLength) ?> Zeichen)</small></label>
                 <input type="password" id="new_password" name="password" autocomplete="new-password" minlength="<?= $e($minPasswordLength) ?>" required>
                 <?php if (isset($errors['password'])): ?><p class="field-error"><?= $e($errors['password']) ?></p><?php endif; ?>
+                <?= $view->renderPartial('partials/password_strength', ['for' => 'new_password', 'minimum' => $minPasswordLength]) ?>
             </div>
             <div class="field">
                 <label for="new_repeat_password">Kennwort wiederholen</label>
