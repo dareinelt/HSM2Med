@@ -17,8 +17,11 @@
  * @var int $minPasswordLength
  * @var int $currentUserId
  */
+use App\User\Permission;
+
 $isNew = $user === null;
 $isSelf = !$isNew && $user->id === $currentUserId;
+$protectsAdminRole = $isSelf && $user->hasPermission(Permission::USERS);
 $selected = array_map(static fn (int $id): string => (string) $id, $values['groups']);
 ?>
 <div class="page-head">
@@ -98,13 +101,18 @@ $selected = array_map(static fn (int $id): string => (string) $id, $values['grou
             <p class="muted">Es sind noch keine Gruppen eingerichtet.</p>
         <?php else: ?>
             <?php foreach ($groups as $group): ?>
+                <?php $locksAdminRole = $protectsAdminRole && in_array(Permission::USERS, $group['permissions'], true); ?>
                 <label class="check">
                     <input type="checkbox" name="groups[]" value="<?= $e($group['id']) ?>"
-                        <?= in_array((string) $group['id'], $selected, true) ? 'checked' : '' ?>>
+                        <?= ($locksAdminRole || in_array((string) $group['id'], $selected, true)) ? 'checked' : '' ?><?= $locksAdminRole ? ' disabled' : '' ?>>
+                    <?php if ($locksAdminRole): ?><input type="hidden" name="groups[]" value="<?= $e($group['id']) ?>"><?php endif; ?>
                     <span>
                         <strong><?= $e($group['label']) ?></strong>
                         <span class="recipient-address muted"><?= $e($group['description']) ?></span>
                         <small class="muted"><?= $e($group['member_count']) ?> Mitglied(er)</small>
+                        <?php if ($locksAdminRole): ?>
+                            <small class="muted">Die eigene Admin-Rolle lässt sich nicht entfernen.</small>
+                        <?php endif; ?>
                     </span>
                 </label>
             <?php endforeach; ?>

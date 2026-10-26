@@ -19,6 +19,8 @@ use Throwable;
  *  * Benutzer werden nie geloescht, nur deaktiviert – historische Vorgaenge bleiben zuordenbar.
  *  * Die letzte aktive Person mit dem Recht "Benutzerverwaltung" kann sich nicht selbst
  *    aussperren: weder durch Deaktivieren, noch durch Entfernen des Rechts aus ihrer Gruppe.
+ *  * Niemand kann sich selbst die Admin-Rolle entziehen – auch dann nicht, wenn weitere
+ *    Personen mit diesem Recht vorhanden sind.
  *  * Kennwoerter werden nur als Hash gespeichert (password_hash, PASSWORD_DEFAULT). Nach zu
  *    vielen Fehlanmeldungen wird das Konto zeitweise gesperrt.
  *  * Das Kennwort des Administrators kommt beim ersten Start aus der Umgebung
@@ -182,8 +184,13 @@ final class UserService
         }
         $this->requireKnownGroups($input->groupIds);
 
-        if ($currentUserId === $id && !$input->isActive) {
-            throw UserException::rule('is_active', 'Das eigene Benutzerkonto kann nicht deaktiviert werden.');
+        if ($currentUserId === $id) {
+            if (!$input->isActive) {
+                throw UserException::rule('is_active', 'Das eigene Benutzerkonto kann nicht deaktiviert werden.');
+            }
+            if ($existing->hasPermission(Permission::USERS) && !$this->groupsGrantPermission($input->groupIds, Permission::USERS)) {
+                throw UserException::rule('groups', 'Die eigene Admin-Rolle kann nicht entfernt werden.');
+            }
         }
 
         $own = !$this->pdo->inTransaction();
@@ -457,6 +464,22 @@ final class UserService
                 throw UserException::rule('groups', 'Eine gewählte Gruppe existiert nicht mehr. Bitte die Auswahl erneuern.');
             }
         }
+    }
+
+    /**
+     * Hat mindestens eine der gewaehlten Gruppen dieses Recht?
+     *
+     * @param list<int> $groupIds
+     */
+    private function groupsGrantPermission(array $groupIds, string $permission): bool
+    {
+        foreach ($groupIds as $groupId) {
+            $group = $this->groups->find($groupId);
+            if ($group !== null && in_array($permission, $group['permissions'], true)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
