@@ -260,6 +260,9 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
         $this->assertSame(200, $response->status);
         $this->assertContains('Kein Patient gewählt', $response->body);
         $this->assertContains('is-disabled', $response->body);
+        // Ohne aktiven Patienten gibt es kein Kontextmenü an der Patientenwahl.
+        $this->assertFalse(str_contains($response->body, 'data-patient-menu-trigger'));
+        $this->assertFalse(str_contains($response->body, 'data-patient-menu-panel'));
     }
 
     /** Mit Patienten zeigt der Rahmen den aktiven Patienten; das Funktionsband ist bedienbar. */
@@ -273,6 +276,11 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
         $this->assertSame(200, $response->status);
         $this->assertContains('Mustermann, Erika', $response->body);
         $this->assertFalse(str_contains($response->body, 'Kein Patient gewählt'));
+        // Rechtsklick auf die Kachel bietet das Zuruecksetzen der Patientenauswahl an.
+        $this->assertContains('data-patient-menu-trigger', $response->body);
+        $this->assertContains('data-patient-menu-panel', $response->body);
+        $this->assertContains('Patientenauswahl zurücksetzen', $response->body);
+        $this->assertContains('action="/patients/select/clear"', $response->body);
     }
 
     /** "Brief erstellen" springt mit aktivem Patienten direkt in den Assistenten. */

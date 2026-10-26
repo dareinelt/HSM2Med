@@ -243,6 +243,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Patientenwahl in der Titelleiste: Rechtsklick auf die Kachel oeffnet ein eigenes
+    // Kontextmenue zum Zuruecksetzen der Auswahl. Die Kachel traegt das Ausloeser-Attribut
+    // nur bei aktivem Patienten; ohne Auswahl gibt es daher auch kein Menue.
+    const patientMenuTrigger = document.querySelector('[data-patient-menu-trigger]');
+    const patientMenu = document.querySelector('[data-patient-menu-panel]');
+    if (patientMenuTrigger && patientMenu) {
+        let patientMenuOpen = false;
+        const closePatientMenu = (restoreFocus) => {
+            if (!patientMenuOpen) {
+                return;
+            }
+            patientMenuOpen = false;
+            patientMenu.hidden = true;
+            patientMenuTrigger.setAttribute('aria-expanded', 'false');
+            if (restoreFocus) {
+                patientMenuTrigger.focus();
+            }
+        };
+        const openPatientMenu = (x, y) => {
+            patientMenu.hidden = false;
+            patientMenuOpen = true;
+            patientMenuTrigger.setAttribute('aria-expanded', 'true');
+            // Das Menue bleibt vollstaendig im sichtbaren Bereich.
+            const rect = patientMenu.getBoundingClientRect();
+            const left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 4));
+            const top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 4));
+            patientMenu.style.left = left + 'px';
+            patientMenu.style.top = top + 'px';
+            const firstItem = patientMenu.querySelector('[role="menuitem"]');
+            if (firstItem) {
+                firstItem.focus({ preventScroll: true });
+            }
+        };
+        patientMenuTrigger.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            openPatientMenu(event.clientX, event.clientY);
+        });
+        // Tastatur: Kontextmenuetaste und Umschalt+F10 oeffnen das Menue an der Kachel.
+        patientMenuTrigger.addEventListener('keydown', (event) => {
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                event.preventDefault();
+                const rect = patientMenuTrigger.getBoundingClientRect();
+                openPatientMenu(rect.left, rect.bottom + 4);
+            }
+        });
+        document.addEventListener('click', (event) => {
+            if (patientMenuOpen && !patientMenu.contains(event.target)) {
+                closePatientMenu(false);
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (patientMenuOpen && event.key === 'Escape') {
+                closePatientMenu(true);
+            }
+        });
+        document.addEventListener('scroll', () => closePatientMenu(false), true);
+        window.addEventListener('resize', () => closePatientMenu(false));
+    }
+
     // Brief-Assistent: geaenderte Messwertauswahl -> Rueckfrage, ob die Auswahl als Standard
     // fuer alle kuenftigen Briefe gespeichert werden soll. Gefragt wird einmal je Formular.
     // Ohne JavaScript bleibt das Kontrollkaestchen im Schritt sichtbar und wird beim Absenden

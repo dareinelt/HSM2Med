@@ -320,7 +320,9 @@ Patientenübersicht um und weist auf die fehlende Auswahl hin.
 
 Der aktive Patient steht in der Titelleiste und in der Statusleiste. Ausgewählt wird er in der
 Patientenübersicht über *Auswählen* oder in der Akte über *Als aktiven Patienten wählen*;
-*Auswahl aufheben* entfernt die Zuordnung wieder. **Das Anlegen eines Patienten wählt ihn
+*Auswahl aufheben* entfernt die Zuordnung wieder. Ein **Rechtsklick auf die Kachel des aktiven
+Patienten** in der Titelleiste öffnet zusätzlich ein Kontextmenü mit *Patientenauswahl
+zurücksetzen*; ohne aktiven Patienten erscheint dieses Menü nicht. **Das Anlegen eines Patienten wählt ihn
 automatisch als aktiven Patienten** – nach dem Anlegen kann der Import also sofort erfolgen.
 Ebenso führt *Brief erstellen* mit aktivem Patienten direkt in den Briefassistenten; die
 Patientenauswahl ist dort über *Anderen Patienten wählen* weiterhin erreichbar. Auch
