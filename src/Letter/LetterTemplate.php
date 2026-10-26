@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Letter;
 
+use App\Support\BlockStyle;
+
 /**
  * Briefvorlage (DIN 5008, Form B): Aufbau und alle festen Texte des Briefes.
  *
@@ -201,7 +203,7 @@ final class LetterTemplate
     public static function blockDefinitions(): array
     {
         $meta = ['label' => 'Stand der Fassung und Autor zeigen', 'type' => 'bool', 'default' => true];
-        return [
+        $definitions = [
             'subject' => [
                 'label' => 'Betreff',
                 'description' => 'Betreffzeile in Fettschrift (DIN 5008: ohne das Wort „Betreff").',
@@ -223,9 +225,14 @@ final class LetterTemplate
             ],
             'patient' => [
                 'label' => 'Patientendaten',
-                'description' => 'Name, Geburtsdatum, Patienten-ID und Anschrift aus dem Snapshot.',
+                'description' => 'Name, Geburtsdatum, Patienten-ID und Anschrift aus dem Snapshot. Je Zeile lässt sich einstellen, ob die Beschriftung oder der Wert fett erscheint; die Überschrift bleibt fett.',
                 'unique' => true,
-                'options' => [],
+                'options' => [
+                    'bold_name' => BlockStyle::boldOption('Fett: Name'),
+                    'bold_birth' => BlockStyle::boldOption('Fett: Geburtsdatum'),
+                    'bold_identifier' => BlockStyle::boldOption('Fett: Patienten-ID'),
+                    'bold_address' => BlockStyle::boldOption('Fett: Anschrift'),
+                ],
                 'texts' => [
                     'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Patientendaten'],
                     'label_name' => ['label' => 'Beschriftung Name', 'multiline' => false, 'default' => 'Name'],
@@ -237,9 +244,18 @@ final class LetterTemplate
             ],
             'aggregat' => [
                 'label' => 'Aggregat',
-                'description' => 'Gerätedaten aus dem letzten Import des Patienten in zwei Spalten (Hersteller, Modell, Seriennummer und Status links, Implantationsdatum, Implantationsort und Betriebsart rechts) und darunter die Sonden als je eine Zeile.',
+                'description' => 'Gerätedaten aus dem letzten Import des Patienten in zwei Spalten (Hersteller, Modell, Seriennummer und Status links, Implantationsdatum, Implantationsort und Betriebsart rechts) und darunter die Sonden als je eine Zeile. Je Zeile lässt sich einstellen, ob die Beschriftung oder der Wert fett erscheint; die Überschriften bleiben fett.',
                 'unique' => true,
-                'options' => [],
+                'options' => [
+                    'bold_manufacturer' => BlockStyle::boldOption('Fett: Hersteller'),
+                    'bold_implant_date' => BlockStyle::boldOption('Fett: Implantationsdatum'),
+                    'bold_model' => BlockStyle::boldOption('Fett: Modell'),
+                    'bold_implant_location' => BlockStyle::boldOption('Fett: Implantationsort'),
+                    'bold_serial' => BlockStyle::boldOption('Fett: Seriennummer'),
+                    'bold_mode' => BlockStyle::boldOption('Fett: Betriebsart'),
+                    'bold_status' => BlockStyle::boldOption('Fett: Status'),
+                    'bold_leads' => BlockStyle::boldOption('Fett: Sonden'),
+                ],
                 'texts' => [
                     'heading' => ['label' => 'Überschrift', 'multiline' => false, 'default' => 'Aggregat'],
                     'label_manufacturer' => ['label' => 'Beschriftung Hersteller', 'multiline' => false, 'default' => 'Hersteller'],
@@ -324,6 +340,11 @@ final class LetterTemplate
                 ],
             ],
         ];
+        // Jeder Baustein erhält die Schriftgröße als erste Option; vorhandene Optionen bleiben.
+        foreach ($definitions as $type => $definition) {
+            $definitions[$type]['options'] = ['font_size' => BlockStyle::fontSizeOption()] + $definition['options'];
+        }
+        return $definitions;
     }
 
     /**

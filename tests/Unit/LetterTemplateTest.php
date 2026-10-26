@@ -141,7 +141,7 @@ final class LetterTemplateTest extends TestCase
         $this->assertSame('befund', $normalized['blocks'][6]['type']);
         $this->assertSame('report', $normalized['blocks'][6]['id']);
         $this->assertSame('Befund: Schrittmacher-/ICD-Abfrage', $normalized['blocks'][6]['texts']['heading']);
-        $this->assertSame(['show_meta'], array_keys($normalized['blocks'][6]['options']));
+        $this->assertSame(['font_size', 'show_meta'], array_keys($normalized['blocks'][6]['options']));
     }
 
     public function testNormalizeRejectsInvalidTemplates(): void
@@ -289,6 +289,140 @@ final class LetterTemplateTest extends TestCase
             $this->assertNotContains($needle, $text);
         }
         $this->assertContains('Datum', $text);
+    }
+
+    /** Jeder Baustein bietet eine Schriftgroesse; die Vorgabe bleibt unveraendert. */
+    public function testEveryBlockOffersAFontSize(): void
+    {
+        $blocks = LetterTemplate::editorDefinition()['blocks'];
+        foreach ($blocks as $type => $definition) {
+            $this->assertSame('font_size', array_key_first($definition['options']), 'Baustein ' . $type);
+            $fontSize = $definition['options']['font_size'];
+            $this->assertSame('select', $fontSize['type']);
+            $this->assertSame('normal', $fontSize['default']);
+            $this->assertSame(['small', 'normal', 'large', 'xlarge'], array_keys($fontSize['choices']));
+        }
+
+        $default = LetterTemplate::default();
+        foreach ($default['blocks'] as $block) {
+            $this->assertSame('normal', $block['options']['font_size']);
+        }
+
+        // Die Vorgabe der Patienten- und Aggregatzeilen zeigt den Wert fett.
+        $patient = $default['blocks'][$this->blockIndex($default, 'patient')]['options'];
+        foreach (['bold_name', 'bold_birth', 'bold_identifier', 'bold_address'] as $option) {
+            $this->assertSame('value', $patient[$option]);
+        }
+        $aggregat = $default['blocks'][$this->blockIndex($default, 'aggregat')]['options'];
+        foreach (['bold_manufacturer', 'bold_implant_date', 'bold_model', 'bold_implant_location', 'bold_serial', 'bold_mode', 'bold_status', 'bold_leads'] as $option) {
+            $this->assertSame('value', $aggregat[$option]);
+        }
+    }
+
+    /** Schriftgroesse und Fettdruck werden wie jede Auswahl geprueft. */
+    public function testFontSizeAndBoldChoicesAreValidated(): void
+    {
+        $template = LetterTemplate::default();
+        $anamnesis = $this->blockIndex($template, 'anamnesis');
+        $patient = $this->blockIndex($template, 'patient');
+        $template['blocks'][$anamnesis]['options']['font_size'] = 'riesig';
+        $template['blocks'][$patient]['options']['bold_name'] = 'beides';
+        $error = $this->assertThrows(LetterException::class, fn () => LetterTemplate::normalize($template));
+        $errors = $error->fieldErrors();
+        $this->assertTrue(isset($errors['blocks.' . $anamnesis . '.options.font_size']));
+        $this->assertTrue(isset($errors['blocks.' . $patient . '.options.bold_name']));
+
+        // Fehlende Angaben (aeltere Fassungen) werden mit der Vorgabe ergaenzt.
+        $template = LetterTemplate::default();
+        unset($template['blocks'][$anamnesis]['options']['font_size']);
+        unset($template['blocks'][$patient]['options']['bold_birth']);
+        $normalized = LetterTemplate::normalize($template);
+        $this->assertSame('normal', $normalized['blocks'][$anamnesis]['options']['font_size']);
+        $this->assertSame('value', $normalized['blocks'][$patient]['options']['bold_birth']);
+    }
+
+    /** Die Schriftgroesse skaliert den ganzen Baustein, die Ueberschrift bleibt fett. */
+    public function testFontSizeScalesBlockContent(): void
+    {
+        $template = LetterTemplate::default();
+        $template['blocks'][$this->blockIndex($template, 'anamnesis')]['options']['font_size'] = 'xlarge';
+        $template = LetterTemplate::normalize($template);
+
+        $normal = $this->runsByText($this->generate(LetterTemplate::default()));
+        $scaled = $this->runsByText($this->generate($template));
+
+        $this->assertSame([10.5], array_column($normal['Anamnese'], 'size'));
+        $this->assertSame(['bold'], array_column($normal['Anamnese'], 'font'), 'Ueberschriften bleiben fett.');
+        $this->assertSame([13.65], array_column($scaled['Anamnese'], 'size'));
+        $this->assertSame(['bold'], array_column($scaled['Anamnese'], 'font'));
+        // Andere Bausteine behalten ihre Groesse.
+        $this->assertSame(array_column($normal['Befund'], 'size'), array_column($scaled['Befund'], 'size'));
+    }
+
+    /** Je Zeile der Patientendaten waehlbar, ob Beschriftung oder Wert fett ist. */
+    public function testPatientBlockBoldChoices(): void
+    {
+        $template = LetterTemplate::default();
+        $patient = $this->blockIndex($template, 'patient');
+        $template['blocks'][$patient]['options']['bold_name'] = 'label';
+        $template['blocks'][$patient]['options']['bold_birth'] = 'both';
+        $template['blocks'][$patient]['options']['bold_identifier'] = 'none';
+        $runs = $this->runsByText($this->generate(LetterTemplate::normalize($template)));
+
+        $this->assertSame('bold', $this->fontAt($runs, 'Name'), 'Beschriftung fett.');
+        $this->assertSame('regular', $this->fontAt($runs, 'LASTNAME, FIRSTNAME'), 'Wert normal.');
+        $this->assertSame('bold', $this->fontAt($runs, 'Geburtsdatum'));
+        $this->assertSame('bold', $this->fontAt($runs, '21.10.1938'), 'Beschriftung und Wert fett.');
+        $this->assertSame('regular', $this->fontAt($runs, 'Patienten-ID'));
+        $this->assertSame('regular', $this->fontAt($runs, '10358141'), 'Nichts fett.');
+        // Ohne eigene Angabe bleibt der Wert fett.
+        $this->assertSame('regular', $this->fontAt($runs, 'Anschrift'));
+        $this->assertSame('bold', $this->fontAt($runs, 'Musterstraße 12'));
+    }
+
+    /** Auch im Aggregat ist je Zeile waehlbar, was fett erscheint. */
+    public function testAggregatBoldChoices(): void
+    {
+        $template = LetterTemplate::default();
+        $aggregat = $this->blockIndex($template, 'aggregat');
+        $template['blocks'][$aggregat]['options']['bold_manufacturer'] = 'label';
+        $template['blocks'][$aggregat]['options']['bold_model'] = 'none';
+        $runs = $this->runsByText($this->generate(LetterTemplate::normalize($template)));
+
+        $this->assertSame('bold', $this->fontAt($runs, 'Hersteller'));
+        $this->assertSame('regular', $this->fontAt($runs, 'Beispielhersteller'));
+        $this->assertSame('regular', $this->fontAt($runs, 'Modell'));
+        $this->assertSame('regular', $this->fontAt($runs, 'PM-2000 407155'));
+        // Unveraenderte Zeilen zeigen weiterhin den Wert fett.
+        $this->assertSame('regular', $this->fontAt($runs, 'Seriennummer'));
+        $this->assertSame('bold', $this->fontAt($runs, '1000997498'));
+    }
+
+    /**
+     * @return array<string, list<array{font: string, size: float, text: string}>>
+     */
+    private function runsByText(string $pdf): array
+    {
+        $byText = [];
+        foreach (PdfText::runs($pdf) as $run) {
+            $byText[$run['text']][] = $run;
+        }
+        return $byText;
+    }
+
+    /**
+     * Schrift eines Textes in der Groesse der Bausteinzeilen (9.5 pt).
+     *
+     * @param array<string, list<array{font: string, size: float, text: string}>> $runs
+     */
+    private function fontAt(array $runs, string $text, float $size = 9.5): string
+    {
+        foreach ($runs[$text] ?? [] as $run) {
+            if (abs($run['size'] - $size) < 0.001) {
+                return $run['font'];
+            }
+        }
+        throw new RuntimeException('Text nicht in der erwarteten Groesse gefunden: ' . $text);
     }
 
     public function testFoldMarksAndLegacyDispatch(): void

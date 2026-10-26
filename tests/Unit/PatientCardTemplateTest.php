@@ -130,6 +130,135 @@ final class PatientCardTemplateTest extends TestCase
         $this->assertTrue(isset($this->assertThrows(PatientCardException::class, fn () => PatientCardTemplate::normalize($tooMany))->fieldErrors()['blocks']));
     }
 
+    /** Jeder Baustein des Ausweises bietet eine Schriftgroesse; die Vorgabe bleibt. */
+    public function testEveryBlockOffersAFontSize(): void
+    {
+        $blocks = PatientCardTemplate::editorDefinition()['blocks'];
+        foreach ($blocks as $type => $definition) {
+            $this->assertSame('font_size', array_key_first($definition['options']), 'Baustein ' . $type);
+            $this->assertSame(['small', 'normal', 'large', 'xlarge'], array_keys($definition['options']['font_size']['choices']));
+        }
+
+        $default = PatientCardTemplate::default();
+        foreach ($default['blocks'] as $block) {
+            $this->assertSame('normal', $block['options']['font_size']);
+        }
+        $patient = $default['blocks'][$this->blockIndex($default, 'patient_data')]['options'];
+        foreach (['bold_name', 'bold_birth', 'bold_street', 'bold_city', 'bold_phone', 'bold_indication'] as $option) {
+            $this->assertSame('value', $patient[$option]);
+        }
+        $summary = $default['blocks'][$this->blockIndex($default, 'summary')]['options'];
+        foreach (['bold_other', 'bold_remark', 'bold_physician', 'bold_next_control'] as $option) {
+            $this->assertSame('value', $summary[$option]);
+        }
+    }
+
+    /** Schriftgroesse und Fettdruck werden wie jede Auswahl geprueft. */
+    public function testFontSizeAndBoldChoicesAreValidated(): void
+    {
+        $template = PatientCardTemplate::default();
+        $patient = $this->blockIndex($template, 'patient_data');
+        $template['blocks'][$patient]['options']['font_size'] = 'riesig';
+        $template['blocks'][$patient]['options']['bold_name'] = 'beides';
+        $errors = $this->assertThrows(PatientCardException::class, fn () => PatientCardTemplate::normalize($template))->fieldErrors();
+        $this->assertTrue(isset($errors['blocks.' . $patient . '.options.font_size']));
+        $this->assertTrue(isset($errors['blocks.' . $patient . '.options.bold_name']));
+
+        // Fehlende Angaben (aeltere Fassungen) werden mit der Vorgabe ergaenzt.
+        $template = PatientCardTemplate::default();
+        unset($template['blocks'][$patient]['options']['font_size'], $template['blocks'][$patient]['options']['bold_city']);
+        $normalized = PatientCardTemplate::normalize($template);
+        $this->assertSame('normal', $normalized['blocks'][$patient]['options']['font_size']);
+        $this->assertSame('value', $normalized['blocks'][$patient]['options']['bold_city']);
+    }
+
+    /** Die Schriftgroesse skaliert den Baustein, die Ueberschrift bleibt fett. */
+    public function testFontSizeScalesBlockContent(): void
+    {
+        $template = PatientCardTemplate::default();
+        $template['blocks'][$this->blockIndex($template, 'patient_data')]['options']['font_size'] = 'large';
+        $runs = $this->runsByText($this->generate(PatientCardTemplate::normalize($template)));
+
+        $this->assertSame([10.925], array_column($runs['Patientendaten:'], 'size'));
+        $this->assertSame(['bold'], array_column($runs['Patientendaten:'], 'font'), 'Ueberschriften bleiben fett.');
+        $this->assertSame(10.925, $this->runAt($runs, 'Name', 10.925)['size'], 'Auch die Zeilen skalieren mit.');
+        // Unveraenderte Bausteine bleiben bei der Standardgroesse.
+        $this->assertSame(9.5, $this->runAt($runs, 'Notfallkontakt:')['size']);
+    }
+
+    /** Je Zeile der Patientendaten waehlbar, ob Beschriftung oder Wert fett ist. */
+    public function testPatientDataBoldChoices(): void
+    {
+        $template = PatientCardTemplate::default();
+        $patient = $this->blockIndex($template, 'patient_data');
+        $template['blocks'][$patient]['options']['bold_name'] = 'label';
+        $template['blocks'][$patient]['options']['bold_birth'] = 'both';
+        $template['blocks'][$patient]['options']['bold_street'] = 'none';
+        $runs = $this->runsByText($this->generate(PatientCardTemplate::normalize($template)));
+
+        $this->assertSame('bold', $this->fontAt($runs, 'Name'), 'Beschriftung fett.');
+        $this->assertSame('regular', $this->fontAt($runs, 'LASTNAME, FIRSTNAME'), 'Wert normal.');
+        $this->assertSame('bold', $this->fontAt($runs, 'geboren am:'));
+        $this->assertSame('bold', $this->fontAt($runs, '21.10.1938'), 'Beschriftung und Wert fett.');
+        $this->assertSame('regular', $this->fontAt($runs, 'Straße:'));
+        $this->assertSame('regular', $this->fontAt($runs, 'Musterstraße 12'), 'Nichts fett.');
+        // Ohne eigene Angabe bleibt der Wert fett.
+        $this->assertSame('regular', $this->fontAt($runs, 'PLZ/Wohnort:'));
+        $this->assertSame('bold', $this->fontAt($runs, '12345 Beispielstadt'));
+    }
+
+    /** Auch die Abschlusszeilen richten sich nach der Auswahl. */
+    public function testSummaryBoldChoices(): void
+    {
+        $template = PatientCardTemplate::default();
+        $summary = $this->blockIndex($template, 'summary');
+        $template['blocks'][$summary]['options']['bold_physician'] = 'label';
+        $template['blocks'][$summary]['options']['bold_next_control'] = 'none';
+        $runs = $this->runsByText($this->generate(PatientCardTemplate::normalize($template)));
+
+        $this->assertSame('bold', $this->fontAt($runs, 'Arzt'));
+        $this->assertSame('regular', $this->fontAt($runs, 'Dr. med. Kontrolle'));
+        $this->assertSame('regular', $this->fontAt($runs, 'Nächste Kontrolle in'));
+        $this->assertSame('regular', $this->fontAt($runs, '07.04.2027'));
+        // Unveraenderte Zeilen zeigen weiterhin den Wert fett.
+        $this->assertSame('regular', $this->fontAt($runs, 'Sonstiges'));
+        $this->assertSame('bold', $this->fontAt($runs, 'Bericht Nr. 2 vom 07.10.2026'));
+    }
+
+    /**
+     * @return array<string, list<array{font: string, size: float, text: string}>>
+     */
+    private function runsByText(string $pdf): array
+    {
+        $byText = [];
+        foreach (PdfText::runs($pdf) as $run) {
+            $byText[$run['text']][] = $run;
+        }
+        return $byText;
+    }
+
+    /**
+     * @param array<string, list<array{font: string, size: float, text: string}>> $runs
+     * @return array{font: string, size: float, text: string}
+     */
+    private function runAt(array $runs, string $text, float $size = 9.5): array
+    {
+        foreach ($runs[$text] ?? [] as $run) {
+            if (abs($run['size'] - $size) < 0.001) {
+                return $run;
+            }
+        }
+        throw new RuntimeException('Text nicht in der erwarteten Groesse gefunden: ' . $text);
+    }
+
+    /**
+     * @param array<string, list<array{font: string, size: float, text: string}>> $runs
+     */
+    private function fontAt(array $runs, string $text, float $size = 9.5): string
+    {
+        return $this->runAt($runs, $text, $size)['font'];
+    }
+
     public function testAccessorsReturnCanonicalValues(): void
     {
         $template = PatientCardTemplate::default();

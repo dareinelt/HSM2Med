@@ -958,9 +958,13 @@ der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
   Bereich bzw. Baustein.
 - **Eigenschaften** (rechts): alle festen Texte des gewählten Bereichs bzw. Bausteins,
   Optionen (z. B. Falzmarken; Empfängertext für Briefe ohne Empfängerauswahl; je Zeile des
-  Informationsblocks ein Häkchen zum Ein- und Ausblenden) und Platzhalter wie
+  Informationsblocks ein Häkchen zum Ein- und Ausblenden; **Schriftgröße je Baustein** in den
+  Stufen *Klein*, *Normal*, *Groß*, *Sehr groß*) und Platzhalter wie
   `{salutation}`, `{patient_name}`, `{date_of_birth}`, `{document_number}`, `{letter_date}`;
   `{page}` und `{pages}` nur in der Seitenangabe. „Standard" setzt einen Text zurück.
+  Für die Patientendaten und das Aggregat lässt sich **je Zeile** wählen, ob die Beschriftung
+  (z. B. *Name*), der Wert, beides oder nichts fett gedruckt wird; Überschriften bleiben immer
+  fett.
 
 **Versionierung:** *Als neue Fassung speichern* legt eine neue, unveränderliche Fassung der
 gewählten Art an (optional mit Änderungsnotiz); neue Briefe an Empfänger dieser Art verwenden ab
