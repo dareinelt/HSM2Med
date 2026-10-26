@@ -318,6 +318,8 @@ Der aktive Patient steht in der Titelleiste und in der Statusleiste. Ausgewählt
 Patientenübersicht über *Auswählen* oder in der Akte über *Als aktiven Patienten wählen*;
 *Auswahl aufheben* entfernt die Zuordnung wieder. **Das Anlegen eines Patienten wählt ihn
 automatisch als aktiven Patienten** – nach dem Anlegen kann der Import also sofort erfolgen.
+Ebenso führt *Brief erstellen* mit aktivem Patienten direkt in den Briefassistenten; die
+Patientenauswahl ist dort über *Anderen Patienten wählen* weiterhin erreichbar.
 
 ![Aktiver Patient in der Patientenübersicht](docs/screenshots/48-patient-aktiv.png)
 
@@ -685,7 +687,10 @@ ausschließlich, was erfasst wurde.
 
 ### Ablauf
 
-**1. Patient wählen** (`/letters/new`) – gesucht wird in Nachname, Vorname und Anzeigename:
+**1. Patient wählen** (`/letters/new?select=1`) – gesucht wird in Nachname, Vorname und
+Anzeigename. Mit aktivem Patienten entfällt dieser Schritt: *Brief erstellen* öffnet den
+Assistenten direkt für den aktiven Patienten; die Auswahl bleibt über *Anderen Patienten wählen*
+erreichbar.
 
 ![Patient wählen](docs/screenshots/36-brief-patient-waehlen.png)
 

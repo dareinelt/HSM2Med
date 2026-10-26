@@ -87,7 +87,7 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
     </div>
     <div class="actions">
         <a class="button" href="/patients/<?= $e($patientId) ?>"><?= $icon('patients') ?> <span>Akte</span></a>
-        <a class="button" href="/letters/new"><?= $icon('refresh') ?> <span>Anderen Patienten wählen</span></a>
+        <a class="button" href="/letters/new?select=1"><?= $icon('refresh') ?> <span>Anderen Patienten wählen</span></a>
     </div>
 </div>
 

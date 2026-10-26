@@ -7,6 +7,7 @@ namespace Tests\Integration;
 use App\Application;
 use App\Config\Config;
 use App\Http\Controller\DashboardController;
+use App\Http\Controller\LetterController;
 use App\Http\Controller\LoginController;
 use App\Http\Controller\PatientController;
 use App\Http\Kernel;
@@ -56,6 +57,11 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
     private function dashboard(): DashboardController
     {
         return new DashboardController($this->app, $this->view());
+    }
+
+    private function letters(): LetterController
+    {
+        return new LetterController($this->app, $this->view());
     }
 
     /**
@@ -267,6 +273,31 @@ final class PatientFirstWorkflowTest extends DatabaseTestCase
         $this->assertSame(200, $response->status);
         $this->assertContains('Mustermann, Erika', $response->body);
         $this->assertFalse(str_contains($response->body, 'Kein Patient gewählt'));
+    }
+
+    /** "Brief erstellen" springt mit aktivem Patienten direkt in den Assistenten. */
+    public function testLetterStartsWithActivePatient(): void
+    {
+        $patientId = $this->create();
+
+        $response = $this->letters()->newLetter(new Request('GET', '/letters/new'));
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('action="/letters"', $response->body);
+        $this->assertContains('name="patient_id" value="' . $patientId . '"', $response->body);
+        $this->assertNotContains('Patient wählen', $response->body);
+    }
+
+    /** Die Patientenauswahl bleibt fuer einen Wechsel erreichbar. */
+    public function testLetterPatientSelectionStaysReachable(): void
+    {
+        $patientId = $this->create();
+
+        $response = $this->letters()->newLetter(new Request('GET', '/letters/new', ['select' => '1']));
+
+        $this->assertSame(200, $response->status);
+        $this->assertContains('Patient wählen', $response->body);
+        $this->assertContains('/letters/new?patient=' . $patientId, $response->body);
     }
 
     /** Der Fuß verweist auf die Autoren-Info; der Hinweistext liegt als Overlay im Rahmen. */
