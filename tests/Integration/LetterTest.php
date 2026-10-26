@@ -278,6 +278,27 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame('aus Patientenausweis Nr. 1', $letter['snapshot']['mrt']['source_label']);
     }
 
+    /** Der Anhang ist Opt-in: ohne Auswahl entsteht der Brief ohne Abfragetabelle. */
+    public function testAppendixIsOptIn(): void
+    {
+        $this->importAndSelectPatient();
+        $this->fillRecords();
+        $this->createCard();
+        $this->saveFamilyDoctor();
+
+        $result = $this->letters->create(LetterInput::fromPost([
+            'patient_id' => (string) $this->patientId,
+            'report_id' => '',
+            'confirm_data' => '1',
+            'confirm_letter' => '1',
+            'recipients' => ['family_doctor'],
+            'include_measurements' => '1',
+        ]));
+
+        $letter = $this->letters->letter($result['letter_id']);
+        $this->assertFalse($letter['snapshot']['appendix']['include']);
+    }
+
     /** Praxis-Informationen und Ruecksendeangaben werden in Snapshot und PDF uebernommen. */
     public function testLetterTakesPracticeAndReturnAddressFromSettings(): void
     {

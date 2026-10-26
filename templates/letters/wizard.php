@@ -56,7 +56,7 @@ $selectedRecipients = array_values(array_filter(
     $selection['recipients'],
     static fn (string $type): bool => ($recipients[$type]['available'] ?? false) === true,
 ));
-$appendixChosen = ($selection['include_appendix'] ?? true) === true;
+$appendixChosen = ($selection['include_appendix'] ?? false) === true;
 $includeAppendix = $appendixChosen && $appendixSections !== [];
 $measurementChosen = ($selection['include_measurements'] ?? true) === true;
 $includeMeasurements = $measurementChosen;
@@ -423,7 +423,7 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
                 ? 'kein Anhang (keine Abfrage vorhanden)'
                 : ($appendixChosen
                     ? $e(count($appendixSections)) . ' Abschnitt(e), mehrseitig mit wiederholter Kopfzeile'
-                    : 'abgewählt – der Brief enthält keinen Anhang') ?></td></tr>
+                    : 'nicht ausgewählt – der Brief enthält keinen Anhang') ?></td></tr>
             <tr><th>Messwerttabelle</th><td><?= !$measurementChosen
                 ? 'abgewählt – der Brief enthält keine Messwerttabelle'
                 : (($measurements['present'] ?? false) !== true

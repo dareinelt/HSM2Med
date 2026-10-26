@@ -305,10 +305,11 @@ final class LetterController extends Controller
             // Vorauswahl: die Aerzte, deren Anschrift vollstaendig ist; gibt es keinen, der
             // generische Arztbrief (nur waehlbar, wenn keine Arztanschrift vorliegt).
             'recipients' => self::defaultRecipients($recipients),
-            // Anhang und Messwerttabelle sind voreingestellt. Die Messwerte folgen dem
-            // applikationsweiten Standard, soweit die Werte in den Untersuchungen vorliegen;
-            // ohne Standard (oder ohne passende Werte) sind alle verfuegbaren vorausgewaehlt.
-            'include_appendix' => true,
+            // Die Messwerttabelle ist voreingestellt; der Anhang mit der vollstaendigen Abfrage
+            // ist Opt-in. Die Messwerte folgen dem applikationsweiten Standard, soweit die
+            // Werte in den Untersuchungen vorliegen; ohne Standard (oder ohne passende Werte)
+            // sind alle verfuegbaren vorausgewaehlt.
+            'include_appendix' => false,
             'include_measurements' => true,
             'measurements' => LetterMeasurements::preselect(
                 $prepared['measurements'],
