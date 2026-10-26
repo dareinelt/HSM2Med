@@ -232,8 +232,8 @@ bedienbare Element. Nach der Anmeldung wird die ursprünglich aufgerufene Seite 
 
 * Ohne Bedienung meldet die Anwendung nach `AUTH_IDLE_MINUTES` automatisch ab.
 * Nach fünf Fehlanmeldungen wird ein Konto für 15 Minuten gesperrt.
-* Über die Statusleiste sind **Kennwort ändern** (`/account/password`, für jedes Konto) und
-  **Abmelden** erreichbar.
+* Über die Statusleiste sind **Unterschrift** (`/account/signature`, für jedes Konto),
+  **Kennwort ändern** (`/account/password`, für jedes Konto) und **Abmelden** erreichbar.
 * Ein Konto, das noch das Kennwort aus `.env` verwendet, wird in der Benutzerverwaltung
   ausdrücklich gekennzeichnet.
 
@@ -241,9 +241,17 @@ bedienbare Element. Nach der Anmeldung wird die ursprünglich aufgerufene Seite 
 
 Sichtbar und erreichbar nur für Gruppen mit dem Recht **Benutzerverwaltung** (vorgegeben: *Admin*).
 
-* **Benutzerkonten** (`/system/users`): Anmeldename, Anzeigename, Gruppen, Aktivstatus; Kennwörter
+* **Benutzerkonten** (`/system/users`): Anmeldename, Anzeigename, Titel, Vorname, Nachname,
+  Gruppen, Aktivstatus; Kennwörter
   werden ausschließlich als Hash gespeichert und lassen sich nur **neu setzen**
   (`/system/users/{id}/password`), nie auslesen.
+* **Unterschrift je Konto** (`/system/users/{id}/signature`, eigene Seite `/account/signature`):
+  JPG, PNG oder BMP (max. 1 MiB, max. 2000 × 2000 Pixel), Prüfung ausschließlich über den
+  Dateiinhalt. Das Bild wird nicht unter dem Originalnamen gespeichert und bei gleichem Inhalt
+  (SHA-256) nur einmal abgelegt; die Skalierung auf die Briefgröße (60 × 22 mm) übernimmt der
+  Brief. Unter der Unterschrift steht im Brief **immer** Titel, Vorname und Name der
+  unterzeichnenden Person. Das Entfernen der Unterschrift löscht die Bilddatei nicht, weil
+  bereits erstellte Briefe auf sie verweisen.
 * **Gruppen und Rechte** (`/system/users/groups`): Gruppen anlegen, umbenennen und löschen;
   die **Rechtematrix** je Gruppe bestimmt, welche Bereiche des Funktionsbands sichtbar und
   aufrufbar sind. Die Matrix ist die einzige Quelle für Rechte – es gibt keine Rechte im Code.
@@ -852,7 +860,8 @@ Briefe ab Fassung 2 werden nach **DIN 5008, Form B** gesetzt: Briefkopf 45 mm, A
 Vermerkzone, Informationsblock ab 125 mm links und 50 mm oben (Unser Zeichen, Patient,
 Geburtsdatum, Patienten-ID, Brief-Nr., Stammdatenfassung, Datum – je Zeile per Häkchen in der
 Vorlage ein- und ausblendbar), Betreff fett ohne das Wort „Betreff", Anrede, Brieftext,
-Grußformel; Falzmarken bei 105 mm und 210 mm sowie Lochmarke bei 148,5 mm; linker Rand
+Grußformel, darunter die Unterschrift der angemeldeten Person (max. 60 × 22 mm) mit Titel,
+Vorname und Name; Falzmarken bei 105 mm und 210 mm sowie Lochmarke bei 148,5 mm; linker Rand
 25 mm, rechter Rand 20 mm; Folgeseiten mit Kurzkopf und Seitenangabe. Inhalt, Reihenfolge und
 alle festen Texte bestimmt die [Briefvorlage](#briefvorlage-und-vorlageneditor), deren
 Fassung im Snapshot des Briefes eingefroren wird. Briefkopf (Praxisname, Anschrift, optionale
@@ -946,6 +955,12 @@ Stammdaten wird sie je Empfänger gepflegt:
 
 Ohne Angabe (oder bei fehlendem Nachnamen) druckt der Brief „Sehr geehrte Damen und Herren,“;
 der Brief-Assistent weist vor dem Erzeugen darauf hin.
+
+Der Baustein **Unterschrift** steht in der Standardvorlage direkt unter der Grußformel. Er
+druckt die Unterschrift der angemeldeten Person (gepflegt unter *Unterschrift* in der
+Statusleiste bzw. in der Benutzerverwaltung), automatisch auf 60 × 22 mm skaliert, und darunter
+**immer** Titel, Vorname und Name (`{signer_name}`). Beim Erzeugen werden Bild und Name im Brief
+eingefroren; ein späterer Wechsel der Unterschrift ändert bereits erstellte Briefe nicht.
 
 Der Editor öffnet sich über **System → Briefvorlage bearbeiten** in einem neuen Tab und folgt
 der Office-Oberfläche der Anwendung (Menüband, Statusleiste):
@@ -1170,7 +1185,8 @@ erDiagram
   die Fassung der globalen Stammdaten (`settings_version_id`), die Fassungen der Bausteine
   (Anamnese, Vormedikation, Befund, Epikrise, Schrittmacher-/ICD-Abfrage), die Befunddaten des
   gewählten Berichts, die aufgelösten Anhangsabschnitte, das **Aggregat** samt Sonden
-  (`aggregat`: Gerätedaten und Elektroden des letzten Imports) sowie die Messwerttabelle
+  (`aggregat`: Gerätedaten und Elektroden des letzten Imports), die Unterschrift samt Namen der
+  unterzeichnenden Person (`signature`) sowie die Messwerttabelle
   (`measurements`: Spalten, Zeilen und die getroffene Auswahl) ein. `pdf_content` (MEDIUMBLOB) und
   `pdf_sha256` werden gemeinsam mit dem Snapshot in einer Transaktion gespeichert und nie
   überschrieben; das PDF ist allein aus dem Snapshot reproduzierbar. `report_id` ist optional
@@ -1187,6 +1203,14 @@ erDiagram
   (`snapshot.recipient.salutation`) ein. Die Anrede selbst steht in
   `patient_card_master_data` (`salutation`, `physician_salutation`, `referrer_salutation`); der
   generische Arztbrief (`generic`) hat keine Anrede in den Stammdaten und wird fest angeredet.
+- **user_signatures** speichert die Unterschriften der Benutzer unveränderlich: Bildinhalt
+  (`content`), `mime_type`, `filename`, Abmessungen und `sha256` (eindeutig, gleiche Datei wird
+  nur einmal abgelegt). `users.signature_id` verweist auf die aktuelle Unterschrift
+  (`ON DELETE SET NULL`); `users.title`, `users.first_name` und `users.last_name` liefern den
+  Namen unter der Unterschrift. Ein Brief friert `snapshot.signature`
+  (`id`, `sha256`, `filename`, `name`) ein und lädt die Bilddaten über die unveränderliche
+  Kennung bzw. ersatzweise über die Prüfsumme; deshalb bleibt die Datei auch nach dem Entfernen
+  der Unterschrift erhalten.
 
 ## PDF-Berichte
 
@@ -1415,6 +1439,12 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   die Normalisierung des Benutzernamens bei der Anmeldung. `tests/Unit/UserInputTest.php` deckt Normalisierung und Prüfregeln der
   Eingaben ab (Benutzername, Kennwortlänge, Anzeigename, Gruppenzuordnung, Rechtevereinigung
   mehrerer Gruppen).
+- **Unterschriften (Integration):** `tests/Integration/SignatureTest.php` prüft die einmalige
+  Ablage gleicher Dateien (SHA-256), das Setzen und Entfernen der Unterschrift am Konto, den
+  Namen unter der Unterschrift (Titel, Vorname, Name; Rückfall auf den Anzeigenamen) und dass
+  ein erzeugter Brief Unterschrift und Namen einfriert (auch nach einem Wechsel unverändert
+  reproduzierbar). Die Dateiprüfung (PNG/JPEG/BMP, Größe, Abmessungen, Abwehr fremder Formate)
+  deckt `tests/Unit/ImageUploadValidatorTest.php` ab.
 - **Anmeldung und Benutzeroberfläche (Integration):** `tests/Integration/LoginViewTest.php`
   prüft das Anmeldefenster über der abgedunkelten und unscharfen Oberfläche, die Wahrung des
   angeforderten Ziels (und die Abwehr externer Ziele), die Fehlermeldung ohne Hinweis auf die

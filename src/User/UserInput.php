@@ -21,6 +21,8 @@ final class UserInput
     public const int MIN_USERNAME_LENGTH = 3;
     public const int MAX_USERNAME_LENGTH = 64;
     public const int MAX_DISPLAY_NAME = 128;
+    public const int MAX_TITLE = 64;
+    public const int MAX_NAME = 128;
     public const int MIN_PASSWORD_LENGTH = 12;
     public const int MAX_PASSWORD_LENGTH = 200;
 
@@ -32,6 +34,9 @@ final class UserInput
         public readonly string $displayName,
         public readonly bool $isActive,
         public readonly array $groupIds,
+        public readonly string $title = '',
+        public readonly string $firstName = '',
+        public readonly string $lastName = '',
     ) {
     }
 
@@ -68,6 +73,9 @@ final class UserInput
             displayName: $displayName,
             isActive: self::bool($post['is_active'] ?? null),
             groupIds: self::groupIds($post['groups'] ?? []),
+            title: self::cleanText(self::text($post['title'] ?? ''), self::MAX_TITLE),
+            firstName: self::cleanText(self::text($post['first_name'] ?? ''), self::MAX_NAME),
+            lastName: self::cleanText(self::text($post['last_name'] ?? ''), self::MAX_NAME),
         );
     }
 
@@ -105,13 +113,16 @@ final class UserInput
     /**
      * Werte fuer das erneute Anzeigen des Formulars.
      *
-     * @return array{username:string,display_name:string,is_active:bool,groups:list<int>}
+     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>}
      */
     public function values(): array
     {
         return [
             'username' => $this->username,
             'display_name' => $this->displayName,
+            'title' => $this->title,
+            'first_name' => $this->firstName,
+            'last_name' => $this->lastName,
             'is_active' => $this->isActive,
             'groups' => $this->groupIds,
         ];

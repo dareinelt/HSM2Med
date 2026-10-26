@@ -124,7 +124,7 @@ final class LetterTemplateMigrationTest extends DatabaseTestCase
 
             (new Migrator($this->pdo, $root . '/database/migrations'))->migrate();
 
-            $expected = ['subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports'];
+            $expected = ['subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'signature', 'reports'];
             $upgraded = $this->storedContent($id);
             $this->assertSame($expected, array_column($upgraded['blocks'], 'type'));
 

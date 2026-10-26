@@ -8,8 +8,10 @@
  * @var Closure $e
  * @var Closure $icon
  * @var ?\App\User\User $user
- * @var array{username:string,display_name:string,is_active:bool,groups:list<int>} $values
+ * @var array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>} $values
  * @var list<array{id:int,code:string,label:string,description:string,is_system:bool,member_count:int,permissions:list<string>}> $groups
+ * @var array{id:int,sha256:string,mime_type:string,filename:string,width:int,height:int,created_at:string}|null $signature
+ * @var string|null $signerName
  * @var array<string, string> $errors
  * @var string|null $message
  * @var int $minPasswordLength
@@ -56,6 +58,26 @@ $selected = array_map(static fn (int $id): string => (string) $id, $values['grou
             <p class="muted">Erscheint in der Statusleiste; ohne Angabe wird der Anmeldename gezeigt.</p>
         </div>
     </div>
+
+    <div class="field-row">
+        <div class="field">
+            <label for="title">Titel <small class="muted">(optional)</small></label>
+            <input type="text" id="title" name="title" value="<?= $e($values['title']) ?>" maxlength="64" placeholder="z. B. Dr. med.">
+            <?php if (isset($errors['title'])): ?><p class="field-error"><?= $e($errors['title']) ?></p><?php endif; ?>
+        </div>
+        <div class="field">
+            <label for="first_name">Vorname</label>
+            <input type="text" id="first_name" name="first_name" value="<?= $e($values['first_name']) ?>" maxlength="128">
+            <?php if (isset($errors['first_name'])): ?><p class="field-error"><?= $e($errors['first_name']) ?></p><?php endif; ?>
+        </div>
+        <div class="field">
+            <label for="last_name">Nachname</label>
+            <input type="text" id="last_name" name="last_name" value="<?= $e($values['last_name']) ?>" maxlength="128">
+            <?php if (isset($errors['last_name'])): ?><p class="field-error"><?= $e($errors['last_name']) ?></p><?php endif; ?>
+        </div>
+    </div>
+    <p class="muted">Titel, Vorname und Nachname stehen im Brief immer unter der Unterschrift.
+        Fehlen Vor- und Nachname, wird der Anzeigename verwendet.</p>
 
     <fieldset class="choice-box">
         <legend>Status</legend>
@@ -118,6 +140,44 @@ $selected = array_map(static fn (int $id): string => (string) $id, $values['grou
 </form>
 
 <?php if (!$isNew): ?>
+    <form method="post" action="/system/users/<?= $e($user->id) ?>/signature" class="card" enctype="multipart/form-data">
+        <?= $csrf() ?>
+        <h2><?= $icon('edit', 'app-icon app-icon--sm') ?> Unterschrift</h2>
+        <p class="muted">JPG, PNG oder BMP. Die Anpassung an die Größe im Brief erfolgt automatisch;
+            die Datei wird unverändert aufbewahrt. Bereits erstellte Briefe behalten ihre Unterschrift.</p>
+        <?php if (isset($errors['signature'])): ?><p class="field-error"><?= $e($errors['signature']) ?></p><?php endif; ?>
+        <?php if ($signature !== null): ?>
+            <p class="signature-preview">
+                <img src="/system/users/<?= $e($user->id) ?>/signature?v=<?= $e(substr((string) $signature['sha256'], 0, 12)) ?>"
+                     alt="Hinterlegte Unterschrift" class="signature-image">
+            </p>
+            <p class="muted"><?= $e($signature['filename']) ?> ·
+                <?= $e($signature['width']) ?> × <?= $e($signature['height']) ?> Pixel ·
+                hinterlegt am <?= $e(substr((string) $signature['created_at'], 0, 10)) ?></p>
+        <?php else: ?>
+            <p class="muted">Es ist noch keine Unterschrift hinterlegt.</p>
+        <?php endif; ?>
+        <div class="field-row">
+            <div class="field">
+                <label for="signature"><?= $signature === null ? 'Unterschrift auswählen' : 'Neue Unterschrift auswählen' ?></label>
+                <input type="file" id="signature" name="signature" accept="image/png,image/jpeg,image/bmp">
+            </div>
+        </div>
+        <?php if ($signature !== null): ?>
+            <label class="check">
+                <input type="checkbox" name="remove_signature" value="1">
+                <span>Hinterlegte Unterschrift entfernen</span>
+            </label>
+        <?php endif; ?>
+        <p class="muted">Unter der Unterschrift erscheint im Brief immer:
+            <strong><?= $e($signerName ?? '') ?></strong>. Der Name stammt aus Titel, Vorname und Nachname.</p>
+        <div class="form-actions">
+            <button type="submit" data-once>
+                <?= $icon('check', 'app-icon app-icon--sm') ?> <span data-label>Unterschrift speichern</span>
+            </button>
+        </div>
+    </form>
+
     <form method="post" action="/system/users/<?= $e($user->id) ?>/password" class="card" autocomplete="off">
         <?= $csrf() ?>
         <h2><?= $icon('key', 'app-icon app-icon--sm') ?> Kennwort neu setzen</h2>

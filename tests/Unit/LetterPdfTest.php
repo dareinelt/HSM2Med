@@ -6,9 +6,11 @@ namespace Tests\Unit;
 
 use App\Letter\LetterPdfGenerator;
 use App\Letter\LetterTemplate;
+use App\Report\Pdf\ImageData;
 use App\Report\Pdf\PdfDocument;
 use DateTimeImmutable;
 use RuntimeException;
+use Tests\Support\Images;
 use Tests\Support\LetterFactory;
 use Tests\Support\PdfText;
 use Tests\TestCase;
@@ -128,6 +130,43 @@ final class LetterPdfTest extends TestCase
         $this->assertContains('Fassung 3 · erfasst von Dr. med. Beispiel', $text);
         $this->assertContains('Fassung 2 · erfasst von Dr. med. Beispiel', $text);
         $this->assertContains('Stand 03.10.2026 11:15', $text);
+    }
+
+    /** Baustein "Unterschrift": Bild eingebettet, darunter immer Titel, Vorname und Name. */
+    public function testSignatureBlockEmbedsImageAndPrintsSignerName(): void
+    {
+        $pdf = (new LetterPdfGenerator())->generate(
+            LetterFactory::current(),
+            null,
+            $this->generatedAt(),
+            ImageData::fromBytes(Images::png(120, 40)),
+        );
+
+        $this->assertContains('Dr. med. Erika Muster', PdfText::text($pdf));
+        $this->assertContains('/Subtype /Image', $pdf, 'Die Unterschrift muss als Bild eingebettet sein.');
+        $this->assertContains('Mit freundlichen Grüßen', PdfText::text($pdf));
+    }
+
+    /** Ohne hinterlegte Unterschrift bleibt der Platz frei, der Name steht trotzdem darunter. */
+    public function testSignatureBlockWithoutImageStillPrintsSignerName(): void
+    {
+        $pdf = (new LetterPdfGenerator())->generate(LetterFactory::current(), null, $this->generatedAt());
+
+        $this->assertContains('Dr. med. Erika Muster', PdfText::text($pdf));
+        $this->assertFalse(str_contains($pdf, '/Subtype /Image'), 'Ohne Unterschrift darf kein Bild eingebettet werden.');
+    }
+
+    /** Der Name stammt aus dem eingefrorenen Snapshot, nicht aus den aktuellen Benutzerdaten. */
+    public function testSignatureNameIsFrozenInTheLetter(): void
+    {
+        $pdf = (new LetterPdfGenerator())->generate(
+            LetterFactory::current(['signature' => LetterFactory::signature(['name' => 'Dr. med. Früherer Name'])]),
+            null,
+            $this->generatedAt(),
+        );
+
+        $this->assertContains('Dr. med. Früherer Name', PdfText::text($pdf));
+        $this->assertFalse(str_contains(PdfText::text($pdf), 'Dr. med. Erika Muster'));
     }
 
     /** Baustein "Aggregat": Geraetedaten in zwei Spalten, darunter die Sonden als je eine Zeile. */

@@ -217,6 +217,7 @@
         sequence_no: '1',
         page: '1',
         pages: '2',
+        signer_name: String(obj(data.signature).name || 'Titel Vorname Name'),
     }, obj(data.sample));
 
     /** Beispiel-Anreden je Empfaengerart, damit die Vorschau die Vorlagenart widerspiegelt. */
@@ -661,12 +662,28 @@
                     h('dl', { class: 'te-p-rows' }, ...[['Gerät', 'Beispielgerät DR'], ['Betriebsart', 'DDD'], ['Sonde RA', 'Impedanz 520 Ohm']].flatMap(([label, value]) => [h('dt', { text: label }), h('dd', { text: value })])),
                     h('span', { class: 'te-p-meta', text: 'Anhang unter der Grußformel · beginnt auf einer neuen Seite · entfällt ohne Bericht' })];
             case 'closing':
-                return [textNode(t.text, 'Keine Grußformel'), h('span', { class: 'te-p-signature', 'aria-hidden': 'true' }), textNode(t.signature, null)];
+                return [textNode(t.text, 'Keine Grußformel'), textNode(t.signature, null)];
+            case 'signature':
+                return signaturePreview(block);
             case 'text':
                 return [headingNode(t.heading), textNode(t.text, 'Leerer Textbaustein – rechts Text eingeben')];
             default:
                 return [];
         }
+    }
+
+    /** Vorschau des Bausteins „Unterschrift": Bild der angemeldeten Person, darunter der Name. */
+    function signaturePreview(block) {
+        const info = obj(data.signature);
+        const name = String(info.name || 'Titel Vorname Name');
+        return [
+            info.available && info.url
+                ? h('img', { class: 'te-p-sign-image', src: String(info.url), alt: 'Unterschrift von ' + name })
+                : h('span', { class: 'te-p-sign-empty', text: 'Noch keine Unterschrift hinterlegt' }),
+            block.options.show_line ? h('span', { class: 'te-p-sign-line', 'aria-hidden': 'true' }) : null,
+            h('span', { class: 'te-p-sign-name', text: name }),
+            h('span', { class: 'te-p-meta', text: 'Name aus Titel, Vorname und Nachname der angemeldeten Person' }),
+        ];
     }
 
     /** Baustein-Vorschau fuer Patientenausweise (Beispieldaten aus PatientCardSample). */

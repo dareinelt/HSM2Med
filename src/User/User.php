@@ -26,6 +26,10 @@ final readonly class User
         public ?string $lastLoginAt = null,
         public ?string $createdAt = null,
         public ?string $updatedAt = null,
+        public ?string $title = null,
+        public ?string $firstName = null,
+        public ?string $lastName = null,
+        public ?int $signatureId = null,
     ) {
     }
 
@@ -46,7 +50,30 @@ final readonly class User
             lastLoginAt: isset($row['last_login_at']) ? (string) $row['last_login_at'] : null,
             createdAt: isset($row['created_at']) ? (string) $row['created_at'] : null,
             updatedAt: isset($row['updated_at']) ? (string) $row['updated_at'] : null,
+            title: self::text($row['title'] ?? null),
+            firstName: self::text($row['first_name'] ?? null),
+            lastName: self::text($row['last_name'] ?? null),
+            signatureId: isset($row['signature_id']) ? (int) $row['signature_id'] : null,
         );
+    }
+
+    /**
+     * Name unter der Unterschrift: Titel, Vorname und Nachname. Fehlen Vor- und Nachname,
+     * gilt der Anzeigename, damit unter der Unterschrift nie eine leere Zeile steht.
+     */
+    public function signerName(): string
+    {
+        $name = trim(implode(' ', array_filter(
+            [$this->title, $this->firstName, $this->lastName],
+            static fn (?string $part): bool => $part !== null && $part !== '',
+        )));
+        return $name === '' ? $this->displayName : $name;
+    }
+
+    /** Hat diese Person eine Unterschrift hinterlegt? */
+    public function hasSignature(): bool
+    {
+        return $this->signatureId !== null;
     }
 
     /**
@@ -83,5 +110,11 @@ final readonly class User
     public function groupText(): string
     {
         return implode(', ', $this->groupLabels());
+    }
+
+    private static function text(mixed $value): ?string
+    {
+        $text = trim((string) $value);
+        return $text === '' ? null : $text;
     }
 }

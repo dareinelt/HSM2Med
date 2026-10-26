@@ -218,6 +218,22 @@ final class LetterFactory
     }
 
     /**
+     * Eingefrorene Unterschrift des Briefes (Bilddaten liegen in user_signatures).
+     *
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    public static function signature(array $overrides = []): array
+    {
+        return $overrides + [
+            'id' => 4,
+            'sha256' => str_repeat('a', 64),
+            'filename' => 'unterschrift.png',
+            'name' => 'Dr. med. Erika Muster',
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function base(): array
@@ -369,6 +385,7 @@ final class LetterFactory
                 'filled' => 7,
             ],
             'appendix' => self::appendix(),
+            'signature' => self::signature(),
             'mrt' => [
                 'available' => true,
                 'value' => 'MRT-bedingt tauglich',

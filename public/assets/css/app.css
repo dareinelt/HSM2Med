@@ -134,6 +134,8 @@ label.check input { width: auto; margin-top: .25rem; flex: 0 0 auto; }
 .recipient-choice small { display: block; margin-top: .2rem; }
 .logo-row { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 1rem; align-items: start; }
 .logo-preview img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; background: #fff; padding: .3rem; }
+.signature-preview { margin: 0 0 .4rem; }
+.signature-preview img { max-width: 100%; height: auto; max-height: 120px; border: 1px solid var(--border); border-radius: 4px; background: #fff; padding: .3rem; }
 
 /* Assistent: Schrittumschaltung. Ohne JavaScript bleiben alle Schritte sichtbar. */
 .wizard-form[data-wizard="on"] .wizard-step { display: none; }

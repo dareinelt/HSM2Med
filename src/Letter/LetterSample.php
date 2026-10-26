@@ -144,8 +144,20 @@ final class LetterSample
             ],
             'mrt' => ['available' => false],
             'measurements' => self::measurements($generatedAt),
+            'signature' => self::signature(),
             'source' => ['patient_id' => 0, 'report_id' => null, 'settings_version_id' => 0, 'card_id' => null, 'record_versions' => []],
         ];
+    }
+
+    /**
+     * Beispiel-Unterschrift: Name der unterzeichnenden Person. Ein Bild gibt es in der Vorschau
+     * nicht; der Brief laesst an dieser Stelle Platz fuer die handschriftliche Unterschrift.
+     *
+     * @return array{id: int|null, sha256: string, filename: string, name: string}
+     */
+    public static function signature(): array
+    {
+        return ['id' => null, 'sha256' => '', 'filename' => '', 'name' => 'Dr. med. Beispiel-Anwenderin'];
     }
 
     /**

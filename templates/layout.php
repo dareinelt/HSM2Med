@@ -173,6 +173,8 @@ $permitted = $permitted ?? View::permitted($user);
             <?= $icon('user', 'app-icon app-icon--sm') ?>
             <span><strong><?= $e($user->displayName !== '' ? $user->displayName : $user->username) ?></strong><?= $user->groupText() !== '' ? ' · ' . $e($user->groupText()) : '' ?></span>
         </span>
+        <a class="statusbar__item statusbar__link" href="/account/signature"
+           title="Eigene Unterschrift für Briefe hinterlegen"><?= $icon('edit', 'app-icon app-icon--sm') ?><span>Unterschrift</span></a>
         <a class="statusbar__item statusbar__link" href="/account/password"
            title="Eigenes Kennwort ändern"><?= $icon('key', 'app-icon app-icon--sm') ?><span>Kennwort ändern</span></a>
         <?php if ($user->mayManageUsers()): ?>

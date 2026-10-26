@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\User;
 
 use App\Repository\GroupRepository;
+use App\Repository\SignatureRepository;
 use App\Repository\UserRepository;
+use App\Security\ImageUploadValidator;
 use App\Support\Clock;
 use PDO;
 use Throwable;
@@ -33,12 +35,25 @@ final class UserService
     /** Vergleichswert gegen Zeitunterschiede bei unbekanntem Anmeldenamen (kein echtes Konto). */
     private const string DUMMY_HASH = '$2y$12$2qkI9XT4ussNaL.mPQVnM.eUinzuCODkD6.5I0CHWZ3NlRwgpWUOe';
 
+    private readonly SignatureRepository $signatures;
+
+    private readonly ImageUploadValidator $signatureValidator;
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly UserRepository $users,
         private readonly GroupRepository $groups,
         private readonly Clock $clock,
+        ?SignatureRepository $signatures = null,
+        ?ImageUploadValidator $signatureValidator = null,
     ) {
+        $this->signatures = $signatures ?? new SignatureRepository($pdo);
+        // Unterschriften duerfen auch BMP sein; das Logo der Stammdaten bleibt bei PNG/JPEG.
+        $this->signatureValidator = $signatureValidator ?? new ImageUploadValidator(
+            ImageUploadValidator::MAX_BYTES,
+            true,
+            'unterschrift',
+        );
     }
 
     /**
@@ -134,6 +149,9 @@ final class UserService
                 self::hash($password),
                 $input->isActive,
                 $now,
+                self::nullable($input->title),
+                self::nullable($input->firstName),
+                self::nullable($input->lastName),
             );
             $this->users->setGroups($id, $input->groupIds, $now);
             if ($own) {
@@ -175,7 +193,7 @@ final class UserService
         try {
             $now = $this->now();
             $before = $this->userAdministrators();
-            $this->users->update($id, $input->username, $input->displayName, $input->isActive, $now);
+            $this->users->update($id, $input->username, $input->displayName, $input->isActive, $now, self::nullable($input->title), self::nullable($input->firstName), self::nullable($input->lastName));
             $this->users->setGroups($id, $input->groupIds, $now);
             $this->guardUserAdministration($before);
             if ($own) {
@@ -219,6 +237,63 @@ final class UserService
         }
         UserInput::requirePassword($newPassword, $user->username);
         $this->users->setPassword($user->id, self::hash($newPassword), $this->now());
+    }
+
+    /**
+     * Hinterlegt die Unterschrift eines Benutzers (JPG, PNG oder BMP).
+     *
+     * Die Datei wird geprueft und unveraendert abgelegt; die Anpassung an die im Brief
+     * vorgesehene Groesse erfolgt erst beim Erzeugen des PDF. Eine ersetzte Unterschrift erzeugt
+     * eine neue Zeile, damit bereits erstellte Briefe ihre damalige Unterschrift behalten.
+     *
+     * @param array{name?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed}|null $file Eintrag aus $_FILES
+     * @throws \App\Security\UploadException wenn die Datei kein zulaessiges Bild ist
+     */
+    public function setSignature(int $id, ?array $file): void
+    {
+        $this->requireUser($id);
+        $image = $this->signatureValidator->validateUpload($file);
+        $now = $this->now();
+        $signatureId = $this->signatures->store(
+            $image['bytes'],
+            hash('sha256', $image['bytes']),
+            $image['mime_type'],
+            $image['filename'],
+            $image['width'],
+            $image['height'],
+            $now,
+        );
+        $this->users->setSignature($id, $signatureId, $now);
+    }
+
+    /**
+     * Entfernt die hinterlegte Unterschrift. Die Bilddatei bleibt erhalten, weil erstellte
+     * Briefe auf sie verweisen.
+     */
+    public function removeSignature(int $id): void
+    {
+        $this->requireUser($id);
+        $this->users->setSignature($id, null, $this->now());
+    }
+
+    /**
+     * Angaben zur hinterlegten Unterschrift ohne Bilddaten (fuer die Anzeige im Formular).
+     *
+     * @return array{id: int, sha256: string, mime_type: string, filename: string, width: int, height: int, created_at: string}|null
+     */
+    public function signature(int $signatureId): ?array
+    {
+        return $this->signatures->find($signatureId);
+    }
+
+    /**
+     * Unterschrift samt Bilddaten fuer die Auslieferung des Bildes.
+     *
+     * @return array{id: int, sha256: string, mime_type: string, filename: string, width: int, height: int, created_at: string, content: string}|null
+     */
+    public function signatureFile(int $signatureId): ?array
+    {
+        return $this->signatures->findWithContent($signatureId);
     }
 
     /**
@@ -415,6 +490,20 @@ final class UserService
     private function now(): string
     {
         return $this->clock->now()->format('Y-m-d H:i:s');
+    }
+
+    private function requireUser(int $id): void
+    {
+        if ($this->users->find($id) === null) {
+            throw UserException::rule('signature', 'Der Benutzer existiert nicht mehr.');
+        }
+    }
+
+    /** Leere Angaben werden als "nicht gesetzt" gespeichert. */
+    private static function nullable(string $value): ?string
+    {
+        $text = trim($value);
+        return $text === '' ? null : $text;
     }
 
     private static function minutesUntil(string $lockedUntil, string $now): int

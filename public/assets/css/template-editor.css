@@ -314,7 +314,10 @@
 .te-p-table { width: 100%; border-collapse: collapse; font-size: .82em; }
 .te-p-table th, .te-p-table td { padding: calc(var(--mm) * .6) calc(var(--mm) * .8); border-bottom: 1px solid #ccc; text-align: left; }
 .te-p-table th { background: #eef1f5; }
-.te-p-signature { display: block; height: calc(var(--mm) * 12); }
+.te-p-sign-image { display: block; max-width: calc(var(--mm) * 60); max-height: calc(var(--mm) * 22); object-fit: contain; }
+.te-p-sign-empty { display: block; height: calc(var(--mm) * 22); padding: calc(var(--mm) * 1) 0; color: #8a9099; font-size: .78em; }
+.te-p-sign-line { display: block; width: calc(var(--mm) * 60); border-top: 1px solid #555; margin-top: calc(var(--mm) * 1); }
+.te-p-sign-name { display: block; margin-top: calc(var(--mm) * .8); font-weight: 600; }
 
 .te-zone--appendix, .te-zone--continuation { margin-top: calc(var(--mm) * 2); padding: calc(var(--mm) * 1.5); border: 1px dashed #c9d0da; font-size: .8em; }
 .te-zone--appendix { display: flex; flex-direction: column; }

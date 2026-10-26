@@ -11,8 +11,10 @@ use App\PatientCard\PatientName;
 use App\Report\Pdf\ImageData;
 use App\Report\ReportData;
 use App\Report\ReportService;
+use App\Repository\SignatureRepository;
 use App\Security\FileName;
 use App\Support\Clock;
+use App\User\User;
 use PDO;
 use RuntimeException;
 
@@ -37,10 +39,11 @@ use RuntimeException;
 final class LetterService
 {
     /**
-     * Fassung des Brief-Snapshots (4: mit Baustein "Aggregat" aus dem letzten Import; 3: mit
-     * Messwerttabelle und Wahl von Anhang/Messwerttabelle).
+     * Fassung des Brief-Snapshots (5: mit Baustein "Unterschrift" und Teil "signature"; 4: mit
+     * Baustein "Aggregat" aus dem letzten Import; 3: mit Messwerttabelle und Wahl von
+     * Anhang/Messwerttabelle).
      */
-    public const int LETTER_VERSION = 4;
+    public const int LETTER_VERSION = 5;
 
     /** Vorlage einer Neuausfertigung: die des Ausgangsbriefes oder die aktuelle Fassung. */
     public const string TEMPLATE_ORIGINAL = 'original';
@@ -49,7 +52,7 @@ final class LetterService
     /** Datenteile eines Snapshots, die eine Neuausfertigung unveraendert uebernimmt. */
     private const array DATA_PARTS = [
         'master', 'patient', 'aggregat', 'anamnesis', 'premedication', 'epicrisis', 'befund', 'device_check',
-        'report', 'appendix', 'measurements', 'mrt', 'source', 'recipient',
+        'report', 'appendix', 'measurements', 'mrt', 'source', 'recipient', 'signature',
     ];
 
     /** Bausteine, die in den Brieftext einfliessen. */
@@ -71,6 +74,7 @@ final class LetterService
         private readonly Clock $clock,
         private readonly LetterTemplateService $templates,
         private readonly LetterMeasurements $measurements,
+        private readonly SignatureRepository $signatures,
     ) {
     }
 
@@ -214,10 +218,14 @@ final class LetterService
      * wirksame Messwertauswahl zusaetzlich als applikationsweiter Standard gespeichert (in
      * derselben Transaktion).
      *
+     * $author ist die unterzeichnende Person (die angemeldete Person). Ihre Unterschrift und ihr
+     * Name (Titel, Vorname, Name) werden im Snapshot eingefroren; damit bleibt der Brief auch
+     * nach einem Wechsel der Unterschrift reproduzierbar.
+     *
      * @return array{letter_id: int, letter_ids: list<int>, patient_id: int, sequence_no: int, page_count: int,
      *     letters: list<array{letter_id: int, sequence_no: int, recipient_type: string, recipient_label: string, page_count: int}>}
      */
-    public function create(LetterInput $input): array
+    public function create(LetterInput $input, ?User $author = null): array
     {
         $errors = [];
         if ($input->recipients === []) {
@@ -261,6 +269,8 @@ final class LetterService
             $type = (string) $recipient['type'];
             $templates[$type] ??= $this->templates->current($type);
         }
+        $signaturePart = $this->signaturePart($author);
+        $signature = $this->signatureImage($signaturePart);
 
         $letters = [];
         $this->pdo->beginTransaction();
@@ -279,6 +289,7 @@ final class LetterService
 
                 $snapshot = $this->snapshot($prepared, $settings, $settingsVersionId, $sequence, $letterVersion, $documentNumber, $generatedAt);
                 $snapshot['recipient'] = LetterRecipient::snapshotPart($recipient);
+                $snapshot['signature'] = $signaturePart;
                 $snapshot = self::withTemplate($snapshot, $template);
                 $snapshot['appendix']['include'] = $input->includeAppendix;
                 $snapshot['measurements'] = LetterMeasurements::freeze(
@@ -287,7 +298,7 @@ final class LetterService
                     $input->measurements,
                     $input->includeMeasurements,
                 );
-                $pdf = $this->generator->generate($snapshot, $logo, $generatedAt);
+                $pdf = $this->generator->generate($snapshot, $logo, $generatedAt, $signature);
 
                 $letterId = $this->repository->insertLetter([
                     'patient_id' => $input->patientId,
@@ -376,7 +387,7 @@ final class LetterService
         }
         $snapshot = $letter['snapshot'];
         $generatedAt = $this->snapshotTime($snapshot, (string) $letter['created_at']);
-        $pdf = $this->generator->generate($snapshot, $this->snapshotLogo($snapshot), $generatedAt);
+        $pdf = $this->generator->generate($snapshot, $this->snapshotLogo($snapshot), $generatedAt, $this->snapshotSignature($snapshot));
         return ['content' => $pdf, 'filename' => (string) $letter['pdf_filename']];
     }
 
@@ -476,7 +487,7 @@ final class LetterService
                 'template_mode' => $templateMode,
             ];
 
-            $pdf = $this->generator->generate($snapshot, $this->snapshotLogo($old), $generatedAt);
+            $pdf = $this->generator->generate($snapshot, $this->snapshotLogo($old), $generatedAt, $this->snapshotSignature($old));
             $patientName = (string) $source['patient_name'];
             $newId = $this->repository->insertLetter([
                 'patient_id' => $patientId,
@@ -523,7 +534,7 @@ final class LetterService
      *
      * @throws LetterException wenn die Vorlage ungueltig ist
      */
-    public function previewPdf(mixed $templateContent, string $type = LetterRecipient::PATIENT): string
+    public function previewPdf(mixed $templateContent, string $type = LetterRecipient::PATIENT, ?User $signer = null): string
     {
         $content = LetterTemplate::normalize($templateContent);
         $settings = $this->cards->settings() ?? [];
@@ -531,6 +542,8 @@ final class LetterService
         $type = self::recipientType($type);
         $sample = LetterSample::snapshot($settings, $generatedAt);
         $sample['recipient'] = LetterSample::recipient($type);
+        $signaturePart = $signer === null ? LetterSample::signature() : $this->signaturePart($signer);
+        $sample['signature'] = $signaturePart;
         $snapshot = self::withTemplate($sample, [
             'id' => 0,
             'version_no' => 0,
@@ -539,7 +552,12 @@ final class LetterService
             'content' => $content,
         ]);
         $snapshot['template']['version_no'] = 'Vorschau';
-        return $this->generator->generate($snapshot, $this->logoImage($settings), $generatedAt);
+        return $this->generator->generate(
+            $snapshot,
+            $this->logoImage($settings),
+            $generatedAt,
+            $this->signatureImage($signaturePart),
+        );
     }
 
     /**
@@ -619,10 +637,69 @@ final class LetterService
     }
 
     /**
+     * Unterschrift des Snapshots. Die Bilddaten werden ueber die eingefrorene Kennung geladen und
+     * gegen die eingefrorene Pruefsumme geprueft; ist die Kennung nicht mehr vorhanden, dient die
+     * Pruefsumme als Rueckfall. Passt beides nicht, bleibt der Platz unter der Grussformel leer.
+     *
      * @param array<string, mixed> $snapshot
      */
-    private function snapshotTime(array $snapshot, string $fallback): \DateTimeImmutable
+    private function snapshotSignature(array $snapshot): ?ImageData
     {
+        return $this->signatureImage((array) ($snapshot['signature'] ?? []));
+    }
+
+    /**
+     * Teil "signature" des Snapshots: Unterschrift und Name der unterzeichnenden Person.
+     *
+     * @return array{id: int|null, sha256: string, filename: string, name: string}
+     */
+    private function signaturePart(?User $author): array
+    {
+        $part = [
+            'id' => null,
+            'sha256' => '',
+            'filename' => '',
+            'name' => $author?->signerName() ?? '',
+        ];
+        $signatureId = $author?->signatureId;
+        if ($signatureId === null) {
+            return $part;
+        }
+        $signature = $this->signatures->find($signatureId);
+        if ($signature === null) {
+            return $part;
+        }
+        $part['id'] = $signature['id'];
+        $part['sha256'] = $signature['sha256'];
+        $part['filename'] = $signature['filename'];
+        return $part;
+    }
+
+    /**
+     * @param array{id?: int|null, sha256?: string} $part
+     */
+    private function signatureImage(array $part): ?ImageData
+    {
+        $expected = (string) ($part['sha256'] ?? '');
+        $id = (int) ($part['id'] ?? 0);
+        $signature = $id > 0 ? $this->signatures->findWithContent($id) : null;
+        if ($signature === null && $expected !== '') {
+            $signature = $this->signatures->findByHash($expected);
+        }
+        if ($signature === null || !hash_equals($expected, $signature['sha256'])) {
+            return null;
+        }
+        try {
+            return ImageData::fromBytes($signature['content']);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $snapshot
+     */
+    private function snapshotTime(array $snapshot, string $fallback): \DateTimeImmutable    {
         $value = (string) ($snapshot['generated_at'] ?? $fallback);
         $time = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', substr($value, 0, 19), $this->clock->now()->getTimezone());
         return $time === false ? new \DateTimeImmutable($fallback) : $time;

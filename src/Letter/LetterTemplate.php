@@ -61,6 +61,7 @@ final class LetterTemplate
         'document_number' => 'Dokumentnummer',
         'letter_date' => 'Briefdatum (TT.MM.JJJJ)',
         'sequence_no' => 'laufende Briefnummer des Patienten',
+        'signer_name' => 'Titel, Vorname und Name der unterzeichnenden Person',
     ];
 
     /** Nur in der Seitenangabe der Fusszeile zulaessig. */
@@ -312,13 +313,22 @@ final class LetterTemplate
             ],
             'closing' => [
                 'label' => 'Grußformel',
-                'description' => 'Gruß und Unterschriftsblock (Platz für die Unterschrift wird freigehalten).',
+                'description' => 'Grußzeile des Briefes. Die Unterschrift folgt im eigenen Baustein „Unterschrift“.',
                 'unique' => true,
                 'options' => [],
                 'texts' => [
                     'text' => ['label' => 'Grußformel', 'multiline' => false, 'default' => 'Mit freundlichen Grüßen'],
-                    'signature' => ['label' => 'Unterzeichner', 'multiline' => true, 'default' => '{center_name}'],
+                    'signature' => ['label' => 'Zusatzzeile unter der Grußformel (optional)', 'multiline' => true, 'default' => ''],
                 ],
+            ],
+            'signature' => [
+                'label' => 'Unterschrift',
+                'description' => 'Unterschrift der angemeldeten Person; darunter stehen immer Titel, Vorname und Name. Das Bild wird automatisch auf die vorgesehene Größe skaliert.',
+                'unique' => true,
+                'options' => [
+                    'show_line' => ['label' => 'Linie über dem Namen', 'type' => 'bool', 'default' => true],
+                ],
+                'texts' => [],
             ],
             'text' => [
                 'label' => 'Freier Textbaustein',
@@ -352,7 +362,7 @@ final class LetterTemplate
      * und wird als Anhang unter der Grussformel auf einer neuen Seite gedruckt.
      */
     private const array DEFAULT_ORDER = [
-        'subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports',
+        'subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'signature', 'reports',
     ];
 
     /**

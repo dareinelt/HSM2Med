@@ -16,8 +16,8 @@ use PDO;
  */
 final class UserRepository
 {
-    private const string COLUMNS = 'id, username, display_name, is_active, failed_attempts, locked_until,'
-        . ' last_login_at, password_changed_at, created_at, updated_at';
+    private const string COLUMNS = 'id, username, display_name, title, first_name, last_name, signature_id,'
+        . ' is_active, failed_attempts, locked_until, last_login_at, password_changed_at, created_at, updated_at';
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -88,8 +88,8 @@ final class UserRepository
     public function all(): array
     {
         $rows = $this->pdo->query(
-            'SELECT id, username, display_name, is_active, last_login_at, created_at, updated_at'
-            . ' FROM users ORDER BY is_active DESC, username'
+            'SELECT id, username, display_name, title, first_name, last_name, signature_id, is_active,'
+            . ' last_login_at, created_at, updated_at FROM users ORDER BY is_active DESC, username'
         )->fetchAll(PDO::FETCH_ASSOC);
         $groups = $this->groupMap();
         $permissions = $this->permissionMap();
@@ -138,22 +138,48 @@ final class UserRepository
         return $permissions;
     }
 
-    public function create(string $username, string $displayName, string $passwordHash, bool $isActive, string $now): int
-    {
+    public function create(
+        string $username,
+        string $displayName,
+        string $passwordHash,
+        bool $isActive,
+        string $now,
+        ?string $title = null,
+        ?string $firstName = null,
+        ?string $lastName = null,
+    ): int {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO users (username, display_name, password_hash, is_active, created_at, updated_at, password_changed_at)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO users (username, display_name, title, first_name, last_name, password_hash, is_active,'
+            . ' created_at, updated_at, password_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
-        $stmt->execute([$username, $displayName, $passwordHash, $isActive ? 1 : 0, $now, $now, $now]);
+        $stmt->execute([
+            $username, $displayName, $title, $firstName, $lastName, $passwordHash, $isActive ? 1 : 0, $now, $now, $now,
+        ]);
         return (int) $this->pdo->lastInsertId();
     }
 
-    public function update(int $id, string $username, string $displayName, bool $isActive, string $now): void
-    {
+    public function update(
+        int $id,
+        string $username,
+        string $displayName,
+        bool $isActive,
+        string $now,
+        ?string $title = null,
+        ?string $firstName = null,
+        ?string $lastName = null,
+    ): void {
         $stmt = $this->pdo->prepare(
-            'UPDATE users SET username = ?, display_name = ?, is_active = ?, updated_at = ? WHERE id = ?'
+            'UPDATE users SET username = ?, display_name = ?, title = ?, first_name = ?, last_name = ?,'
+            . ' is_active = ?, updated_at = ? WHERE id = ?'
         );
-        $stmt->execute([$username, $displayName, $isActive ? 1 : 0, $now, $id]);
+        $stmt->execute([$username, $displayName, $title, $firstName, $lastName, $isActive ? 1 : 0, $now, $id]);
+    }
+
+    /** Hinterlegte Unterschrift setzen oder entfernen (null). */
+    public function setSignature(int $id, ?int $signatureId, string $now): void
+    {
+        $stmt = $this->pdo->prepare('UPDATE users SET signature_id = ?, updated_at = ? WHERE id = ?');
+        $stmt->execute([$signatureId, $now, $id]);
     }
 
     public function existsOther(string $username, int $excludeUserId): bool
