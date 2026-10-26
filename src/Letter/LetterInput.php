@@ -31,7 +31,7 @@ final class LetterInput
         public readonly bool $confirmData,
         public readonly bool $confirmLetter,
         public readonly array $recipients = [],
-        public readonly bool $includeAppendix = true,
+        public readonly bool $includeAppendix = false,
         public readonly bool $includeMeasurements = true,
         public readonly ?array $measurements = null,
         public readonly bool $rememberMeasurements = false,

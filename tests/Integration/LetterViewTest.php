@@ -298,6 +298,8 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('name="confirm_data"', $response->body);
         $this->assertContains('name="confirm_letter"', $response->body);
         $this->assertContains('Anhang: vollständige Abfrage', $response->body);
+        // Der Anhang ist Opt-in und daher nicht vorausgewaehlt.
+        $this->assertContains('nicht ausgewählt – der Brief enthält keinen Anhang', $response->body);
         $this->assertContains('MRT-bedingt tauglich', $response->body);
         $this->assertContains('ab Nr. 1 für diesen Patienten', $response->body);
         $this->assertNotContains('Noch nicht erfasst', $response->body);

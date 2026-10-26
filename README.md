@@ -686,9 +686,9 @@ abhängigkeitsfreien PDF-Writer.
 Der Brief wird **automatisch aus der Patientenakte** erzeugt – aus den versionierten
 Bausteinen Anamnese, Vormedikation, Befund und Epikrise, dem Befundteil der gewählten
 Untersuchung als Anhang unter der Grußformel (Baustein **Berichte**, immer auf einer neuen
-Seite), der vollständigen Schrittmacher-/ICD-Abfrage als Anhang und der **Messwerttabelle auf der
-letzten Seite**. Er enthält keine medizinische Bewertung und keine Diagnose; übernommen wird
-ausschließlich, was erfasst wurde.
+Seite), auf Wunsch der vollständigen Schrittmacher-/ICD-Abfrage als Anhang (Opt-in im
+Assistenten) und der **Messwerttabelle auf der letzten Seite**. Er enthält keine medizinische
+Bewertung und keine Diagnose; übernommen wird ausschließlich, was erfasst wurde.
 
 ![Briefübersicht](docs/screenshots/43-brief-uebersicht.png)
 
@@ -708,7 +708,9 @@ erzeugt. Der Assistent zeigt vorab, welche Bausteine fehlen:
 ![Bericht zuordnen](docs/screenshots/38-brief-assistent-bericht.png)
 
 **3. Bausteine prüfen** – je Textbaustein die aktuelle Fassung mit Fassungsnummer,
-erfassender Person und Zeitpunkt sowie die Hinweise, die der Brief enthalten wird:
+erfassender Person und Zeitpunkt sowie die Hinweise, die der Brief enthalten wird. Die Checkbox
+**Anhang mit der vollständigen Abfrage in diesen Brief aufnehmen** ist **nicht vorausgewählt**
+(Opt-in); ohne sie enthält der Brief nur den Brieftext und die Messwerttabelle:
 
 ![Bausteine prüfen](docs/screenshots/39-brief-assistent-bausteine.png)
 
