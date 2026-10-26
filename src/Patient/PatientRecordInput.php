@@ -141,9 +141,13 @@ final class PatientRecordInput
                 if ($entry[$field] === '') {
                     continue;
                 }
-                $iso = DateInput::parse($entry[$field]);
+                $iso = DateInput::parseExtended($entry[$field]);
                 if ($iso === null) {
-                    $errors['medication'] = sprintf('Zeile %s: "%s" ist kein gültiges Datum (erwartet TT.MM.JJJJ).', $position, $field === 'from' ? 'von' : 'bis');
+                    $errors['medication'] = sprintf(
+                        'Zeile %s: "%s" ist kein gültiges Datum (erwartet TT.MM.JJJJ, TTMMJJJJ oder MM/JJJJ; ohne Tag gilt der Monatserste).',
+                        $position,
+                        $field === 'from' ? 'von' : 'bis',
+                    );
                     continue;
                 }
                 $entry[$field] = $iso;

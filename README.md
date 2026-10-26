@@ -460,8 +460,10 @@ Autor (`Fassung 2, vom 07.10.2026, erfasst von Dr. med. Anna Beispiel`). Inhalts
 Eingaben erzeugen **keine** neue Fassung; verglichen wird ein SHA-256 über den
 normalisierten Inhalt. Freitext ist auf 20 000 Zeichen begrenzt, der Autor auf 255 Zeichen,
 die Vormedikation auf 50 Zeilen. Datumsangaben in Medikamentenzeilen werden wie das
-Geburtsdatum normalisiert gespeichert und in der Akte als `TT.MM.JJJJ` angezeigt; eine leere
-Spalte *bis* bedeutet „fortlaufend".
+Geburtsdatum normalisiert gespeichert und in der Akte als `TT.MM.JJJJ` angezeigt; zusätzlich
+werden `TTMMJJJJ`, `JJJJMMTT`, `MM/JJJJ`, `MM.JJJJ`, `MM-JJJJ`, `JJJJ-MM`, `JJJJ/MM` und
+`JJJJ.MM` erkannt, wobei ohne Tagesangabe der Monatserste gilt. Eine leere Spalte *bis* bedeutet
+„fortlaufend".
 
 ![Patientenakte](docs/screenshots/26-akte-patient.png)
 

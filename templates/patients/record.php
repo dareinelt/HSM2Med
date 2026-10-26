@@ -303,7 +303,8 @@ $checkField = static function (array $field, string $name, string $current, bool
             <p><button type="button" class="button" data-repeat-add>Weitere Zeile</button></p>
         </div>
         <?= $err('medication') ?>
-        <p class="muted">Vollständig leere Zeilen werden verworfen. Der Wirkstoff ist je Zeile erforderlich.</p>
+        <p class="muted">Vollständig leere Zeilen werden verworfen. Der Wirkstoff ist je Zeile erforderlich.
+            Datum als TT.MM.JJJJ, TTMMJJJJ oder MM/JJJJ; ohne Tag gilt der Monatserste.</p>
     <?php endif; ?>
 
     <?php if (!$isDeviceCheck): ?>
