@@ -334,7 +334,7 @@ def main() -> int:
         page.wait_for_load_state()
         shot(page, "13-ausweis-stammdaten")
 
-        page.goto(f"{BASE_URL}/patient-cards/new")
+        page.goto(f"{BASE_URL}/patient-cards/new?select=1")
         shot(page, "14-ausweis-bericht-waehlen")
 
         page.locator("a[href^='/patient-cards/reports/']").first.click()
@@ -499,7 +499,9 @@ def main() -> int:
         page.goto(f"{BASE_URL}/letters")
         shot(page, "35-brief-uebersicht-leer")
 
-        page.goto(f"{BASE_URL}/letters/new")
+        # Mit aktivem Patienten springt /letters/new direkt in den Assistenten; die
+        # Patientenauswahl ist ueber ?select=1 erreichbar.
+        page.goto(f"{BASE_URL}/letters/new?select=1")
         shot(page, "36-brief-patient-waehlen")
 
         # Schritt 2: Bericht fuer den Baustein "Berichte" zuordnen (ohne Bericht entfaellt der Anhang).

@@ -71,7 +71,7 @@ $activePatient = $activePatient ?? null;
             <input type="search" id="q" name="q" value="<?= $e($query) ?>" maxlength="200" autofocus>
         </div>
         <div class="field buttons"><button type="submit" class="primary"><?= $icon('search') ?> <span data-label>Suchen</span></button>
-            <?php if ($query !== ''): ?> <a class="button" href="/letters/new"><?= $icon('undo') ?> <span>Zurücksetzen</span></a><?php endif; ?></div>
+            <?php if ($query !== ''): ?> <a class="button" href="/letters/new?select=1"><?= $icon('undo') ?> <span>Zurücksetzen</span></a><?php endif; ?></div>
     </form>
 </section>
 

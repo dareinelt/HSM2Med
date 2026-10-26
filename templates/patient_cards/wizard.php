@@ -78,7 +78,7 @@ $date = static fn (string $key): string => \App\PatientCard\PatientCardInput::fo
     </div>
     <div class="actions">
         <a class="button" href="/reports/<?= $e($id) ?>"><?= $icon('eye') ?> <span>Bericht ansehen</span></a>
-        <a class="button" href="/patient-cards/new"><?= $icon('refresh') ?> <span>Anderen Bericht wählen</span></a>
+        <a class="button" href="/patient-cards/new?select=1"><?= $icon('refresh') ?> <span>Anderen Bericht wählen</span></a>
     </div>
 </div>
 

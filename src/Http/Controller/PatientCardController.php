@@ -61,6 +61,10 @@ final class PatientCardController extends Controller
 
     /**
      * Auswahl des Quellberichts. Ohne Bericht kann kein Ausweis entstehen.
+     *
+     * Der aktive Patient ist fuehrend: "Ausweis erstellen" springt ohne erneute Auswahl direkt in
+     * den Assistenten des neuesten Berichts dieses Patienten. Die Berichtsauswahl bleibt ueber
+     * ?select=1, eine Suche oder eine Seitenzahl erreichbar.
      */
     public function selectReport(Request $request): Response
     {
@@ -68,6 +72,16 @@ final class PatientCardController extends Controller
         foreach (self::WIZARD_FILTERS as $key) {
             $filters[$key] = mb_substr(trim($request->query($key)), 0, 200);
         }
+        $choosingReport = $request->query('select') !== ''
+            || $request->query('page') !== ''
+            || array_filter($filters, static fn (string $value): bool => $value !== '') !== [];
+
+        $activePatient = $this->app->activePatientSummary();
+        $activeReports = $activePatient === null ? [] : $this->app->patientService()->reports($activePatient['id']);
+        if (!$choosingReport && $activeReports !== []) {
+            return $this->wizard($request, ['id' => (string) $activeReports[0]['id']]);
+        }
+
         $page = self::page($request->query('page', '1'));
         $result = $this->app->reportRepository()->search($filters, self::PER_PAGE, ($page - 1) * self::PER_PAGE);
         $cards = $this->app->patientCardRepository()->latestCardsForReports(
@@ -82,6 +96,8 @@ final class PatientCardController extends Controller
             'total' => $result['total'],
             'page' => $page,
             'pages' => max(1, (int) ceil($result['total'] / self::PER_PAGE)),
+            'activePatient' => $activePatient,
+            'activeReports' => count($activeReports),
         ], 'patient_cards'));
     }
 
@@ -233,6 +249,7 @@ final class PatientCardController extends Controller
             'physicians' => $repository->followUpPhysicians(
                 array_map(static fn (array $row): int => (int) $row['id'], $past),
             ),
+            'activePatientId' => $this->app->activePatient()->id(),
         ], 'patient_cards'));
     }
 

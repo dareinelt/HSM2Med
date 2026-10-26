@@ -62,7 +62,14 @@ final class LetterController extends Controller
     public function newLetter(Request $request): Response
     {
         $query = mb_substr(trim($request->query('q')), 0, 200);
-        $patientId = ctype_digit($request->query('patient')) ? (int) $request->query('patient') : 0;
+        $patientParam = $request->query('patient');
+        $patientId = ctype_digit($patientParam) ? (int) $patientParam : 0;
+        // Der aktive Patient ist fuehrend: "Brief erstellen" springt ohne erneute Auswahl direkt
+        // in den Assistenten. Die Patientenauswahl bleibt ueber ?select=1 und die Suche erreichbar.
+        $choosingPatient = $request->query('select') !== '' || $query !== '' || $patientParam !== '';
+        if ($patientId <= 0 && !$choosingPatient) {
+            $patientId = $this->app->activePatient()->id() ?? 0;
+        }
 
         if ($patientId <= 0) {
             return Response::html($this->view->render('letters/new', [
