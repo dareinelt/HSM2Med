@@ -85,6 +85,13 @@ def shot(page: Page, name: str, full_page: bool = True) -> None:
         # Seite bereits gescrollt; Chromium rendert klebende Elemente dann an der aktuellen
         # Scrollposition und der Seitenkopf fehlt am oberen Bildrand. Deshalb zurueckscrollen.
         page.evaluate("window.scrollTo(0, 0)")
+        # Die Statusleiste klebt am unteren Bildrand und erscheint bei einer ganzseitigen
+        # Aufnahme sonst mitten im Bild. Darum das Ansichtsfenster auf die Seitenhoehe setzen.
+        height = page.evaluate("Math.ceil(document.documentElement.scrollHeight)")
+        if height > page.viewport_size["height"]:
+            page.set_viewport_size({"width": VIEWPORT["width"], "height": height})
+            page.evaluate("window.scrollTo(0, 0)")
+            full_page = False
     page.screenshot(path=str(target), full_page=full_page)
     print(f"  {target.name}")
 
