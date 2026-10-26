@@ -277,7 +277,7 @@
     color: #8a919c;
     font-size: .8em;
 }
-.te-return { display: block; padding-bottom: 1px; border-bottom: 1px solid #333; font-size: .62em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.te-return { display: block; padding-bottom: 1px; border-bottom: 1px solid #333; font-size: .62em; overflow-wrap: anywhere; }
 .te-remark { display: block; margin-bottom: calc(var(--mm) * 2); font-size: .8em; }
 .te-recipient { display: flex; flex-direction: column; }
 .te-zone--recipient, .te-zone--return { padding-top: 0; }

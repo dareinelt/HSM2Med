@@ -63,6 +63,8 @@ final class LetterPdfGenerator
     private const float ADDRESS_BOTTOM = 90.0 * self::MM;
     private const float ADDRESS_WIDTH = 80.0 * self::MM;
     private const int ADDRESS_MAX_LINES = 6;
+    /** Hoechstens zwei Zeilen fuer die Ruecksendeangabe, damit die volle Absenderanschrift lesbar bleibt. */
+    private const int RETURN_MAX_LINES = 2;
 
     private const float INFO_X = 125.0 * self::MM;
     private const float INFO_TOP = 50.0 * self::MM;
@@ -342,10 +344,19 @@ final class LetterPdfGenerator
         if ($this->zoneOption('return_address', 'show')) {
             $return = $this->zoneText('return_address', 'text');
             if ($return !== '') {
-                $line = $this->wrap($return, self::ADDRESS_WIDTH, 'regular', self::SIZE_RETURN)[0] ?? '';
+                $lines = array_slice(
+                    $this->wrap($return, self::ADDRESS_WIDTH, 'regular', self::SIZE_RETURN),
+                    0,
+                    self::RETURN_MAX_LINES,
+                );
+                $lineHeight = self::SIZE_RETURN * self::LINE;
                 $y = self::ADDRESS_TOP + 3.0 * self::MM;
-                $this->pdf->text(self::LEFT, $y, $line, 'regular', self::SIZE_RETURN, self::MUTED);
-                $this->pdf->line(self::LEFT, $y + 1.6, self::LEFT + min(self::ADDRESS_WIDTH, PdfDocument::textWidth($line, 'regular', self::SIZE_RETURN)), $y + 1.6, self::MUTED, 0.3);
+                foreach ($lines as $index => $line) {
+                    $this->pdf->text(self::LEFT, $y + $index * $lineHeight, $line, 'regular', self::SIZE_RETURN, self::MUTED);
+                }
+                $last = (string) end($lines);
+                $underlineY = $y + (count($lines) - 1) * $lineHeight + 1.6;
+                $this->pdf->line(self::LEFT, $underlineY, self::LEFT + min(self::ADDRESS_WIDTH, PdfDocument::textWidth($last, 'regular', self::SIZE_RETURN)), $underlineY, self::MUTED, 0.3);
             }
         }
         $remark = $this->zoneText('recipient', 'remark');
