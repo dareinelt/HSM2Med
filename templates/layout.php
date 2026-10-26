@@ -58,7 +58,6 @@ $permitted = $permitted ?? View::permitted($user);
             <span class="titlebar__mark"><?= $icon('pulse') ?></span>
             <span class="titlebar__brand-text">
                 <strong><?= $e(Config::APP_NAME) ?></strong>
-                <small>Merlin-Auslesedaten</small>
             </span>
         </a>
         <div class="titlebar__quick" role="group" aria-label="Schnellzugriff">
@@ -201,7 +200,7 @@ $permitted = $permitted ?? View::permitted($user);
         <span class="statusbar__item">Bereich: <?= $e($contextLine) ?></span>
     <?php endif; ?>
     <span class="statusbar__grow"></span>
-    <span class="statusbar__item statusbar__note">Automatisch erzeugte Datendarstellung – keine medizinische Bewertung, Diagnose oder Empfehlung. Keine originale Abbott-/Merlin-Dokumentation.</span>
+    <span class="statusbar__item statusbar__note">Automatisch erzeugte Datendarstellung – keine medizinische Bewertung, Diagnose oder Empfehlung.</span>
 </footer>
 <?php // Kontextmenü der Patientenwahl: nur bei aktivem Patienten, Rechtsklick auf die Kachel. ?>
 <?php if ($activePatient !== null): ?>

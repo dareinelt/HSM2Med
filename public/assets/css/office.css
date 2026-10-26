@@ -97,7 +97,6 @@ body.office {
 }
 .titlebar__brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 .titlebar__brand-text strong { font-size: 1rem; }
-.titlebar__brand-text small { color: var(--office-muted); font-size: .74rem; }
 .titlebar__quick {
     display: flex;
     align-items: center;
