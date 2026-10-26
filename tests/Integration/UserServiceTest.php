@@ -444,6 +444,68 @@ final class UserServiceTest extends DatabaseTestCase
         );
     }
 
+    public function testCreateCanRequireAPasswordChangeAtTheNextLogin(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $id = $this->service->create(
+            UserInput::fromPost([
+                'username' => 'anna',
+                'display_name' => 'Anna',
+                'is_active' => '1',
+                'must_change_password' => '1',
+                'groups' => [(string) $this->groupByCode('mfa')],
+            ]),
+            'anna-kennwort-2026',
+        );
+
+        $this->assertTrue($this->service->user($id)->mustChangePassword);
+        $this->assertTrue($this->service->authenticate('anna', 'anna-kennwort-2026')->mustChangePassword);
+
+        // Ohne Kennzeichen entsteht ein Konto ohne Pflicht.
+        $other = $this->service->create(
+            UserInput::fromPost(['username' => 'arzt', 'display_name' => 'Arzt', 'is_active' => '1', 'groups' => []]),
+            'arzt-kennwort-2026',
+        );
+        $this->assertFalse($this->service->user($other)->mustChangePassword);
+    }
+
+    public function testTheOwnPasswordClearsTheRequiredChange(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $id = $this->service->create(
+            UserInput::fromPost([
+                'username' => 'anna',
+                'display_name' => 'Anna',
+                'is_active' => '1',
+                'must_change_password' => '1',
+                'groups' => [(string) $this->groupByCode('mfa')],
+            ]),
+            'anna-kennwort-2026',
+        );
+
+        $anna = $this->service->authenticate('anna', 'anna-kennwort-2026');
+        $this->service->changeOwnPassword($anna, 'anna-kennwort-2026', 'anna-zweites-kennwort', 'anna-zweites-kennwort');
+
+        $this->assertFalse($this->service->user($id)->mustChangePassword);
+        $this->assertFalse($this->service->authenticate('anna', 'anna-zweites-kennwort')->mustChangePassword);
+    }
+
+    public function testAdminSetPasswordRequiresAChangeAtTheNextLogin(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $id = $this->service->create(
+            UserInput::fromPost(['username' => 'anna', 'display_name' => 'Anna', 'is_active' => '1', 'groups' => [(string) $this->groupByCode('mfa')]]),
+            'anna-kennwort-2026',
+        );
+
+        $this->service->setPassword($id, 'neues-kennwort-2026');
+        $this->assertTrue($this->service->user($id)->mustChangePassword);
+
+        // Fuer das eigene Konto entfaellt die Pflicht: das Kennwort ist dort selbst gewaehlt.
+        $this->service->setPassword($id, 'drittes-kennwort-2026', false);
+        $this->assertFalse($this->service->user($id)->mustChangePassword);
+    }
+
     private function groupByCode(string $code): int
     {
         foreach ($this->service->groups() as $group) {

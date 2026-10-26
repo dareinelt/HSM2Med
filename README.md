@@ -115,7 +115,8 @@ historische Auslesungen, ausschließlich aus der Datenbank.
   wird als **Rechtematrix** in der Oberfläche gepflegt (nicht im Code). Vorgegeben sind die
   Gruppen **Admin** (Vollzugriff einschließlich Benutzerverwaltung), **MFA** (Tagesgeschäft:
   Import, Akten, Ausweise, Briefe) und **Arzt** (alle medizinischen Bereiche, Vorlagen,
-  Systeminformationen und Protokoll).
+  Systeminformationen und Protokoll). Ein von der Administration vergebenes Kennwort muss beim
+  nächsten Login ersetzt werden; die Kennwortfelder zeigen dabei eine Kennwortstärke an.
 - Keine externen Abhängigkeiten zur Laufzeit: kein CDN, keine Webfonts, keine Composer-Pakete.
 
 Technik: PHP 8.5 (nativ, `strict_types`, PDO), MySQL 9.7, Apache, Docker Compose.
@@ -236,6 +237,12 @@ bedienbare Element. Nach der Anmeldung wird die ursprünglich aufgerufene Seite 
   **Kennwort ändern** (`/account/password`, für jedes Konto) und **Abmelden** erreichbar.
 * Ein Konto, das noch das Kennwort aus `.env` verwendet, wird in der Benutzerverwaltung
   ausdrücklich gekennzeichnet.
+* Wurde das Kennwort von der Administration vergeben (neues Konto oder neu gesetztes Kennwort),
+  führt die Anmeldung **zuerst** auf *Kennwort ändern* (`/account/password`). Bis das eigene
+  Kennwort gesetzt ist, bleibt nur dieser Bereich (und die Unterschrift sowie *Abmelden*)
+  erreichbar; die Oberfläche erklärt den Grund. Mit dem eigenen Kennwort entfällt die Pflicht
+  automatisch, in der Benutzerverwaltung verschwindet dann die Kennzeichnung
+  *Kennwortwechsel offen*.
 
 ### Benutzerverwaltung (System → *Benutzerverwaltung*)
 
@@ -244,7 +251,12 @@ Sichtbar und erreichbar nur für Gruppen mit dem Recht **Benutzerverwaltung** (v
 * **Benutzerkonten** (`/system/users`): Anmeldename, Anzeigename, Titel, Vorname, Nachname,
   Gruppen, Aktivstatus; Kennwörter
   werden ausschließlich als Hash gespeichert und lassen sich nur **neu setzen**
-  (`/system/users/{id}/password`), nie auslesen.
+  (`/system/users/{id}/password`), nie auslesen. Die Option **Muss Kennwort beim nächsten Login
+  ändern** ist beim Anlegen vorgegeben und wird beim Setzen eines fremden Kennworts wieder
+  gesetzt; sie lässt sich je Konto abschalten. Unter jedem Kennwortfeld zeigt eine Anzeige die
+  **Kennwortstärke** (Länge, Groß-/Kleinbuchstaben, Ziffer, Sonderzeichen). Die Anzeige ist eine
+  Hilfe beim Vergeben – verbindlich prüft der Server die Regel „mindestens 12 Zeichen, nicht
+  gleich dem Anmeldenamen".
 * **Unterschrift je Konto** (`/system/users/{id}/signature`, eigene Seite `/account/signature`):
   JPG, PNG oder BMP (max. 1 MiB, max. 2000 × 2000 Pixel), Prüfung ausschließlich über den
   Dateiinhalt. Das Bild wird nicht unter dem Originalnamen gespeichert und bei gleichem Inhalt
@@ -1307,7 +1319,10 @@ bleiben unverändert, weil jede Fassung ihren Inhalt als Snapshot speichert.
   Meldung wie ein falsches Kennwort. Rechte werden über Gruppen und die in der Oberfläche
   gepflegte Rechtematrix vergeben und **bei jedem Aufruf serverseitig** geprüft
   (`App\User\Permission::forPath()`); die Oberfläche blendet nur zusätzlich aus, was ohnehin
-  verboten ist. Nach `AUTH_IDLE_MINUTES` ohne Bedienung wird die Sitzung beendet. Es ist zu
+  verboten ist. Nach `AUTH_IDLE_MINUTES` ohne Bedienung wird die Sitzung beendet. Ein von der
+  Administration vergebenes Kennwort gilt nur als Startkennwort: Bis zum eigenen Kennwort lässt
+  der Kernel ausschließlich `/account/password`, die eigene Unterschrift und die Abmeldung zu
+  (`App\Http\Kernel::PASSWORD_CHANGE_PATHS`). Es ist zu
   empfehlen, den Netzwerkzugriff zusätzlich über Proxy bzw. Firewall zu beschränken und das
   Kennwort aus `.env` sofort zu ändern.
 - **Uploads:** Größenlimit, nur `.txt`/`.log`, Inhaltsprüfung (Magic Bytes, MIME-Typ,
@@ -1434,7 +1449,9 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   Anlegen/Ändern/Löschen von Benutzern, Dubletten- und Gruppenprüfung, die Selbstsperre, die
   Kontosperre nach fünf Fehlversuchen samt Ablauf, das Setzen von Kennwörtern, die
   Rechte-Matrix je Gruppe, die Regel „der letzte Benutzerverwalter kann sich nicht aussperren",
-  Systemgruppen und Gruppenzählung ab. `tests/Integration/AuthTest.php` prüft Sitzung ohne
+  Systemgruppen und Gruppenzählung ab; dazu die Pflicht zum Kennwortwechsel (Vorgabe beim
+  Anlegen, Aufhebung durch das eigene Kennwort, erneute Pflicht beim Setzen eines fremden
+  Kennworts). `tests/Integration/AuthTest.php` prüft Sitzung ohne
   Anmeldung, Anmeldung und Abmeldung, den Ablauf nach Leerlauf (und die Verlängerung durch
   Aktivität), einen Zeitstempel in der Zukunft, deaktivierte und gelöschte Konten, frisch
   gelesene Rechte je Anfrage, das eigene Kennwort, das vollständige Verwerfen der Sitzung bei
@@ -1453,7 +1470,9 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   angeforderten Ziels (und die Abwehr externer Ziele), die Fehlermeldung ohne Hinweis auf die
   Existenz eines Kontos, Benutzerliste und -formular (Gruppen, Kennwortregeln, Fehleranzeige),
   die Rechte-Matrix, das eigene Konto (auch ohne jedes Recht), die Statusleiste mit Anmeldung
-  und Abmeldung sowie das Ausblenden von Funktionsband und Links ohne Recht.
+  und Abmeldung, die Kennzeichnung *Kennwortwechsel offen*, die Anzeige der Kennwortstärke im
+  Benutzer- und im eigenen Kennwortformular sowie die Sperre des Kernels, solange der
+  Pflichtwechsel offen ist; dazu das Ausblenden von Funktionsband und Links ohne Recht.
 
 ## Screenshots für die Dokumentation
 

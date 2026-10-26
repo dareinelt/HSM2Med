@@ -67,6 +67,7 @@ final class UserInputTest extends TestCase
             'first_name' => ' Erika ',
             'last_name' => '  Muster ',
             'is_active' => '1',
+            'must_change_password' => 'on',
             'groups' => ['2', 3, '3', 'keine', 0, -4],
         ]);
 
@@ -76,6 +77,7 @@ final class UserInputTest extends TestCase
         $this->assertSame('Erika', $input->firstName);
         $this->assertSame('Muster', $input->lastName);
         $this->assertTrue($input->isActive);
+        $this->assertTrue($input->mustChangePassword);
         $this->assertSame([2, 3], $input->groupIds);
         $this->assertSame(
             [
@@ -85,6 +87,7 @@ final class UserInputTest extends TestCase
                 'first_name' => 'Erika',
                 'last_name' => 'Muster',
                 'is_active' => true,
+                'must_change_password' => true,
                 'groups' => [2, 3],
             ],
             $input->values(),

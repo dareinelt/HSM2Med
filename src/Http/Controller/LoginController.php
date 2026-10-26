@@ -66,6 +66,12 @@ final class LoginController extends Controller
         $this->app->logger()->info('Anmeldung erfolgreich', ['benutzer' => $user->username]);
         SessionManager::flash('success', sprintf('Willkommen, %s. Angemeldet als %s.', $user->displayName, $user->groupText() !== '' ? $user->groupText() : 'ohne Gruppe'));
 
+        // Pflichtwechsel: das Kennwort stammt von der Administration und ist zu ersetzen.
+        if ($user->mustChangePassword) {
+            SessionManager::flash('info', 'Bitte ein eigenes Kennwort setzen: Das bisherige Kennwort wurde von der Administration vergeben.');
+            return Response::redirect('/account/password');
+        }
+
         // Ziele, die die angemeldete Person nicht erreichen darf, werden nicht angesteuert.
         if ($auth->can(Permission::forPath($target))) {
             return Response::redirect($target);

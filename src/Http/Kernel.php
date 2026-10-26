@@ -31,6 +31,17 @@ use Throwable;
  */
 final class Kernel
 {
+    /**
+     * Erreichbar, solange ein Pflichtwechsel offen ist: eigenes Kennwort und Abmeldung.
+     * Die Unterschrift bleibt ausgenommen, damit das Profil nicht in einer Sackgasse endet.
+     */
+    private const array PASSWORD_CHANGE_PATHS = [
+        '/account/password',
+        '/account/signature',
+        '/account/signature/image',
+        '/logout',
+    ];
+
     private readonly View $view;
 
     public function __construct(private readonly Application $app)
@@ -76,6 +87,10 @@ final class Kernel
             if ($denied !== null) {
                 return $denied;
             }
+            $passwordChange = $this->passwordChangeRequired($request);
+            if ($passwordChange !== null) {
+                return $passwordChange;
+            }
             if ($this->requiresPatientSelection($request)) {
                 SessionManager::flash('info', 'Der Patientenvorgang ist führend: Bitte zuerst einen Patienten auswählen oder neu anlegen.');
                 return Response::redirect('/patients');
@@ -120,6 +135,26 @@ final class Kernel
             return Response::redirect('/');
         }
         return null;
+    }
+
+    /**
+     * Pflichtwechsel: Ein von der Administration vergebenes Kennwort muss vor der ersten
+     * Nutzung ersetzt werden. Erlaubt bleiben nur das eigene Kennwort und die Abmeldung.
+     */
+    private function passwordChangeRequired(Request $request): ?Response
+    {
+        $user = $this->app->auth()->user();
+        if ($user === null || !$user->mustChangePassword) {
+            return null;
+        }
+        if (in_array($request->path, self::PASSWORD_CHANGE_PATHS, true)) {
+            return null;
+        }
+        SessionManager::flash(
+            'info',
+            'Bitte zuerst ein eigenes Kennwort setzen: Das aktuelle Kennwort wurde von der Administration vergeben.',
+        );
+        return Response::redirect('/account/password');
     }
 
     /**

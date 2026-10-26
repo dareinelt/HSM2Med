@@ -9,6 +9,7 @@ use App\Config\Config;
 use App\Http\Controller\AccountController;
 use App\Http\Controller\LoginController;
 use App\Http\Controller\UserController;
+use App\Http\Kernel;
 use App\Http\Request;
 use App\Http\View;
 use App\Repository\GroupRepository;
@@ -169,6 +170,111 @@ final class LoginViewTest extends DatabaseTestCase
         // Beim Bearbeiten gibt es keine Kennwortfelder im Kontodaten-Formular.
         $this->assertNotContains('id="password"', $html);
         $this->assertNotContains('id="repeat_password"', $html);
+    }
+
+    public function testUserFormOffersThePasswordChangeRequirementAndTheStrengthMeter(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $html = $this->users()->newForm(new Request('GET', '/system/users/new'))->body;
+
+        // Beim Anlegen ist die Pflicht vorgegeben: das Kennwort stammt von der Administration.
+        $this->assertContains('Muss Kennwort beim nächsten Login ändern', $html);
+        $this->assertSame(
+            1,
+            preg_match('/name="must_change_password" value="1" checked>/', $html),
+            'Beim Anlegen muss die Pflicht vorgegeben sein.',
+        );
+
+        // Kennwortstaerke als Hilfe beim Vergeben (Anzeige, keine Sperre).
+        $this->assertContains('data-password-strength="password"', $html);
+        $this->assertContains('data-password-minimum="' . UserInput::MIN_PASSWORD_LENGTH . '"', $html);
+        $this->assertContains('data-strength-rule="length"', $html);
+        $this->assertContains('data-strength-label', $html);
+
+        // Bestandskonto ohne Pflicht: Kaestchen leer, Anzeige am Feld der Administration.
+        $id = $this->service->create(
+            UserInput::fromPost([
+                'username' => 'anna',
+                'display_name' => 'Anna',
+                'is_active' => '1',
+                'groups' => [(string) $this->groupByCode('mfa')],
+            ]),
+            'anna-kennwort-2026',
+        );
+        $edit = $this->users()->editForm(new Request('GET', '/system/users/' . $id . '/edit'), ['id' => (string) $id])->body;
+
+        $this->assertContains('name="must_change_password" value="1">', $edit);
+        $this->assertContains('data-password-strength="new_password"', $edit);
+    }
+
+    public function testAccountPasswordPageExplainsARequiredChange(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $this->service->create(
+            UserInput::fromPost([
+                'username' => 'anna',
+                'display_name' => 'Anna',
+                'is_active' => '1',
+                'must_change_password' => '1',
+                'groups' => [(string) $this->groupByCode('mfa')],
+            ]),
+            'anna-kennwort-2026',
+        );
+        $anna = $this->service->authenticate('anna', 'anna-kennwort-2026');
+        $auth = new Auth(new UserRepository($this->pdo), $this->clock, 1800);
+        $auth->login($anna);
+
+        $html = (new AccountController($this->app, $this->viewWith($auth)))
+            ->form(new Request('GET', '/account/password'))->body;
+
+        $this->assertContains('von der Administration vergeben', $html);
+        $this->assertContains('data-password-strength="password"', $html);
+    }
+
+    /**
+     * Solange der Pflichtwechsel offen ist, fuehrt jedes andere Ziel zum eigenen Kennwort;
+     * nur dieser Bereich (und die Abmeldung) bleibt erreichbar.
+     *
+     * Geprueft wird die Sperre des Kernels selbst – `handle()` setzt eine echte Sitzung voraus.
+     */
+    public function testTheKernelForcesThePasswordChangeBeforeAnyOtherArea(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $id = $this->service->create(
+            UserInput::fromPost([
+                'username' => 'anna',
+                'display_name' => 'Anna',
+                'is_active' => '1',
+                'must_change_password' => '1',
+                'groups' => [(string) $this->groupByCode('mfa')],
+            ]),
+            'anna-kennwort-2026',
+        );
+        $this->app->auth()->login($this->service->authenticate('anna', 'anna-kennwort-2026'));
+
+        $kernel = new Kernel($this->app);
+        $check = new \ReflectionMethod(Kernel::class, 'passwordChangeRequired');
+
+        $blocked = $check->invoke($kernel, new Request('GET', '/patients'));
+        $this->assertTrue($blocked instanceof \App\Http\Response, 'Sperre erwartet');
+        $this->assertSame('/account/password', $blocked->headers['Location'] ?? '');
+        $this->assertContains(
+            'von der Administration vergeben',
+            implode(' ', array_column(\App\Security\SessionManager::takeFlashes(), 'message')),
+        );
+
+        foreach (['/account/password', '/account/signature', '/logout'] as $path) {
+            $this->assertNull($check->invoke($kernel, new Request('GET', $path)), 'Erreichbar: ' . $path);
+        }
+
+        // Ohne offene Pflicht greift die Sperre nicht mehr.
+        $this->service->changeOwnPassword(
+            $this->service->user($id),
+            'anna-kennwort-2026',
+            'anna-neues-kennwort-2026',
+            'anna-neues-kennwort-2026',
+        );
+        $this->assertFalse($this->service->user($id)->mustChangePassword);
     }
 
     public function testTheOwnAdminRoleIsLockedInTheUserForm(): void

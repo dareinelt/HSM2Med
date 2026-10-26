@@ -30,6 +30,7 @@ final readonly class User
         public ?string $firstName = null,
         public ?string $lastName = null,
         public ?int $signatureId = null,
+        public bool $mustChangePassword = false,
     ) {
     }
 
@@ -54,6 +55,7 @@ final readonly class User
             firstName: self::text($row['first_name'] ?? null),
             lastName: self::text($row['last_name'] ?? null),
             signatureId: isset($row['signature_id']) ? (int) $row['signature_id'] : null,
+            mustChangePassword: (int) ($row['must_change_password'] ?? 0) === 1,
         );
     }
 

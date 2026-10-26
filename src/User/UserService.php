@@ -154,6 +154,7 @@ final class UserService
                 self::nullable($input->title),
                 self::nullable($input->firstName),
                 self::nullable($input->lastName),
+                $input->mustChangePassword,
             );
             $this->users->setGroups($id, $input->groupIds, $now);
             if ($own) {
@@ -200,7 +201,17 @@ final class UserService
         try {
             $now = $this->now();
             $before = $this->userAdministrators();
-            $this->users->update($id, $input->username, $input->displayName, $input->isActive, $now, self::nullable($input->title), self::nullable($input->firstName), self::nullable($input->lastName));
+            $this->users->update(
+                $id,
+                $input->username,
+                $input->displayName,
+                $input->isActive,
+                $now,
+                self::nullable($input->title),
+                self::nullable($input->firstName),
+                self::nullable($input->lastName),
+                $input->mustChangePassword,
+            );
             $this->users->setGroups($id, $input->groupIds, $now);
             $this->guardUserAdministration($before);
             if ($own) {
@@ -215,16 +226,18 @@ final class UserService
     }
 
     /**
-     * Setzt ein neues Kennwort (Administration) und hebt eine Sperre auf.
+     * Setzt ein neues Kennwort (Administration) und hebt eine Sperre auf. Sofern die Administration
+     * das Kennwort fuer eine andere Person setzt, kennt diese es nicht und muss es bei der naechsten
+     * Anmeldung ersetzen.
      */
-    public function setPassword(int $id, string $password): void
+    public function setPassword(int $id, string $password, bool $mustChangePassword = true): void
     {
         $user = $this->users->find($id);
         if ($user === null) {
             throw UserException::rule('password', 'Der Benutzer existiert nicht mehr.');
         }
         UserInput::requirePassword($password, $user->username);
-        $this->users->setPassword($id, self::hash($password), $this->now());
+        $this->users->setPassword($id, self::hash($password), $this->now(), $mustChangePassword);
     }
 
     /**
@@ -243,7 +256,8 @@ final class UserService
             throw UserException::rule('password', 'Das neue Kennwort muss sich vom bisherigen unterscheiden.');
         }
         UserInput::requirePassword($newPassword, $user->username);
-        $this->users->setPassword($user->id, self::hash($newPassword), $this->now());
+        // Mit dem eigenen Kennwort entfaellt die Pflicht zum Wechsel.
+        $this->users->setPassword($user->id, self::hash($newPassword), $this->now(), false);
     }
 
     /**

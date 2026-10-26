@@ -409,4 +409,54 @@ document.addEventListener('DOMContentLoaded', () => {
             button.addEventListener('click', () => setAll(false));
         });
     });
+
+    // Kennwortstaerke: reine Anzeige fuer die Person, die ein Kennwort vergibt. Verbindlich
+    // bleibt die Pruefung auf dem Server (Mindestlaenge, nicht gleich dem Anmeldenamen);
+    // die Anzeige blockiert das Absenden nicht.
+    const strengthLevels = ['', 'Sehr schwach', 'Schwach', 'Mittel', 'Stark', 'Sehr stark'];
+    document.querySelectorAll('[data-password-strength]').forEach((meter) => {
+        const input = document.getElementById(meter.dataset.passwordStrength);
+        if (!input) {
+            return;
+        }
+        const minimum = parseInt(meter.dataset.passwordMinimum || '0', 10);
+        const bar = meter.querySelector('[data-strength-bar]');
+        const label = meter.querySelector('[data-strength-label]');
+        const rules = Array.from(meter.querySelectorAll('[data-strength-rule]')).map((item) => ({
+            item,
+            // Gross-/Kleinbuchstaben, Ziffern und Sonderzeichen: deutsche Umlaute zaehlen mit.
+            test: {
+                length: (value) => value.length >= minimum,
+                upper: (value) => /[A-ZÄÖÜ]/u.test(value),
+                lower: (value) => /[a-zäöüß]/u.test(value),
+                digit: (value) => /[0-9]/u.test(value),
+                special: (value) => /[^\p{L}\p{N}]/u.test(value),
+            }[item.dataset.strengthRule] || (() => false),
+        }));
+        const update = () => {
+            const value = input.value;
+            let score = 0;
+            rules.forEach((rule) => {
+                const met = rule.test(value);
+                rule.item.dataset.met = met ? 'true' : 'false';
+                if (met) {
+                    score += 1;
+                }
+            });
+            if (value === '') {
+                score = 0;
+            }
+            meter.dataset.level = String(score);
+            if (bar) {
+                bar.dataset.level = String(score);
+            }
+            if (label) {
+                label.textContent = value === ''
+                    ? 'Kennwortstärke wird beim Tippen angezeigt.'
+                    : strengthLevels[score];
+            }
+        };
+        input.addEventListener('input', update);
+        update();
+    });
 });

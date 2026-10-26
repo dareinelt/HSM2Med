@@ -28,6 +28,7 @@ final class AccountController extends Controller
             'title' => 'Kennwort ändern',
             'errors' => [],
             'message' => null,
+            'mustChangePassword' => $this->app->auth()->user()?->mustChangePassword ?? false,
         ]));
     }
 
@@ -50,6 +51,7 @@ final class AccountController extends Controller
                 'title' => 'Kennwort ändern',
                 'errors' => $e->fieldErrors(),
                 'message' => $e->getMessage(),
+                'mustChangePassword' => $user->mustChangePassword,
             ]), 422);
         }
 

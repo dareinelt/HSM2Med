@@ -37,6 +37,7 @@ final class UserInput
         public readonly string $title = '',
         public readonly string $firstName = '',
         public readonly string $lastName = '',
+        public readonly bool $mustChangePassword = false,
     ) {
     }
 
@@ -76,6 +77,7 @@ final class UserInput
             title: self::cleanText(self::text($post['title'] ?? ''), self::MAX_TITLE),
             firstName: self::cleanText(self::text($post['first_name'] ?? ''), self::MAX_NAME),
             lastName: self::cleanText(self::text($post['last_name'] ?? ''), self::MAX_NAME),
+            mustChangePassword: self::bool($post['must_change_password'] ?? null),
         );
     }
 
@@ -113,7 +115,7 @@ final class UserInput
     /**
      * Werte fuer das erneute Anzeigen des Formulars.
      *
-     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>}
+     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,must_change_password:bool,groups:list<int>}
      */
     public function values(): array
     {
@@ -124,6 +126,7 @@ final class UserInput
             'first_name' => $this->firstName,
             'last_name' => $this->lastName,
             'is_active' => $this->isActive,
+            'must_change_password' => $this->mustChangePassword,
             'groups' => $this->groupIds,
         ];
     }

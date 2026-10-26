@@ -7,6 +7,7 @@
  * @var Closure(string): bool $permitted
  * @var array<string, string> $errors
  * @var string|null $message
+ * @var bool $mustChangePassword
  */
 $minimum = \App\Http\Controller\AccountController::minimumLength();
 ?>
@@ -23,6 +24,12 @@ $minimum = \App\Http\Controller\AccountController::minimumLength();
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($mustChangePassword): ?>
+    <p class="alert alert-info" role="status">Ihr Kennwort wurde von der Administration vergeben.
+        Bitte legen Sie jetzt ein eigenes Kennwort fest; erst danach sind die übrigen Bereiche
+        wieder zugänglich.</p>
+<?php endif; ?>
 
 <?php if ($message !== null): ?>
     <p class="alert alert-error" role="alert"><?= $e($message) ?></p>
@@ -43,6 +50,7 @@ $minimum = \App\Http\Controller\AccountController::minimumLength();
             <label for="password">Neues Kennwort <small class="muted">(mind. <?= $e($minimum) ?> Zeichen)</small></label>
             <input type="password" id="password" name="password" autocomplete="new-password" minlength="<?= $e($minimum) ?>" required>
             <?php if (isset($errors['password'])): ?><p class="field-error"><?= $e($errors['password']) ?></p><?php endif; ?>
+            <?= $view->renderPartial('partials/password_strength', ['for' => 'password', 'minimum' => $minimum]) ?>
         </div>
         <div class="field">
             <label for="repeat_password">Neues Kennwort wiederholen</label>

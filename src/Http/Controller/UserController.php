@@ -47,6 +47,7 @@ final class UserController extends Controller
             'first_name' => '',
             'last_name' => '',
             'is_active' => true,
+            'must_change_password' => true,
             'groups' => [],
         ])));
     }
@@ -104,9 +105,11 @@ final class UserController extends Controller
     public function setPassword(Request $request, array $params = []): Response
     {
         $user = $this->requireUser($params);
+        // Beim eigenen Konto ist das neue Kennwort bekannt – kein Pflichtwechsel noetig.
+        $isOwnAccount = $this->app->auth()->id() === $user->id;
 
         try {
-            $this->app->userService()->setPassword($user->id, $request->post('password'));
+            $this->app->userService()->setPassword($user->id, $request->post('password'), !$isOwnAccount);
         } catch (UserException $e) {
             return Response::html($this->view->render('users/form', $this->formVars(
                 $user,
@@ -117,11 +120,13 @@ final class UserController extends Controller
         }
 
         // Bestehende Sitzungen des Kontos enden mit dem neuen Kennwort; die eigene bleibt bestehen.
-        if ($this->app->auth()->id() === $user->id) {
+        if ($isOwnAccount) {
             $this->app->auth()->refreshCredential();
         }
         $this->app->logger()->info('Kennwort zurückgesetzt', ['benutzer_id' => $user->id]);
-        SessionManager::flash('success', 'Das Kennwort wurde neu gesetzt.');
+        SessionManager::flash('success', $isOwnAccount
+            ? 'Das Kennwort wurde neu gesetzt.'
+            : 'Das Kennwort wurde neu gesetzt. Die Person muss es bei der nächsten Anmeldung ändern.');
         return Response::redirect('/system/users');
     }
 
@@ -322,7 +327,7 @@ final class UserController extends Controller
     /**
      * Werte des Formulars; bei Fehlern die abgeschickten Werte, sonst die gespeicherten.
      *
-     * @param array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>} $values
+     * @param array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,must_change_password:bool,groups:list<int>} $values
      * @param array<string, string> $errors
      * @return array<string, mixed>
      */
@@ -347,7 +352,7 @@ final class UserController extends Controller
     /**
      * Gespeicherte Werte eines Benutzers fuer das Formular.
      *
-     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>}
+     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,must_change_password:bool,groups:list<int>}
      */
     private function storedValues(User $user): array
     {
@@ -358,12 +363,13 @@ final class UserController extends Controller
             'first_name' => $user->firstName ?? '',
             'last_name' => $user->lastName ?? '',
             'is_active' => $user->isActive,
+            'must_change_password' => $user->mustChangePassword,
             'groups' => array_map(static fn (array $group): int => $group['id'], $user->groups),
         ];
     }
 
     /**
-     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>}
+     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,must_change_password:bool,groups:list<int>}
      */
     private function rawValues(Request $request): array
     {
@@ -374,6 +380,7 @@ final class UserController extends Controller
             'first_name' => $request->post('first_name'),
             'last_name' => $request->post('last_name'),
             'is_active' => in_array($request->post('is_active'), ['1', 'on', 'true'], true),
+            'must_change_password' => in_array($request->post('must_change_password'), ['1', 'on', 'true'], true),
             'groups' => UserInput::groupIds($request->post['groups'] ?? []),
         ];
     }

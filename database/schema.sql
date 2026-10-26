@@ -1013,3 +1013,23 @@ UPDATE letter_template_versions
 WHERE JSON_SEARCH(JSON_EXTRACT(content, '$.blocks[*].texts.signature'), 'one', '{center_name}') IS NOT NULL;
 
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('017_user_signatures', 'fbdb05ff739b191ca5fdfd07dd6f4aa014ee248260f9144e3fc624b649142082', NOW());
+
+-- ===== Migration 018_must_change_password =====
+
+-- HSM2Med – Migration 018: Kennwortwechsel bei der naechsten Anmeldung
+--
+-- Grundsaetze:
+--  * Legt die Administration ein Konto an oder setzt sie ein Kennwort neu, kennt die betroffene
+--    Person dieses Kennwort nicht. Sie muss es bei der naechsten Anmeldung ersetzen; bis dahin
+--    sind alle Bereiche ausser "Kennwort aendern" und "Abmelden" gesperrt.
+--  * Bestandskonten bleiben unveraendert (0): die Migration zwingt niemanden ohne Anlass zu
+--    einem neuen Kennwort.
+--  * Das Merkmal wird beim Setzen des eigenen Kennworts automatisch zurueckgesetzt
+--    (UserService::changeOwnPassword()).
+
+ALTER TABLE users
+    ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0
+        COMMENT '1 = muss das Kennwort bei der naechsten Anmeldung aendern'
+        AFTER password_changed_at;
+
+INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ('018_must_change_password', 'fcb16ba5e2742ffbe19e54fb90eda98d5dba9657d5dba5ba22cb0a001e0ab330', NOW());
