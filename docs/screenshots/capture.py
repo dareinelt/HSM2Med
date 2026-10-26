@@ -78,21 +78,42 @@ AKTE_EPICRISIS = (
 )
 
 
+def save(page: Page, target: Path, full_page: bool) -> None:
+    """Schreibt die Aufnahme und wiederholt sie einmal.
+
+    Auf der Windows-Freigabe des Docker-Containers scheitert das Ueberschreiben einer
+    vorhandenen Bilddatei gelegentlich mit EINVAL; nach dem Loeschen gelingt es.
+    """
+    try:
+        page.screenshot(path=str(target), full_page=full_page)
+    except OSError:
+        target.unlink(missing_ok=True)
+        page.screenshot(path=str(target), full_page=full_page)
+
+
 def shot(page: Page, name: str, full_page: bool = True) -> None:
     target = OUT / f"{name}.png"
-    if full_page:
-        # Funktionsband und Titelleiste kleben ("sticky"). Nach Eingaben hat Playwright die
-        # Seite bereits gescrollt; Chromium rendert klebende Elemente dann an der aktuellen
-        # Scrollposition und der Seitenkopf fehlt am oberen Bildrand. Deshalb zurueckscrollen.
+    if not full_page:
+        save(page, target, False)
+        print(f"  {target.name}")
+        return
+    # Funktionsband und Titelleiste kleben ("sticky"). Nach Eingaben hat Playwright die
+    # Seite bereits gescrollt; Chromium rendert klebende Elemente dann an der aktuellen
+    # Scrollposition und der Seitenkopf fehlt am oberen Bildrand. Deshalb zurueckscrollen.
+    page.evaluate("window.scrollTo(0, 0)")
+    # Die Statusleiste klebt am unteren Bildrand und erscheint bei einer ganzseitigen
+    # Aufnahme sonst mitten im Bild. Darum das Ansichtsfenster auf die Seitenhoehe setzen:
+    # dann ist die Seite genau so hoch wie das Fenster und die Leiste sitzt unten.
+    height = page.evaluate("Math.ceil(document.documentElement.scrollHeight)")
+    if height > page.viewport_size["height"]:
+        original = page.viewport_size
+        page.set_viewport_size({"width": original["width"], "height": height})
         page.evaluate("window.scrollTo(0, 0)")
-        # Die Statusleiste klebt am unteren Bildrand und erscheint bei einer ganzseitigen
-        # Aufnahme sonst mitten im Bild. Darum das Ansichtsfenster auf die Seitenhoehe setzen.
-        height = page.evaluate("Math.ceil(document.documentElement.scrollHeight)")
-        if height > page.viewport_size["height"]:
-            page.set_viewport_size({"width": VIEWPORT["width"], "height": height})
-            page.evaluate("window.scrollTo(0, 0)")
-            full_page = False
-    page.screenshot(path=str(target), full_page=full_page)
+        save(page, target, False)
+        page.set_viewport_size(original)
+        page.evaluate("window.scrollTo(0, 0)")
+    else:
+        save(page, target, True)
     print(f"  {target.name}")
 
 
@@ -521,7 +542,14 @@ def main() -> int:
         page.click("[data-wizard-next]")
         shot(page, "39-brief-assistent-bausteine")
 
-        # Schritt 4: Empfaenger – je Haken entsteht ein eigener Brief.
+        # Der Anhang mit der vollstaendigen Abfrage ist Opt-in (nicht vorausgewaehlt); fuer die
+        # Beispielbriefe der Dokumentation wird er nach der Aufnahme zugeschaltet.
+        page.check("input[name=include_appendix]")
+
+        # Schritt 4 (Messwerte) hat keine eigene Aufnahme und wird nur durchlaufen.
+        page.click("[data-wizard-next]")
+
+        # Schritt 5: Empfaenger – je Haken entsteht ein eigener Brief.
         page.click("[data-wizard-next]")
         page.check("input[name='recipients[]'][value=patient]")
         shot(page, "50-brief-assistent-empfaenger")
