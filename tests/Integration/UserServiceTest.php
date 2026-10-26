@@ -319,18 +319,31 @@ final class UserServiceTest extends DatabaseTestCase
         );
         $this->assertSame(['admin'], $this->service->user($admin->id)->groupCodes());
 
-        // Mit einer zweiten Person mit diesem Recht ist beides moeglich.
-        $this->service->create(
+        // Mit einer zweiten Person mit diesem Recht bleibt die Rechtematrix aenderbar.
+        $admin2 = $this->service->create(
             UserInput::fromPost(['username' => 'admin2', 'display_name' => 'Zweiter Admin', 'is_active' => '1', 'groups' => [(string) $adminGroup]]),
             'admin2-kennwort-2026',
         );
         $this->service->saveGroup($adminGroup, 'Admin', 'Test', [Permission::USERS, Permission::DASHBOARD]);
         $this->assertSame([Permission::DASHBOARD, Permission::USERS], $this->service->group($adminGroup)['permissions']);
 
+        // Die eigene Admin-Rolle laesst sich auch dann nicht entfernen, wenn es weitere Admins gibt.
+        $error = $this->assertThrows(
+            UserException::class,
+            fn () => $this->service->update(
+                $admin->id,
+                UserInput::fromPost(['username' => 'admin', 'display_name' => 'Administrator', 'is_active' => '1', 'groups' => []]),
+                $admin->id,
+            ),
+        );
+        $this->assertContains('Admin-Rolle', implode(' ', $error->fieldErrors()));
+        $this->assertSame(['admin'], $this->service->user($admin->id)->groupCodes());
+
+        // Ein anderer Administrator darf die Rolle entziehen.
         $this->service->update(
             $admin->id,
             UserInput::fromPost(['username' => 'admin', 'display_name' => 'Administrator', 'is_active' => '1', 'groups' => []]),
-            $admin->id,
+            $admin2,
         );
         $this->assertSame([], $this->service->user($admin->id)->groupCodes());
         $this->assertFalse($this->service->user($admin->id)->mayManageUsers());

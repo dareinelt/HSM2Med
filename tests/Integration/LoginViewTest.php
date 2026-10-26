@@ -171,6 +171,40 @@ final class LoginViewTest extends DatabaseTestCase
         $this->assertNotContains('id="repeat_password"', $html);
     }
 
+    public function testTheOwnAdminRoleIsLockedInTheUserForm(): void
+    {
+        $this->service->seedAdmin('admin', 'admin-kennwort-2026');
+        $admin = $this->service->authenticate('admin', 'admin-kennwort-2026');
+        $this->app->auth()->login($admin);
+        $adminGroup = $this->groupByCode('admin');
+
+        $html = $this->users()->editForm(new Request('GET', '/system/users/' . $admin->id . '/edit'), ['id' => (string) $admin->id])->body;
+
+        // Die eigene Admin-Gruppe bleibt gesetzt und laesst sich nicht abwaehlen.
+        $this->assertContains('Die eigene Admin-Rolle lässt sich nicht entfernen.', $html);
+        $this->assertContains('<input type="hidden" name="groups[]" value="' . $adminGroup . '">', $html);
+        $this->assertSame(
+            1,
+            preg_match('/name="groups\[\]" value="' . $adminGroup . '"\s+checked disabled>/', $html),
+            'Die Admin-Gruppe muss im eigenen Konto gesperrt sein.',
+        );
+
+        // Bei fremden Konten bleibt die Admin-Gruppe waehlbar.
+        $other = $this->service->create(
+            UserInput::fromPost(['username' => 'anna', 'display_name' => 'Anna', 'is_active' => '1', 'groups' => [(string) $this->groupByCode('mfa')]]),
+            'anna-kennwort-2026',
+        );
+        $foreign = $this->users()->editForm(new Request('GET', '/system/users/' . $other . '/edit'), ['id' => (string) $other])->body;
+
+        $this->assertNotContains('Die eigene Admin-Rolle lässt sich nicht entfernen.', $foreign);
+        $this->assertNotContains('<input type="hidden" name="groups[]" value="' . $adminGroup . '">', $foreign);
+        $this->assertSame(
+            0,
+            preg_match('/name="groups\[\]" value="' . $adminGroup . '"\s+checked disabled>/', $foreign),
+            'Bei fremden Konten darf die Admin-Gruppe nicht gesperrt sein.',
+        );
+    }
+
     public function testGroupListAndPermissionMatrixShowTheWholeCatalog(): void
     {
         $this->service->seedAdmin('admin', 'admin-kennwort-2026');

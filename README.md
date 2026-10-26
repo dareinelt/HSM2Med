@@ -261,6 +261,9 @@ Sichtbar und erreichbar nur für Gruppen mit dem Recht **Benutzerverwaltung** (v
   erscheinen gar nicht erst; ein direkter Aufruf der Adresse wird abgewiesen.
 * Die letzte Gruppe mit dem Recht *Benutzerverwaltung* kann nicht so geändert oder gelöscht
   werden, dass niemand mehr die Benutzerverwaltung öffnen könnte.
+* Die eigene Admin-Rolle kann niemand entfernen: Beim Bearbeiten des eigenen Kontos sind
+  Gruppen mit dem Recht *Benutzerverwaltung* gesperrt. Ein anderer Administrator kann die
+  Rolle weiterhin entziehen.
 
 ![Benutzerverwaltung mit Konten und Gruppen](docs/screenshots/55-benutzerverwaltung.png)
 
