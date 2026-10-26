@@ -444,7 +444,7 @@
         const ret = zones.return_address;
         head.append(place(zoneBox('return_address', 'te-zone--return' + (ret.options.show ? '' : ' is-off'),
             ret.options.show ? h('span', { class: 'te-return', text: fill(ret.texts.text) }) : h('span', { class: 'te-empty', text: 'Rücksendeangabe ausgeblendet' }),
-        ), mm, 20, 45, 85, 5));
+        ), mm, 20, 45, 85, 7));
         const recipient = zones.recipient;
         const recipientLines = recipient.options.source === 'patient'
             ? ['Frau', 'Erika Mustermann', 'Musterstraße 1', '12345 Beispielstadt']
@@ -452,7 +452,7 @@
         head.append(place(zoneBox('recipient', 'te-zone--recipient',
             recipient.texts.remark.trim() !== '' ? h('span', { class: 'te-remark', text: fill(recipient.texts.remark) }) : null,
             h('div', { class: 'te-recipient' }, ...recipientLines.map((line) => h('span', { text: line }))),
-        ), mm, 20, 50.5, 85, 40));
+        ), mm, 20, 52, 85, 38));
 
         // Informationsblock
         const info = zones.info_block;

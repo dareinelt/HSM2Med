@@ -223,7 +223,9 @@ Nur in `footer.page_label`: `{page}`, `{pages}` (Definition-Flag `page: true`).
 kommen aus den **Praxis-Informationen** (System → *Praxis-Informationen*, `/system/settings`).
 `{practice_contact_line}` setzt sich aus den gepflegten Angaben Telefon, Fax, E-Mail und
 Internetseite zusammen (nur gefüllte Teile, getrennt mit `·`); `{return_address_line}` ist die
-Rücksendeangabe (Name, Straße, „PLZ Ort"), ersatzweise Praxisname und Praxisanschrift.
+Rücksendeangabe (Name, Straße, „PLZ Ort"), ersatzweise Praxisname und Praxisanschrift. Reicht die
+Breite des Anschriftfelds nicht aus, bricht die Rücksendeangabe auf eine zweite Zeile um; die
+Unterstreichung steht unter der letzten Zeile.
 
 Gefüllt werden sie ausschließlich aus dem Snapshot des Briefes
 (`LetterPdfGenerator::placeholderValues()`); `LetterTemplate::fill()` lässt unbekannte

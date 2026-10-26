@@ -88,7 +88,7 @@ final class LetterTemplate
             ],
             'return_address' => [
                 'label' => 'Rücksendeangabe',
-                'description' => 'Kleine Absenderzeile oberhalb der Empfängeranschrift (Anschriftfeld, Zusatz- und Vermerkzone). Standard ist {return_address_line}: die Rücksendeangaben aus dem Bereich System, ersatzweise Name und Anschrift der Praxis.',
+                'description' => 'Kleine Absenderzeile oberhalb der Empfängeranschrift (Anschriftfeld, Zusatz- und Vermerkzone). Standard ist {return_address_line}: die Rücksendeangaben aus dem Bereich System, ersatzweise Name und Anschrift der Praxis. Reicht die Breite nicht, bricht die Zeile auf eine zweite Zeile um.',
                 'options' => [
                     'show' => ['label' => 'Rücksendeangabe drucken', 'type' => 'bool', 'default' => true],
                 ],

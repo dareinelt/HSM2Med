@@ -318,6 +318,26 @@ final class LetterPdfTest extends TestCase
         $this->assertContains('Praxis am Markt · Marktplatz 3 · 54321 Musterstadt', $pageOne);
     }
 
+    /** Test 14b: Lange Ruecksendeangaben brechen auf eine zweite Zeile um und bleiben vollstaendig. */
+    public function testLongReturnAddressWrapsToSecondLine(): void
+    {
+        $pageOne = PdfText::pages($this->generateWithTemplate([
+            'master' => [
+                'return_name' => 'MVZ Innere Medizin Wolfenbüttel der MVZ Städtisches Klinikum Wolfenbüttel gGmbH',
+                'return_street' => 'Alter Weg 80',
+                'return_postal_code' => '38302',
+                'return_city' => 'Wolfenbüttel',
+            ],
+        ]))[0];
+
+        $this->assertContains('MVZ Innere Medizin Wolfenbüttel der MVZ Städtisches Klinikum', $pageOne);
+        $this->assertContains('Wolfenbüttel gGmbH · Alter Weg 80 · 38302 Wolfenbüttel', $pageOne);
+        $this->assertNotContains(
+            'MVZ Innere Medizin Wolfenbüttel der MVZ Städtisches Klinikum Wolfenbüttel gGmbH · Alter Weg 80 · 38302 Wolfenbüttel',
+            $pageOne,
+        );
+    }
+
     /** Test 15: Ohne Kontaktangaben entfaellt die Kontaktzeile im Briefkopf. */
     public function testLetterheadOmitsMissingContactLine(): void
     {
