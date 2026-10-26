@@ -37,9 +37,10 @@ use RuntimeException;
 final class LetterService
 {
     /**
-     * Fassung des Brief-Snapshots (3: mit Messwerttabelle und Wahl von Anhang/Messwerttabelle).
+     * Fassung des Brief-Snapshots (4: mit Baustein "Aggregat" aus dem letzten Import; 3: mit
+     * Messwerttabelle und Wahl von Anhang/Messwerttabelle).
      */
-    public const int LETTER_VERSION = 3;
+    public const int LETTER_VERSION = 4;
 
     /** Vorlage einer Neuausfertigung: die des Ausgangsbriefes oder die aktuelle Fassung. */
     public const string TEMPLATE_ORIGINAL = 'original';
@@ -47,7 +48,7 @@ final class LetterService
 
     /** Datenteile eines Snapshots, die eine Neuausfertigung unveraendert uebernimmt. */
     private const array DATA_PARTS = [
-        'master', 'patient', 'anamnesis', 'premedication', 'epicrisis', 'befund', 'device_check',
+        'master', 'patient', 'aggregat', 'anamnesis', 'premedication', 'epicrisis', 'befund', 'device_check',
         'report', 'appendix', 'measurements', 'mrt', 'source', 'recipient',
     ];
 
@@ -126,6 +127,7 @@ final class LetterService
      *     measurement_choices: list<array{key: string, label: string, available: bool, values: list<string>}>,
      *     measurement_previous: int,
      *     measurement_default: list<string>,
+     *     aggregat: array<string, mixed>,
      *     warnings: list<string>,
      *     next_sequence: int
      * }
@@ -140,6 +142,7 @@ final class LetterService
         $mrt = $this->mrtFromCard($patientId);
         $appendix = $this->appendixFor($records, $mrt);
         $measurements = $this->measurements->resolve($patientId, $report);
+        $aggregat = $this->aggregatFor($patientId, $masterData);
 
         $warnings = [];
         $identityError = self::identityError($patient);
@@ -163,6 +166,9 @@ final class LetterService
         if ($report === null) {
             $warnings[] = 'Es ist kein Bericht ausgewählt; der Baustein „Berichte" (Befundteil des Berichts) entfällt.';
         }
+        if (($aggregat['present'] ?? false) !== true) {
+            $warnings[] = 'Es liegt kein Import vor; im Baustein „Aggregat" erscheint „nicht angegeben".';
+        }
         if (($mrt['available'] ?? false) !== true) {
             $warnings[] = 'Im neuesten Patientenausweis ist keine MRT-Tauglichkeit angegeben; im Anhang erscheint die Angabe der Abfrage.';
         }
@@ -181,6 +187,7 @@ final class LetterService
                 $this->templates->current(LetterRecipient::PATIENT)['content'],
             ),
             'measurement_default' => $this->repository->measurementDefaults(),
+            'aggregat' => $aggregat,
             'warnings' => $warnings,
             'recipients' => LetterRecipient::all($patient, $masterData),
             'next_sequence' => $this->repository->nextSequence($patientId),
@@ -399,7 +406,10 @@ final class LetterService
         }
         $old = $source['snapshot'];
         $oldVersion = (int) ($old['letter_version'] ?? 0);
-        if ($oldVersion !== self::LETTER_VERSION && !in_array($oldVersion, LetterPdfGenerator::LEGACY_LETTER_VERSIONS, true)) {
+        if ($oldVersion !== self::LETTER_VERSION
+            && !in_array($oldVersion, LetterPdfGenerator::COMPATIBLE_LETTER_VERSIONS, true)
+            && !in_array($oldVersion, LetterPdfGenerator::LEGACY_LETTER_VERSIONS, true)
+        ) {
             throw LetterException::rule('letter', 'Die Fassung dieses Briefes kann nicht neu ausgefertigt werden.');
         }
         foreach (['patient', 'master'] as $part) {
@@ -411,10 +421,10 @@ final class LetterService
         $template = null;
         if ($templateMode === self::TEMPLATE_CURRENT) {
             $template = $this->templates->current(self::recipientType($source['recipient_type'] ?? null));
-        } elseif ($oldVersion === self::LETTER_VERSION) {
+        } elseif ($oldVersion !== 1) {
+            // Ab Fassung 2 ist die Vorlage im Snapshot eingefroren und damit reproduzierbar.
             $template = $this->snapshotTemplate($old, (int) ($source['template_version_id'] ?? 0));
         }
-
         $patientId = (int) $source['patient_id'];
         $reportId = $source['report_id'] === null ? null : (int) $source['report_id'];
         $now = $this->now();
@@ -444,6 +454,10 @@ final class LetterService
             }
             if ($template !== null) {
                 $snapshot = self::withTemplate($snapshot, $template);
+                if ($templateMode === self::TEMPLATE_ORIGINAL) {
+                    // Die Vorlage des Ausgangsbriefes bleibt dessen Fassung: der Aufbau ist unveraendert.
+                    $snapshot['letter_version'] = $oldVersion;
+                }
                 if (is_array($snapshot['measurements'] ?? null)) {
                     $frozen = $snapshot['measurements'];
                     $snapshot['measurements'] = LetterMeasurements::freeze(
@@ -729,6 +743,7 @@ final class LetterService
                     'phone' => (string) ($masterData['phone'] ?? ''),
                 ],
             ],
+            'aggregat' => (array) ($prepared['aggregat'] ?? []),
             'anamnesis' => $this->recordPart($records[PatientRecordType::Anamnesis->value] ?? null),
             'premedication' => $this->recordPart($records[PatientRecordType::Premedication->value] ?? null),
             'epicrisis' => $this->recordPart($records[PatientRecordType::Epicrisis->value] ?? null),
@@ -865,6 +880,71 @@ final class LetterService
             'groups' => $groups,
             'filled' => count($rows) + array_sum(array_map(static fn (array $lead): int => count($lead['rows']), $leads))
                 + array_sum(array_map(static fn (array $group): int => count($group['rows']), $groups)),
+        ];
+    }
+
+    /**
+     * Geraetedaten des letzten Imports fuer den Baustein "Aggregat".
+     *
+     * Hersteller, Modell (Modellbezeichnung und Modellnummer), Seriennummer, Implantationsdatum
+     * und Betriebsart stammen aus der Abfrage des letzten Imports; der Implantationsort wird in
+     * den Stammdaten gepflegt (er ist aus dem Merlin-Export nicht ableitbar). Der Status ist
+     * fest "aktiv", solange eine Abfrage vorliegt. Die Sonden (Elektroden) kommen aus derselben
+     * Abfrage.
+     *
+     * @param array<string, mixed> $masterData
+     * @return array<string, mixed>
+     */
+    private function aggregatFor(int $patientId, array $masterData): array
+    {
+        $aggregat = [
+            'present' => false,
+            'report_id' => null,
+            'manufacturer' => '',
+            'model' => '',
+            'serial_number' => '',
+            'status' => '',
+            'implant_date' => '',
+            'implant_location' => trim((string) ($masterData['device_implant_location'] ?? '')),
+            'mode' => '',
+            'leads' => [],
+        ];
+        $latest = $this->repository->reportsByPatient($patientId)[0] ?? null;
+        $report = $latest === null ? null : $this->reports->load((int) $latest['id']);
+        if ($report === null) {
+            return $aggregat;
+        }
+        $device = [];
+        foreach ($report->summarySection('device') as $row) {
+            $device[(string) ($row['label'] ?? '')] = trim((string) ($row['value'] ?? ''));
+        }
+        $model = trim(($device['Modell'] ?? '') . ' ' . ($device['Modellnummer'] ?? ''));
+        $leads = [];
+        foreach ($report->leads() as $lead) {
+            if (!is_array($lead)) {
+                continue;
+            }
+            $leads[] = [
+                'chamber' => trim((string) ($lead['chamber_label'] ?? '')),
+                'manufacturer' => trim((string) ($lead['manufacturer'] ?? '')),
+                'model' => trim((string) ($lead['model_label'] ?? '') . ' ' . (string) ($lead['model_number'] ?? '')),
+                'serial_number' => trim((string) ($lead['serial_number'] ?? '')),
+                'lead_type' => trim((string) ($lead['lead_type'] ?? '')),
+                'implant_date' => trim((string) ($lead['implant_date_display'] ?? '')),
+            ];
+        }
+
+        return [
+            'present' => true,
+            'report_id' => $report->id(),
+            'manufacturer' => $device['Hersteller'] ?? '',
+            'model' => $model,
+            'serial_number' => $device['Seriennummer'] ?? '',
+            'status' => 'aktiv',
+            'implant_date' => $device['Implantation'] ?? '',
+            'implant_location' => $aggregat['implant_location'],
+            'mode' => $device['Modus'] ?? '',
+            'leads' => $leads,
         ];
     }
 

@@ -303,6 +303,9 @@
 .te-p-rows { display: grid; grid-template-columns: calc(var(--mm) * 35) 1fr; margin: 0; row-gap: calc(var(--mm) * .4); }
 .te-p-rows dt { color: #555; }
 .te-p-rows dd { margin: 0; }
+.te-p-pairs { display: grid; grid-template-columns: calc(var(--mm) * 34) 1fr calc(var(--mm) * 34) 1fr; margin: 0; row-gap: calc(var(--mm) * .4); column-gap: calc(var(--mm) * 2); }
+.te-p-pairs dt { color: #555; }
+.te-p-pairs dd { margin: 0; }
 .te-p-table { width: 100%; border-collapse: collapse; font-size: .82em; }
 .te-p-table th, .te-p-table td { padding: calc(var(--mm) * .6) calc(var(--mm) * .8); border-bottom: 1px solid #ccc; text-align: left; }
 .te-p-table th { background: #eef1f5; }

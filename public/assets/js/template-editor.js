@@ -616,6 +616,21 @@
                         [t.label_address, 'Musterstraße 1, 12345 Beispielstadt · ' + fill(t.label_phone) + ' 01234 567890']]
                         .filter(([label]) => label.trim() !== '')
                         .flatMap(([label, value]) => [h('dt', { text: fill(label) }), h('dd', { text: value })]))];
+            case 'aggregat':
+                return [headingNode(t.heading), h('dl', { class: 'te-p-pairs' },
+                    ...[[[t.label_manufacturer, 'Beispielhersteller'], [t.label_implant_date, todayText]],
+                        [[t.label_model, 'Beispielmodell DR 123456'], [t.label_implant_location, 'Pectoral subcutan rechts']],
+                        [[t.label_serial, 'SN-123456'], [t.label_mode, 'DDD']],
+                        [[t.label_status, 'aktiv'], ['', '']]]
+                        .flatMap((pair) => pair.flatMap(([label, value]) => [
+                            h('dt', { text: fill(label) }),
+                            h('dd', { text: String(label).trim() === '' ? '' : value }),
+                        ]))),
+                    headingNode(t.heading_leads),
+                    h('dl', { class: 'te-p-rows' },
+                        ...[['RA', 'Beispielhersteller Beispielsonde 1234 · SN 1001 · Schraubsonde · implantiert ' + todayText],
+                            ['RV', 'Beispielhersteller Beispielsonde 5678 · SN 1002 · Schraubsonde · implantiert ' + todayText]]
+                            .flatMap(([label, value]) => [h('dt', { text: label }), h('dd', { text: value })]))];
             case 'anamnesis':
             case 'befund':
             case 'epicrisis':

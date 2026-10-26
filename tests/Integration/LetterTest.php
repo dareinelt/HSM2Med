@@ -549,7 +549,7 @@ final class LetterTest extends DatabaseTestCase
         $this->assertSame([], $prepared['appendix']['sections']);
         $this->assertFalse($prepared['appendix']['present']);
         $this->assertFalse($prepared['mrt']['available']);
-        $this->assertSame(8, count($prepared['warnings']), 'Vier Textbausteine, Anhang, Messwerte, Bericht und MRT-Angabe fehlen.');
+        $this->assertSame(9, count($prepared['warnings']), 'Vier Textbausteine, Anhang, Messwerte, Bericht, Aggregat und MRT-Angabe fehlen.');
 
         $this->importAndSelectPatient();
         $this->fillRecords();

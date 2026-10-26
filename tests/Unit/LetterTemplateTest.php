@@ -57,7 +57,7 @@ final class LetterTemplateTest extends TestCase
         $this->assertSame($default, LetterTemplate::normalize($default));
         $this->assertSame(LetterTemplate::encode($default), LetterTemplate::encode(LetterTemplate::normalize(json_decode(LetterTemplate::encode($default), true))));
         $this->assertSame(
-            ['subject', 'salutation', 'patient', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports'],
+            ['subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports'],
             array_column($default['blocks'], 'type'),
         );
 
@@ -80,10 +80,10 @@ final class LetterTemplateTest extends TestCase
         $this->assertSame('closing', $normalized['blocks'][1]['type']);
         $this->assertSame('Mit freundlichen Grüßen', $normalized['blocks'][1]['texts']['text']);
         $this->assertSame('Seite {page} von {pages}', $normalized['zones']['footer']['texts']['page_label']);
-        $this->assertSame('text', $normalized['blocks'][9]['id']);
-        $this->assertSame("Zeile 1\nZeile 2", $normalized['blocks'][9]['texts']['text']);
-        $this->assertSame('text-2', $normalized['blocks'][10]['id']);
-        $this->assertFalse($normalized['blocks'][10]['enabled']);
+        $this->assertSame('text', $normalized['blocks'][10]['id']);
+        $this->assertSame("Zeile 1\nZeile 2", $normalized['blocks'][10]['texts']['text']);
+        $this->assertSame('text-2', $normalized['blocks'][11]['id']);
+        $this->assertFalse($normalized['blocks'][11]['enabled']);
     }
 
     /** Die Messwerttabelle ist eine eigene Zone: Anzahl frueherer Untersuchungen und Texte. */
@@ -129,7 +129,7 @@ final class LetterTemplateTest extends TestCase
     public function testNormalizeConvertsLegacyReportBlock(): void
     {
         $template = LetterTemplate::default();
-        $template['blocks'][5] = [
+        $template['blocks'][6] = [
             'id' => 'report',
             'type' => 'report',
             'enabled' => true,
@@ -138,10 +138,10 @@ final class LetterTemplateTest extends TestCase
         ];
 
         $normalized = LetterTemplate::normalize($template);
-        $this->assertSame('befund', $normalized['blocks'][5]['type']);
-        $this->assertSame('report', $normalized['blocks'][5]['id']);
-        $this->assertSame('Befund: Schrittmacher-/ICD-Abfrage', $normalized['blocks'][5]['texts']['heading']);
-        $this->assertSame(['show_meta'], array_keys($normalized['blocks'][5]['options']));
+        $this->assertSame('befund', $normalized['blocks'][6]['type']);
+        $this->assertSame('report', $normalized['blocks'][6]['id']);
+        $this->assertSame('Befund: Schrittmacher-/ICD-Abfrage', $normalized['blocks'][6]['texts']['heading']);
+        $this->assertSame(['show_meta'], array_keys($normalized['blocks'][6]['options']));
     }
 
     public function testNormalizeRejectsInvalidTemplates(): void
@@ -160,8 +160,8 @@ final class LetterTemplateTest extends TestCase
         $error = $this->assertThrows(LetterException::class, fn () => LetterTemplate::normalize($template));
         $errors = $error->fieldErrors();
         $this->assertTrue(isset($errors['name']));
-        $this->assertTrue(isset($errors['blocks.9']), 'Doppelter fester Baustein.');
-        $this->assertTrue(isset($errors['blocks.10']), 'Unbekannter Baustein.');
+        $this->assertTrue(isset($errors['blocks.10']), 'Doppelter fester Baustein.');
+        $this->assertTrue(isset($errors['blocks.11']), 'Unbekannter Baustein.');
         $this->assertTrue(isset($errors['zones.recipient.options.source']));
         $this->assertTrue(isset($errors['zones.footer.texts.disclaimer']), 'Seitenplatzhalter nur in der Seitenangabe.');
         $this->assertFalse(isset($errors['zones.footer.texts.page_label']));

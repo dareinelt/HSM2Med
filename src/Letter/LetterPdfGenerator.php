@@ -34,15 +34,16 @@ use RuntimeException;
 final class LetterPdfGenerator
 {
     /** Fassung des Brief-Snapshots, die dieser Generator erzeugt. */
-    public const int SUPPORTED_LETTER_VERSION = 3;
+    public const int SUPPORTED_LETTER_VERSION = 4;
 
     /**
      * Aeltere Snapshot-Fassungen, die dieser Generator ebenfalls erzeugt: Fassung 2 enthaelt
      * bereits die eingefrorene Vorlage, aber weder den Teil "measurements" noch die Auswahl
      * "appendix.include". Der Anhang galt dort immer als gewaehlt, die Messwerttabelle als
-     * nicht gewaehlt – so bleiben alte Briefe bitgleich.
+     * nicht gewaehlt – so bleiben alte Briefe bitgleich. Fassung 3 kennt die Messwerttabelle,
+     * aber noch keinen Baustein "Aggregat"; die Vorlage dieser Briefe enthaelt ihn nicht.
      */
-    public const array COMPATIBLE_LETTER_VERSIONS = [2];
+    public const array COMPATIBLE_LETTER_VERSIONS = [2, 3];
 
     /** Aeltere Snapshot-Fassungen, die ueber den damaligen Aufbau reproduziert werden. */
     public const array LEGACY_LETTER_VERSIONS = [1];
@@ -92,6 +93,10 @@ final class LetterPdfGenerator
     private const float CELL_PAD = 0.5;
     private const float LABEL_WIDTH = 35.0 * self::MM;
     private const float APPENDIX_LABEL_WIDTH = 95.0 * self::MM;
+
+    /** Aggregat: zwei gleich breite Spalten mit Beschriftung und Wert. */
+    private const float AGGREGAT_COLUMN = self::CONTENT_WIDTH / 2.0;
+    private const float AGGREGAT_LABEL_WIDTH = 34.0 * self::MM;
 
     private const array INK = [0.0, 0.0, 0.0];
     private const array MUTED = [0.40, 0.40, 0.40];
@@ -476,6 +481,7 @@ final class LetterPdfGenerator
                 'subject' => $this->subjectBlock($y, $block),
                 'salutation' => $this->plainBlock($y, $this->blockValue($block, 'text')),
                 'patient' => $this->patientBlock($y, $block),
+                'aggregat' => $this->aggregatBlock($y, $block),
                 'anamnesis' => $this->recordBlock($y, $block, (array) ($this->letter['anamnesis'] ?? [])),
                 'premedication' => $this->premedicationBlock($y, $block, (array) ($this->letter['premedication'] ?? [])),
                 'befund' => $this->befundBlock($y, $block),
@@ -556,6 +562,87 @@ final class LetterPdfGenerator
             $y = $this->fieldRows($y, $rows);
         }
         return $y + self::SIZE_TEXT * self::LINE;
+    }
+
+    /**
+     * Aggregat: Geraetedaten aus dem letzten Import des Patienten in zwei Spalten.
+     *
+     * Links stehen Hersteller, Modell, Seriennummer und Status, rechts Implantationsdatum,
+     * Implantationsort und Betriebsart. Fehlende Angaben erscheinen mit dem Text der Vorlage.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function aggregatBlock(float $y, array $block): float
+    {
+        $aggregat = (array) ($this->letter['aggregat'] ?? []);
+        $value = static fn (string $key): string => trim((string) ($aggregat[$key] ?? ''));
+        $rows = [];
+        foreach ([
+            ['label_manufacturer', 'manufacturer', 'label_implant_date', 'implant_date'],
+            ['label_model', 'model', 'label_implant_location', 'implant_location'],
+            ['label_serial', 'serial_number', 'label_mode', 'mode'],
+            ['label_status', 'status', '', ''],
+        ] as [$leftLabel, $leftKey, $rightLabel, $rightKey]) {
+            $left = [$leftLabel === '' ? '' : $this->blockValue($block, $leftLabel), $this->orEmpty($value($leftKey))];
+            $right = [$rightLabel === '' ? '' : $this->blockValue($block, $rightLabel), $rightKey === '' ? '' : $this->orEmpty($value($rightKey))];
+            if ($left[0] === '' && $right[0] === '') {
+                continue;
+            }
+            $rows[] = [$left, $right];
+        }
+        $y = $this->sectionStart($y, $this->blockValue($block, 'heading'), '');
+        if ($rows !== []) {
+            $y = $this->fieldPairs($y, $rows);
+        }
+        $y = $this->leadSection($y, $block, (array) ($aggregat['leads'] ?? []));
+        return $y + self::SIZE_TEXT * self::LINE;
+    }
+
+    /**
+     * Sonden aus dem letzten Import, platzsparend eine Zeile je Sonde: die Kammer als
+     * Beschriftung, alle uebrigen Angaben mit Mittelpunkt getrennt als Wert.
+     *
+     * @param array<string, mixed> $block
+     * @param list<mixed> $leads
+     */
+    private function leadSection(float $y, array $block, array $leads): float
+    {
+        $heading = $this->blockValue($block, 'heading_leads');
+        $rows = [];
+        foreach ($leads as $lead) {
+            if (!is_array($lead)) {
+                continue;
+            }
+            $field = static fn (string $key): string => trim((string) ($lead[$key] ?? ''));
+            $parts = [];
+            $device = trim($field('manufacturer') . ' ' . $field('model'));
+            if ($device !== '') {
+                $parts[] = $device;
+            }
+            foreach (['serial_number' => 'SN ', 'lead_type' => '', 'implant_date' => 'implantiert '] as $key => $prefix) {
+                if ($field($key) !== '') {
+                    $parts[] = $prefix . $field($key);
+                }
+            }
+            $label = $field('chamber');
+            if ($label === '' && $parts === []) {
+                continue;
+            }
+            $rows[] = [$label, $parts === [] ? $this->empty : implode(' · ', $parts)];
+        }
+
+        if ($rows === []) {
+            $hint = $this->blockValue($block, 'leads_empty');
+            if ($heading !== '') {
+                $y = $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $heading, 'bold', self::SIZE_FIELD);
+            }
+            return $hint === '' ? $y : $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $hint, 'regular', self::SIZE_FIELD, self::MUTED);
+        }
+
+        if ($heading !== '') {
+            $y = $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $heading, 'bold', self::SIZE_FIELD);
+        }
+        return $this->fieldRows($y, $rows);
     }
 
     /**
@@ -1165,6 +1252,42 @@ final class LetterPdfGenerator
             }
             foreach ($valueLines as $index => $line) {
                 $this->pdf->text(self::LEFT + self::LABEL_WIDTH, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'bold', self::SIZE_FIELD, self::INK);
+            }
+            $y += $height;
+        }
+        return $y + 2.0;
+    }
+
+    /**
+     * Zwei Spalten mit Beschriftung und Wert; die Zeilenhoehe richtet sich nach der laengeren
+     * Seite eines Paares. Seitenumbruch vor jedem Paar.
+     *
+     * @param list<array{0: array{0: string, 1: string}, 1: array{0: string, 1: string}}> $rows
+     */
+    private function fieldPairs(float $y, array $rows): float
+    {
+        $lineHeight = self::SIZE_FIELD * self::LINE;
+        $valueWidth = self::AGGREGAT_COLUMN - self::AGGREGAT_LABEL_WIDTH - 6.0;
+        foreach ($rows as [$left, $right]) {
+            $cells = [];
+            $height = 0.0;
+            foreach ([[self::LEFT, $left], [self::LEFT + self::AGGREGAT_COLUMN, $right]] as [$x, $cell]) {
+                if ($cell[0] === '') {
+                    continue;
+                }
+                $labelLines = $this->wrap($cell[0], self::AGGREGAT_LABEL_WIDTH - 4.0, 'regular', self::SIZE_FIELD);
+                $valueLines = $this->wrap($cell[1], $valueWidth, 'bold', self::SIZE_FIELD);
+                $height = max($height, max(count($labelLines), count($valueLines)) * $lineHeight);
+                $cells[] = [$x, $labelLines, $valueLines];
+            }
+            $y = $this->ensureSpace($y, $height);
+            foreach ($cells as [$x, $labelLines, $valueLines]) {
+                foreach ($labelLines as $index => $line) {
+                    $this->pdf->text($x, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'regular', self::SIZE_FIELD, self::INK);
+                }
+                foreach ($valueLines as $index => $line) {
+                    $this->pdf->text($x + self::AGGREGAT_LABEL_WIDTH, $y + $index * $lineHeight + 0.75 * self::SIZE_FIELD, $line, 'bold', self::SIZE_FIELD, self::INK);
+                }
             }
             $y += $height;
         }

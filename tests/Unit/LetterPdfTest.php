@@ -130,6 +130,70 @@ final class LetterPdfTest extends TestCase
         $this->assertContains('Stand 03.10.2026 11:15', $text);
     }
 
+    /** Baustein "Aggregat": Geraetedaten in zwei Spalten, darunter die Sonden als je eine Zeile. */
+    public function testAggregatBlockShowsDeviceAndLeads(): void
+    {
+        $text = PdfText::text((new LetterPdfGenerator())->generate(LetterFactory::current([
+            'aggregat' => [
+                'leads' => [
+                    [
+                        'chamber' => 'RA',
+                        'manufacturer' => 'Biotronik',
+                        'model' => 'Linox SD',
+                        'serial_number' => '1001',
+                        'lead_type' => 'ICD',
+                        'implant_date' => '01.02.2019',
+                    ],
+                ],
+            ],
+        ]), null, $this->generatedAt()));
+
+        foreach ([
+            'Aggregat',
+            'Hersteller',
+            'Beispielhersteller',
+            'PM-2000 407155',
+            '1000997498',
+            'Implantationsdatum',
+            '23.10.2026',
+            'Implantationsort',
+            'Pectoral subcutan re',
+            'Betriebsart',
+            'intraoperativ',
+            'Sonden (Elektroden)',
+            'Biotronik Linox SD · SN 1001 · ICD · implantiert 01.02.2019',
+        ] as $needle) {
+            $this->assertContains($needle, $text);
+        }
+
+        $this->assertTrue(strpos($text, 'Patientendaten') < strpos($text, 'Aggregat'), 'Das Aggregat steht unter den Patientendaten.');
+        $this->assertTrue(strpos($text, 'PM-2000 407155') < strpos($text, 'Sonden (Elektroden)'), 'Die Sonden folgen den Gerätedaten.');
+    }
+
+    /** Ohne Import bleibt der Baustein mit "nicht angegeben" gefuellt und meldet fehlende Sonden. */
+    public function testAggregatBlockMarksMissingData(): void
+    {
+        $text = PdfText::text((new LetterPdfGenerator())->generate(LetterFactory::current([
+            'aggregat' => [
+                'present' => false,
+                'report_id' => null,
+                'manufacturer' => '',
+                'model' => '',
+                'serial_number' => '',
+                'status' => '',
+                'implant_date' => '',
+                'implant_location' => '',
+                'mode' => '',
+                'leads' => [],
+            ],
+        ]), null, $this->generatedAt()));
+
+        $this->assertContains('Aggregat', $text);
+        $this->assertContains('Im letzten Import sind keine Sonden erfasst.', $text);
+        $this->assertContains('nicht angegeben', $text);
+        $this->assertNotContains('aktiv', $text);
+    }
+
     /** Test 5: Der Befundteil entfaellt vollstaendig, wenn kein Bericht zugeordnet ist. */
     public function testReportSectionIsOmittedWithoutReport(): void
     {
