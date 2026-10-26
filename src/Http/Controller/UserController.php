@@ -8,6 +8,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Security\SessionManager;
+use App\Security\UploadException;
 use App\User\Permission;
 use App\User\User;
 use App\User\UserException;
@@ -42,6 +43,9 @@ final class UserController extends Controller
         return Response::html($this->view->render('users/form', $this->formVars(null, [
             'username' => '',
             'display_name' => '',
+            'title' => '',
+            'first_name' => '',
+            'last_name' => '',
             'is_active' => true,
             'groups' => [],
         ])));
@@ -69,12 +73,7 @@ final class UserController extends Controller
     {
         $user = $this->requireUser($params);
 
-        return Response::html($this->view->render('users/form', $this->formVars($user, [
-            'username' => $user->username,
-            'display_name' => $user->displayName,
-            'is_active' => $user->isActive,
-            'groups' => array_map(static fn (array $group): int => $group['id'], $user->groups),
-        ])));
+        return Response::html($this->view->render('users/form', $this->formVars($user, $this->storedValues($user))));
     }
 
     /**
@@ -109,12 +108,12 @@ final class UserController extends Controller
         try {
             $this->app->userService()->setPassword($user->id, $request->post('password'));
         } catch (UserException $e) {
-            return Response::html($this->view->render('users/form', $this->formVars($user, [
-                'username' => $user->username,
-                'display_name' => $user->displayName,
-                'is_active' => $user->isActive,
-                'groups' => array_map(static fn (array $group): int => $group['id'], $user->groups),
-            ], $e->fieldErrors(), $e->getMessage())), 422);
+            return Response::html($this->view->render('users/form', $this->formVars(
+                $user,
+                $this->storedValues($user),
+                $e->fieldErrors(),
+                $e->getMessage(),
+            )), 422);
         }
 
         // Bestehende Sitzungen des Kontos enden mit dem neuen Kennwort; die eigene bleibt bestehen.
@@ -126,9 +125,63 @@ final class UserController extends Controller
         return Response::redirect('/system/users');
     }
 
-    public function groups(Request $request): Response
+    /**
+     * Hinterlegt oder entfernt die Unterschrift eines Benutzers (JPG, PNG, BMP).
+     *
+     * @param array<string, string> $params
+     */
+    public function uploadSignature(Request $request, array $params = []): Response
     {
-        return Response::html($this->view->render('users/groups', [
+        $user = $this->requireUser($params);
+        $service = $this->app->userService();
+
+        try {
+            if ($request->post('remove_signature') === '1') {
+                $service->removeSignature($user->id);
+                $this->app->logger()->info('Unterschrift entfernt', ['benutzer_id' => $user->id]);
+                SessionManager::flash('success', 'Die Unterschrift wurde entfernt. Bereits erstellte Briefe behalten ihre Unterschrift.');
+            } else {
+                $service->setSignature($user->id, $request->file('signature'));
+                $this->app->logger()->info('Unterschrift hinterlegt', ['benutzer_id' => $user->id]);
+                SessionManager::flash('success', 'Die Unterschrift wurde gespeichert.');
+            }
+        } catch (UploadException $e) {
+            $stored = $service->user($user->id) ?? $user;
+            return Response::html($this->view->render('users/form', $this->formVars(
+                $stored,
+                $this->storedValues($stored),
+                ['signature' => $e->getMessage()],
+            )), 422);
+        }
+
+        return Response::redirect('/system/users/' . $user->id . '/edit');
+    }
+
+    /**
+     * Hinterlegte Unterschrift als Bild (fuer die Vorschau im Formular).
+     *
+     * @param array<string, string> $params
+     */
+    public function signatureImage(Request $request, array $params = []): Response
+    {
+        $user = $this->requireUser($params);
+        if ($user->signatureId === null) {
+            throw HttpException::notFound('Es ist keine Unterschrift hinterlegt.');
+        }
+        $signature = $this->app->userService()->signatureFile($user->signatureId);
+        if ($signature === null) {
+            throw HttpException::notFound('Es ist keine Unterschrift hinterlegt.');
+        }
+        $mime = $signature['mime_type'];
+        if (!in_array($mime, ['image/png', 'image/jpeg', 'image/bmp'], true)) {
+            throw HttpException::notFound('Die hinterlegte Unterschrift kann nicht angezeigt werden.');
+        }
+
+        return Response::image($signature['content'], $mime);
+    }
+
+    public function groups(Request $request): Response
+    {        return Response::html($this->view->render('users/groups', [
             'title' => 'Gruppen und Rechte',
             'groups' => $this->app->userService()->groups(),
             'catalog' => Permission::CATALOG,
@@ -269,7 +322,7 @@ final class UserController extends Controller
     /**
      * Werte des Formulars; bei Fehlern die abgeschickten Werte, sonst die gespeicherten.
      *
-     * @param array{username:string,display_name:string,is_active:bool,groups:list<int>} $values
+     * @param array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>} $values
      * @param array<string, string> $errors
      * @return array<string, mixed>
      */
@@ -280,6 +333,10 @@ final class UserController extends Controller
             'user' => $user,
             'values' => $values,
             'groups' => $this->app->userService()->groups(),
+            'signature' => $user?->signatureId === null
+                ? null
+                : $this->app->userService()->signature($user->signatureId),
+            'signerName' => $user?->signerName(),
             'errors' => $errors,
             'message' => $message,
             'minPasswordLength' => UserInput::MIN_PASSWORD_LENGTH,
@@ -288,13 +345,34 @@ final class UserController extends Controller
     }
 
     /**
-     * @return array{username:string,display_name:string,is_active:bool,groups:list<int>}
+     * Gespeicherte Werte eines Benutzers fuer das Formular.
+     *
+     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>}
+     */
+    private function storedValues(User $user): array
+    {
+        return [
+            'username' => $user->username,
+            'display_name' => $user->displayName,
+            'title' => $user->title ?? '',
+            'first_name' => $user->firstName ?? '',
+            'last_name' => $user->lastName ?? '',
+            'is_active' => $user->isActive,
+            'groups' => array_map(static fn (array $group): int => $group['id'], $user->groups),
+        ];
+    }
+
+    /**
+     * @return array{username:string,display_name:string,title:string,first_name:string,last_name:string,is_active:bool,groups:list<int>}
      */
     private function rawValues(Request $request): array
     {
         return [
             'username' => $request->post('username'),
             'display_name' => $request->post('display_name'),
+            'title' => $request->post('title'),
+            'first_name' => $request->post('first_name'),
+            'last_name' => $request->post('last_name'),
             'is_active' => in_array($request->post('is_active'), ['1', 'on', 'true'], true),
             'groups' => UserInput::groupIds($request->post['groups'] ?? []),
         ];

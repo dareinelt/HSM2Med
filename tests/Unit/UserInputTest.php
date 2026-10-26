@@ -63,16 +63,30 @@ final class UserInputTest extends TestCase
         $input = UserInput::fromPost([
             'username' => '  Dr.Muster ',
             'display_name' => "Dr. med.\t Erika   Muster",
+            'title' => '  Dr. med. ',
+            'first_name' => ' Erika ',
+            'last_name' => '  Muster ',
             'is_active' => '1',
             'groups' => ['2', 3, '3', 'keine', 0, -4],
         ]);
 
         $this->assertSame('dr.muster', $input->username);
         $this->assertSame('Dr. med. Erika Muster', $input->displayName);
+        $this->assertSame('Dr. med.', $input->title);
+        $this->assertSame('Erika', $input->firstName);
+        $this->assertSame('Muster', $input->lastName);
         $this->assertTrue($input->isActive);
         $this->assertSame([2, 3], $input->groupIds);
         $this->assertSame(
-            ['username' => 'dr.muster', 'display_name' => 'Dr. med. Erika Muster', 'is_active' => true, 'groups' => [2, 3]],
+            [
+                'username' => 'dr.muster',
+                'display_name' => 'Dr. med. Erika Muster',
+                'title' => 'Dr. med.',
+                'first_name' => 'Erika',
+                'last_name' => 'Muster',
+                'is_active' => true,
+                'groups' => [2, 3],
+            ],
             $input->values(),
         );
     }

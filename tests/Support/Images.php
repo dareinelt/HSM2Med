@@ -51,4 +51,33 @@ final class Images
     {
         return pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
     }
+
+    /**
+     * BMP mit 24 Bit je Pixel (BI_RGB, von unten nach oben, Zeilen auf 4 Byte ausgerichtet).
+     */
+    public static function bmp(int $width = 8, int $height = 8): string
+    {
+        $rowSize = (int) (ceil($width * 3 / 4) * 4);
+        $pixels = '';
+        for ($y = $height - 1; $y >= 0; $y--) {
+            $row = '';
+            for ($x = 0; $x < $width; $x++) {
+                $row .= chr(($x * 32) % 256) . chr(($y * 32) % 256) . "\x80";
+            }
+            $pixels .= str_pad($row, $rowSize, "\x00");
+        }
+        $offset = 14 + 40;
+        return 'BM'
+            . pack('V', $offset + strlen($pixels))
+            . pack('vv', 0, 0)
+            . pack('V', $offset)
+            . pack('V', 40)
+            . pack('VV', $width, $height)
+            . pack('vv', 1, 24)
+            . pack('V', 0)
+            . pack('V', strlen($pixels))
+            . pack('VV', 2835, 2835)
+            . pack('VV', 0, 0)
+            . $pixels;
+    }
 }

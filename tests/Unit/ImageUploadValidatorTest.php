@@ -108,6 +108,47 @@ final class ImageUploadValidatorTest extends TestCase
         $this->assertSame('logo', $result['filename']);
     }
 
+    /**
+     * Unterschriften erlauben zusaetzlich BMP; das Logo bleibt bei PNG/JPEG.
+     */
+    public function testSignatureValidatorAcceptsBmp(): void
+    {
+        $validator = new ImageUploadValidator(ImageUploadValidator::MAX_BYTES, true, 'unterschrift');
+        $bmp = Images::bmp(30, 12);
+        $result = $validator->validateContent($bmp, 'unterschrift.bmp');
+
+        $this->assertSame('image/bmp', $result['mime_type']);
+        $this->assertSame('unterschrift.bmp', $result['filename']);
+        $this->assertSame(30, $result['width']);
+        $this->assertSame(12, $result['height']);
+        $this->assertSame($bmp, $result['bytes']);
+
+        $image = ImageData::fromBytes($bmp);
+        $this->assertSame(30, $image->width);
+        $this->assertSame(12, $image->height);
+        $this->assertSame('DeviceRGB', $image->colorSpace);
+        $this->assertSame('FlateDecode', $image->filter);
+
+        // Ohne Namen greift der uebergebene Ersatzname.
+        $this->assertSame('unterschrift', $validator->validateContent(Images::png(2, 2), '')['filename']);
+    }
+
+    public function testBmpIsRejectedForTheLogo(): void
+    {
+        $bmp = Images::bmp(4, 4);
+        $exception = $this->assertThrows(
+            UploadException::class,
+            fn () => (new ImageUploadValidator())->validateContent($bmp, 'logo.bmp'),
+        );
+        $this->assertContains('Nur PNG- und JPEG-Dateien sind erlaubt.', $exception->getMessage());
+    }
+
+    public function testRejectsBrokenBmp(): void
+    {
+        $validator = new ImageUploadValidator(ImageUploadValidator::MAX_BYTES, true, 'unterschrift');
+        $this->assertThrows(UploadException::class, fn () => $validator->validateContent('BM' . str_repeat("\x00", 60), 'unterschrift.bmp'));
+    }
+
     public function testRejectsMissingUpload(): void
     {
         $validator = new ImageUploadValidator();

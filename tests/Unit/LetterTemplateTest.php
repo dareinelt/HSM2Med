@@ -57,7 +57,7 @@ final class LetterTemplateTest extends TestCase
         $this->assertSame($default, LetterTemplate::normalize($default));
         $this->assertSame(LetterTemplate::encode($default), LetterTemplate::encode(LetterTemplate::normalize(json_decode(LetterTemplate::encode($default), true))));
         $this->assertSame(
-            ['subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'reports'],
+            ['subject', 'salutation', 'patient', 'aggregat', 'anamnesis', 'premedication', 'befund', 'epicrisis', 'closing', 'signature', 'reports'],
             array_column($default['blocks'], 'type'),
         );
 
@@ -77,13 +77,14 @@ final class LetterTemplateTest extends TestCase
 
         $normalized = LetterTemplate::normalize($template);
         $this->assertSame('reports', $normalized['blocks'][0]['type']);
-        $this->assertSame('closing', $normalized['blocks'][1]['type']);
-        $this->assertSame('Mit freundlichen Grüßen', $normalized['blocks'][1]['texts']['text']);
+        $this->assertSame('signature', $normalized['blocks'][1]['type']);
+        $this->assertSame('closing', $normalized['blocks'][2]['type']);
+        $this->assertSame('Mit freundlichen Grüßen', $normalized['blocks'][2]['texts']['text']);
         $this->assertSame('Seite {page} von {pages}', $normalized['zones']['footer']['texts']['page_label']);
-        $this->assertSame('text', $normalized['blocks'][10]['id']);
-        $this->assertSame("Zeile 1\nZeile 2", $normalized['blocks'][10]['texts']['text']);
-        $this->assertSame('text-2', $normalized['blocks'][11]['id']);
-        $this->assertFalse($normalized['blocks'][11]['enabled']);
+        $this->assertSame('text', $normalized['blocks'][11]['id']);
+        $this->assertSame("Zeile 1\nZeile 2", $normalized['blocks'][11]['texts']['text']);
+        $this->assertSame('text-2', $normalized['blocks'][12]['id']);
+        $this->assertFalse($normalized['blocks'][12]['enabled']);
     }
 
     /** Die Messwerttabelle ist eine eigene Zone: Anzahl frueherer Untersuchungen und Texte. */
@@ -160,8 +161,8 @@ final class LetterTemplateTest extends TestCase
         $error = $this->assertThrows(LetterException::class, fn () => LetterTemplate::normalize($template));
         $errors = $error->fieldErrors();
         $this->assertTrue(isset($errors['name']));
-        $this->assertTrue(isset($errors['blocks.10']), 'Doppelter fester Baustein.');
-        $this->assertTrue(isset($errors['blocks.11']), 'Unbekannter Baustein.');
+        $this->assertTrue(isset($errors['blocks.11']), 'Doppelter fester Baustein.');
+        $this->assertTrue(isset($errors['blocks.12']), 'Unbekannter Baustein.');
         $this->assertTrue(isset($errors['zones.recipient.options.source']));
         $this->assertTrue(isset($errors['zones.footer.texts.disclaimer']), 'Seitenplatzhalter nur in der Seitenangabe.');
         $this->assertFalse(isset($errors['zones.footer.texts.page_label']));

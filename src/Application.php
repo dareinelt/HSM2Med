@@ -40,6 +40,7 @@ use App\Repository\GroupRepository;
 use App\Repository\ImportRepository;
 use App\Repository\ReportRepository;
 use App\Repository\UserRepository;
+use App\Repository\SignatureRepository;
 use App\Security\Auth;
 use App\Security\ImageUploadValidator;
 use App\Support\Clock;
@@ -66,6 +67,7 @@ final class Application
     private ?PatientRecordService $patientRecordService = null;
     private ?ActivePatient $activePatient = null;
     private ?UserRepository $userRepository = null;
+    private ?SignatureRepository $signatureRepository = null;
     private ?GroupRepository $groupRepository = null;
     private ?UserService $userService = null;
     private ?Auth $auth = null;
@@ -253,7 +255,13 @@ final class Application
             $this->clock,
             $this->letterTemplateService(),
             new LetterMeasurements($this->measurementTemplate(), $this->patientCardRepository()),
+            $this->signatureRepository(),
         );
+    }
+
+    public function signatureRepository(): SignatureRepository
+    {
+        return $this->signatureRepository ??= new SignatureRepository($this->pdo());
     }
 
     public function letterTemplateService(): LetterTemplateService
@@ -283,6 +291,7 @@ final class Application
             $this->userRepository(),
             $this->groupRepository(),
             $this->clock,
+            $this->signatureRepository(),
         );
     }
 

@@ -49,6 +49,7 @@ final class LetterTemplateController extends Controller
                 'source' => '/system/letter-templates/source',
             ],
             'settings' => $this->centerSettings(),
+            'signature' => $this->signatureInfo(),
             'labels' => [
                 'document' => 'Briefvorlage',
                 'documents' => 'Briefe',
@@ -148,7 +149,11 @@ final class LetterTemplateController extends Controller
     {
         $content = self::decodeContent($request);
         try {
-            $pdf = $this->app->letterService()->previewPdf($content, self::type($request->post('type')));
+            $pdf = $this->app->letterService()->previewPdf(
+                $content,
+                self::type($request->post('type')),
+                $this->app->auth()->user(),
+            );
         } catch (LetterException $e) {
             $lines = [];
             foreach ($e->fieldErrors() as $field => $message) {
@@ -216,6 +221,24 @@ final class LetterTemplateController extends Controller
             'center_name' => (string) ($settings['center_name'] ?? ''),
             'center_address' => (string) ($settings['center_address'] ?? ''),
             'has_logo' => ($settings['logo_id'] ?? null) !== null,
+        ];
+    }
+
+    /**
+     * Eigene Unterschrift fuer die Vorschau des Bausteins im Editor.
+     *
+     * Der Editor zeigt das Bild der angemeldeten Person; darunter steht immer der Name aus
+     * Titel, Vorname und Nachname.
+     *
+     * @return array{available: bool, url: string, name: string}
+     */
+    private function signatureInfo(): array
+    {
+        $user = $this->app->auth()->user();
+        return [
+            'available' => $user?->hasSignature() ?? false,
+            'url' => '/account/signature/image',
+            'name' => $user?->signerName() ?? 'Titel Vorname Name',
         ];
     }
 }

@@ -35,7 +35,7 @@ use RuntimeException;
 final class LetterPdfGenerator
 {
     /** Fassung des Brief-Snapshots, die dieser Generator erzeugt. */
-    public const int SUPPORTED_LETTER_VERSION = 4;
+    public const int SUPPORTED_LETTER_VERSION = 5;
 
     /**
      * Aeltere Snapshot-Fassungen, die dieser Generator ebenfalls erzeugt: Fassung 2 enthaelt
@@ -43,8 +43,10 @@ final class LetterPdfGenerator
      * "appendix.include". Der Anhang galt dort immer als gewaehlt, die Messwerttabelle als
      * nicht gewaehlt – so bleiben alte Briefe bitgleich. Fassung 3 kennt die Messwerttabelle,
      * aber noch keinen Baustein "Aggregat"; die Vorlage dieser Briefe enthaelt ihn nicht.
+     * Fassung 4 kennt weder den Baustein "Unterschrift" noch den Teil "signature"; ihre
+     * Vorlage bringt den Unterzeichner noch als Text der Grussformel mit.
      */
-    public const array COMPATIBLE_LETTER_VERSIONS = [2, 3];
+    public const array COMPATIBLE_LETTER_VERSIONS = [2, 3, 4];
 
     /** Aeltere Snapshot-Fassungen, die ueber den damaligen Aufbau reproduziert werden. */
     public const array LEGACY_LETTER_VERSIONS = [1];
@@ -59,6 +61,10 @@ final class LetterPdfGenerator
     private const float HEAD_BOTTOM = 43.0 * self::MM;
     private const float LOGO_WIDTH = 42.0 * self::MM;
     private const float LOGO_HEIGHT = 27.0 * self::MM;
+
+    /** Rahmen, in den die Unterschrift eingepasst wird (Seitenverhaeltnis bleibt erhalten). */
+    private const float SIGNATURE_WIDTH = 60.0 * self::MM;
+    private const float SIGNATURE_HEIGHT = 22.0 * self::MM;
 
     private const float ADDRESS_TOP = 45.0 * self::MM;
     private const float ADDRESS_ZONE_TOP = 62.7 * self::MM;
@@ -130,6 +136,9 @@ final class LetterPdfGenerator
     /** Schriftgroesse des aktuellen Bausteins, relativ zur Grundgroesse. */
     private float $scale = 1.0;
 
+    /** Unterschrift der unterzeichnenden Person (null, wenn keine hinterlegt ist). */
+    private ?ImageData $signature = null;
+
     public function __construct(private readonly bool $compress = true)
     {
     }
@@ -137,7 +146,7 @@ final class LetterPdfGenerator
     /**
      * @param array<string, mixed> $letter Brief-Snapshot (siehe LetterService::snapshot())
      */
-    public function generate(array $letter, ?ImageData $logo, DateTimeImmutable $generatedAt): string
+    public function generate(array $letter, ?ImageData $logo, DateTimeImmutable $generatedAt, ?ImageData $signature = null): string
     {
         $version = (int) ($letter['letter_version'] ?? 0);
         if (in_array($version, self::LEGACY_LETTER_VERSIONS, true)) {
@@ -156,6 +165,7 @@ final class LetterPdfGenerator
         }
         $this->pdf = new PdfDocument($this->compress);
         $this->letter = $letter;
+        $this->signature = $signature;
         $this->values = self::placeholderValues($letter);
         $this->empty = $this->zoneText('general', 'empty');
         if (trim($this->empty) === '') {
@@ -246,6 +256,7 @@ final class LetterPdfGenerator
             'document_number' => trim((string) ($letter['document']['document_number'] ?? '')),
             'letter_date' => $date((string) ($letter['document']['letter_date'] ?? '')),
             'sequence_no' => (string) ($letter['sequence_no'] ?? ''),
+            'signer_name' => trim((string) ($letter['signature']['name'] ?? '')),
         ];
     }
 
@@ -492,6 +503,7 @@ final class LetterPdfGenerator
                 'befund' => $this->befundBlock($y, $block),
                 'epicrisis' => $this->recordBlock($y, $block, (array) ($this->letter['epicrisis'] ?? [])),
                 'closing' => $this->closingBlock($y, $block),
+                'signature' => $this->signatureBlock($y, $block),
                 'text' => $this->textBlock($y, $block),
                 'reports' => $this->reportsBlock($y, $block),
                 default => $y,
@@ -819,6 +831,47 @@ final class LetterPdfGenerator
             $y = $this->paragraph(self::LEFT, $y + 3 * $lineHeight, self::CONTENT_WIDTH, $signature, 'regular', self::SIZE_TEXT);
         }
         return $y + $lineHeight;
+    }
+
+    /**
+     * Unterschrift der unterzeichnenden Person mit Titel, Vorname und Name darunter.
+     *
+     * Das Bild wird wie das Logo seitenverhaeltnismassig in den vorgesehenen Rahmen eingepasst
+     * (LetterPdfGenerator::SIGNATURE_WIDTH/SIGNATURE_HEIGHT). Ohne hinterlegte Unterschrift
+     * bleibt der Platz fuer die handschriftliche Unterschrift frei; die Namenszeile steht in
+     * jedem Fall unter dem Bild.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function signatureBlock(float $y, array $block): float
+    {
+        $lineHeight = self::SIZE_TEXT * $this->scale * self::LINE;
+        $image = $this->signature;
+        $width = 0.0;
+        $height = 0.0;
+        if ($image !== null && $image->width > 0 && $image->height > 0) {
+            $fit = min(self::SIGNATURE_WIDTH / $image->width, self::SIGNATURE_HEIGHT / $image->height);
+            $width = $image->width * $fit;
+            $height = $image->height * $fit;
+        } else {
+            $height = self::SIGNATURE_HEIGHT * 0.6;
+        }
+        $name = trim((string) ($this->letter['signature']['name'] ?? ''));
+        $nameHeight = $name === '' ? 0.0 : $lineHeight;
+        $y = $this->ensureSpace($y, $height + $nameHeight + 2.0 * $lineHeight);
+
+        if ($image !== null && $width > 0.0 && $height > 0.0) {
+            $this->pdf->image(self::LEFT, $y, $width, $height, $image);
+        }
+        $y += $height + $lineHeight;
+        if (($block['options']['show_line'] ?? true) === true) {
+            $this->pdf->line(self::LEFT, $y, self::LEFT + self::SIGNATURE_WIDTH, $y, self::RULE, 0.5);
+            $y += 0.25 * $lineHeight;
+        }
+        if ($name !== '') {
+            $y = $this->paragraph(self::LEFT, $y, self::CONTENT_WIDTH, $name, 'regular', self::SIZE_TEXT);
+        }
+        return $y + 0.5 * $lineHeight;
     }
 
     /**

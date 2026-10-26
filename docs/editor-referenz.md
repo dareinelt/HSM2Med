@@ -160,11 +160,12 @@ Arzt; `LetterRecipient`), steht dessen Anschrift in `snapshot.recipient.lines` u
 | `premedication` | Vormedikation | ja | `font_size`, `show_meta` | `heading`, `col_substance`, `col_dose`, `col_schedule`, `col_reason`, `col_period` |
 | `befund` | Befund | ja | `font_size`, `show_meta` | `heading` |
 | `epicrisis` | Epikrise | ja | `font_size`, `show_meta` | `heading` |
-| `closing` | Grußformel | ja | `font_size` | `text`, `signature` (mehrzeilig) |
+| `closing` | Grußformel | ja | `font_size` | `text`, `signature` (Zusatzzeile unter der Grußformel) |
+| `signature` | Unterschrift | ja | `font_size`, `show_line` | – (Bild der angemeldeten Person, darunter `{signer_name}`) |
 | `text` | Freier Textbaustein | **nein** | `font_size` | `heading`, `text` (mehrzeilig) |
 | `reports` | Berichte | ja | `font_size`, `show_meta` | `heading` |
 
-Standardreihenfolge: `subject, salutation, patient, aggregat, anamnesis, premedication, befund, epicrisis, closing, reports`.
+Standardreihenfolge: `subject, salutation, patient, aggregat, anamnesis, premedication, befund, epicrisis, closing, signature, reports`.
 Eindeutige Bausteine lassen sich aus-, aber nicht löschen (`enabled: false`). Freie Textbausteine
 können beliebig oft ergänzt und gelöscht werden.
 
@@ -202,6 +203,19 @@ Der Baustein `reports` steht als Anhang am Ende des Briefes: Er druckt den Befun
 zugeordneten Berichts (Geräte-, Sonden- und Messwerte) **immer auf einer neuen Seite** unter der
 Grußformel und entfällt vollständig, wenn dem Brief kein Bericht zugeordnet ist. Der Baustein
 `befund` druckt dagegen den Freitext des Aktenbausteins *Befund* (Patientenakte) im Brieftext.
+
+Der Baustein `signature` (*Unterschrift*) steht in der Standardvorlage direkt unter der
+Grußformel und druckt die Unterschrift der **angemeldeten Person** (System → *Benutzer* bzw.
+eigene Seite *Unterschrift*, `/account/signature`). Das Bild wird auf höchstens 60 × 22 mm
+skaliert (Seitenverhältnis bleibt erhalten) und linksbündig gesetzt; darunter steht **immer**
+`{signer_name}`, also Titel, Vorname und Name der unterzeichnenden Person (fehlende Teile
+entfallen, ohne Namensbestandteile gilt der Anzeigename). Mit der Option `show_line` lässt sich
+eine Linie über dem Namen ein- oder ausblenden (Vorgabe: ein). Ohne hinterlegte Unterschrift
+bleibt der Platz über dem Namen leer, der Name wird trotzdem gedruckt; fehlt die unterzeichnende
+Person ganz, bleibt der Bereich leer. Bild und Name werden beim Erstellen im Snapshot eingefroren
+(`signature.id`, `signature.sha256`, `signature.filename`, `signature.name`); ein späterer Wechsel
+der Unterschrift ändert bereits erzeugte Briefe nicht. Der Editor zeigt an dieser Stelle die
+Unterschrift der angemeldeten Person als Vorschau (oder einen Hinweis, wenn keine hinterlegt ist).
 
 Fassungen aus der Zeit vor dem Aktenbaustein *Befund* führen den Blocktyp `report`
 (*Befund (Bericht)*); `LetterTemplate::normalize()` bildet ihn auf `befund` ab, sodass alte
@@ -247,7 +261,8 @@ bereits gespeicherten Vorlage kann jederzeit durch festen Text ersetzt werden; d
 Erlaubt in allen Texten: `{salutation}` (siehe 4.3), `{center_name}`, `{center_address_line}`,
 `{practice_contact_line}`, `{return_address_line}`, `{return_name}`, `{return_street}`,
 `{return_postal_code}`, `{return_city}`, `{patient_name}`, `{first_name}`, `{last_name}`,
-`{date_of_birth}`, `{patient_identifier}`, `{document_number}`, `{letter_date}`, `{sequence_no}`.
+`{date_of_birth}`, `{patient_identifier}`, `{document_number}`, `{letter_date}`, `{sequence_no}`,
+`{signer_name}`.
 Nur in `footer.page_label`: `{page}`, `{pages}` (Definition-Flag `page: true`).
 
 `{center_name}`, `{center_address_line}`, `{practice_contact_line}` sowie die `{return_*}`
@@ -261,6 +276,10 @@ Unterstreichung steht unter der letzten Zeile.
 Gefüllt werden sie ausschließlich aus dem Snapshot des Briefes
 (`LetterPdfGenerator::placeholderValues()`); `LetterTemplate::fill()` lässt unbekannte
 Platzhalter sichtbar stehen. Beim Speichern lehnt `normalize()` unbekannte Platzhalter ab.
+
+`{signer_name}` kommt aus dem Snapshot (`signature.name`), also aus Titel, Vorname und Name der
+beim Erstellen angemeldeten Person; im Editor zeigt die Vorschau dafür den Namen der aktuell
+angemeldeten Person.
 
 ### 4.5 Grenzen und Normalisierung (`LetterTemplate::normalize()`)
 

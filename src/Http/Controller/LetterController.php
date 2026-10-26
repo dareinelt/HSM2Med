@@ -109,7 +109,7 @@ final class LetterController extends Controller
         }
 
         try {
-            $result = $this->app->letterService()->create($input);
+            $result = $this->app->letterService()->create($input, $this->app->auth()->user());
         } catch (LetterException $e) {
             return $this->renderWizard(
                 $input->patientId,

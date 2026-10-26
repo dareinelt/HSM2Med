@@ -308,7 +308,7 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | `ReportData`/`ReportSummary` | Wertobjekte (inkl. `reportVersion()`) |
 | `PdfGenerator` | Layout des PDF-Berichts, Versionsprüfung, Rohdatenanhang |
 | `Pdf\PdfDocument` | Eigener PDF-Writer (Seiten, Tabellen, Schriften, Kompression, Bilder) |
-| `Pdf\ImageData`/`Pdf\PngDecoder` | Bilddaten für XObjects (PNG dekodieren, JPEG direkt einbetten, SMask für Transparenz) |
+| `Pdf\ImageData`/`Pdf\PngDecoder`/`Pdf\BmpDecoder` | Bilddaten für XObjects (PNG dekodieren, JPEG direkt einbetten, BMP dekodieren, SMask für Transparenz) |
 
 ### `src/PatientCard/`
 
@@ -329,10 +329,10 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 
 | Klasse | Verantwortung |
 | --- | --- |
-| `LetterService` | Assistent, Erzeugen (ein Brief je gewähltem Empfänger in einer Transaktion, Snapshot mit eingebetteter Vorlage), `reproducePdf()` (damalige Vorlage, nichts speichern), `regenerate()` (Neuausfertigung `original`/`current`, `current` nur mit Bestätigung), `previewPdf()` (Editor-Vorschau mit Beispieldaten) |
+| `LetterService` | Assistent, Erzeugen (ein Brief je gewähltem Empfänger in einer Transaktion, Snapshot mit eingebetteter Vorlage; die angemeldete Person als unterzeichnende Person mit Unterschrift und Namen eingefroren), `reproducePdf()` (damalige Vorlage, nichts speichern), `regenerate()` (Neuausfertigung `original`/`current`, `current` nur mit Bestätigung), `previewPdf()` (Editor-Vorschau mit Beispieldaten) |
 | `LetterTemplate` | Vorlagenschema: Zonen, Bausteintypen, Platzhalter, `default()`, `normalize()` (Prüfung mit Feldpfaden wie `blocks.3.texts.text`), `fill()`, `editorDefinition()` für den JS-Editor |
 | `LetterTemplateService` / `LetterTemplateRepository` | Versionierung: `current()`, `save()` (neue Fassung, Konflikt über `base_version`, unveränderter Inhalt abgelehnt), Fassungsliste |
-| `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter, Fassung 2 druckt ohne Messwerttabelle, Fassung 3 mit, Fassung 4 zusätzlich mit dem Baustein „Aggregat“ (Gerätedaten des letzten Imports und Sonden, zweispaltig) |
+| `LetterPdfGenerator` | DIN-5008-Form-B-Layout aus `template.content`; leitet `letter_version` 1 an `LegacyLetterPdfGenerator` weiter, Fassung 2 druckt ohne Messwerttabelle, Fassung 3 mit, Fassung 4 zusätzlich mit dem Baustein „Aggregat“ (Gerätedaten des letzten Imports und Sonden, zweispaltig), Fassung 5 zusätzlich mit dem Baustein „Unterschrift“ (Bild der angemeldeten Person, automatisch auf 60 × 22 mm skaliert, darunter immer Titel, Vorname und Name) |
 | `LetterMeasurements` | Messwerttabelle des Briefes: löst den festen Katalog (`App\PatientCard\MeasurementTemplate`) gegen die Untersuchungen des Patienten auf (aktuelle Untersuchung ganz rechts, davor bis zu `MAX_PREVIOUS` frühere), friert die Tabelle samt Auswahl in den Snapshot ein (`freeze()`), liefert die Checkbox-Liste des Assistenten (`choices()`, `previousCount()`) und löst die wirksame Auswahl bzw. die Vorauswahl aus dem gespeicherten Standard auf (`chosen()`, `preselect()`) |
 | `LetterSample` | Beispieldaten für Editor-Vorschau |
 | `LetterRecipient` | Empfängerarten `patient`, `family_doctor`, `referring_physician`, `generic`: Anschriftzeilen aus Stammdaten, Verfügbarkeit (Name/Praxis + PLZ + Ort), fehlende Angaben; der generische Arztbrief hat eine feste Anschrift und ist nur ohne Arztanschrift wählbar |
@@ -352,8 +352,9 @@ Vorlagenschema lesen.
 Abmeldezeitpunkt, gleitende Ruhezeit aus `AUTH_IDLE_MINUTES`, Rechte werden bei jeder Anfrage
 frisch aus der Datenbank gelesen), `Csrf` (Token je Session), `SessionManager` (Start,
 ID-Erneuerung, Flash-Nachrichten, `HttpOnly`/`SameSite=Strict`), `UploadValidator` (Größe,
-Endung, MIME, verbotene Signaturen, 0x1C-Pflicht, NUL-Anteil), `ImageUploadValidator` (Logo:
-PNG/JPEG, max. 1 MiB, max. 2000 px, prüft `is_uploaded_file()`),
+Endung, MIME, verbotene Signaturen, 0x1C-Pflicht, NUL-Anteil), `ImageUploadValidator` (Logo und
+Unterschrift: PNG/JPEG, für Unterschriften zusätzlich BMP; max. 1 MiB, max. 2000 px, prüft
+`is_uploaded_file()` und den Inhalt),
 `FileName::sanitize()`/`downloadName()`, `UploadException`.
 
 ### `src/User/`
@@ -361,9 +362,9 @@ PNG/JPEG, max. 1 MiB, max. 2000 px, prüft `is_uploaded_file()`),
 | Klasse | Verantwortung |
 | --- | --- |
 | `Permission` | Rechtematrix: `CATALOG` (14 Bereiche = Kennungen des Funktionsbandes + `letter_templates` + `patient_card_templates` + `users`), `DESCRIPTIONS`, `forPath()` (bindende Reihenfolge: spezielle Pfade vor Präfixen, `/account*` → `null`), `normalize()` |
-| `User` | Angemeldete Person: Kennung, Anzeigename, Gruppen, Rechte; `hasPermission()`, `mayManageUsers()`, `groupText()` |
-| `UserInput` | Serverseitige Prüfung (Benutzername kleingeschrieben, Kennwortlänge, Anzeigename, Gruppen, Aktiv-Kennzeichen) |
-| `UserService` | Anmelden (`authenticate()` mit Sperre nach `MAX_FAILED_ATTEMPTS = 5` für `LOCK_MINUTES = 15`), Benutzer anlegen/ändern/`setPassword()`, eigenes Kennwort, Gruppen und Rechte-Matrix, `seedAdmin()`; Regel „der letzte Benutzerverwalter kann sich nicht aussperren“ |
+| `User` | Angemeldete Person: Kennung, Anzeigename, Titel/Vorname/Name, Gruppen, Rechte, hinterlegte Unterschrift; `hasPermission()`, `mayManageUsers()`, `groupText()`, `signerName()` (Name unter der Unterschrift), `hasSignature()` |
+| `UserInput` | Serverseitige Prüfung (Benutzername kleingeschrieben, Kennwortlänge, Anzeigename, Titel/Vorname/Name, Gruppen, Aktiv-Kennzeichen) |
+| `UserService` | Anmelden (`authenticate()` mit Sperre nach `MAX_FAILED_ATTEMPTS = 5` für `LOCK_MINUTES = 15`), Benutzer anlegen/ändern/`setPassword()`, eigenes Kennwort, Unterschrift setzen/entfernen/ausliefern, Gruppen und Rechte-Matrix, `seedAdmin()`; Regel „der letzte Benutzerverwalter kann sich nicht aussperren“ |
 | `UserException` / `AuthException` | Feldmeldungen (HTTP 422) bzw. Anmeldefehler; Meldungstext ist immer „Bitte die markierten Angaben prüfen.“, die Gründe stehen in `fieldErrors()` |
 
 ### `src/Support/`
@@ -389,6 +390,9 @@ angemeldete Anfrage mit Hinweis zurück auf `/`.
 | POST | `/logout` | `LoginController::logout` | Abmelden | – (frei) |
 | GET | `/account/password` | `AccountController::form` | Eigenes Kennwort ändern | – (jede angemeldete Person) |
 | POST | `/account/password` | `AccountController::change` | Eigenes Kennwort speichern | – (jede angemeldete Person) |
+| GET | `/account/signature` | `AccountController::signatureForm` | Eigene Unterschrift hochladen/entfernen | – (jede angemeldete Person) |
+| POST | `/account/signature` | `AccountController::saveSignature` | Eigene Unterschrift speichern oder entfernen | – (jede angemeldete Person) |
+| GET | `/account/signature/image` | `AccountController::signatureImage` | Eigene Unterschrift ausliefern | – (jede angemeldete Person) |
 | GET | `/` | `DashboardController::index` | Kennzahlen und letzte Berichte | `dashboard` |
 | GET | `/import` | `ImportController::form` | Upload-Formular (Patientenvorgang) | `import` |
 | POST | `/import` | `ImportController::upload` | Datei prüfen und zwischenspeichern (Patientenvorgang) | `import` |
@@ -452,6 +456,8 @@ angemeldete Anfrage mit Hinweis zurück auf `/`.
 | POST | `/system/users/groups/{id}` | `UserController::saveGroup` | Gruppe und Rechte speichern | `users` |
 | POST | `/system/users/groups/{id}/delete` | `UserController::deleteGroup` | Gruppe löschen (Systemgruppen sind geschützt) | `users` |
 | GET | `/system/users/{id}/edit` | `UserController::editForm` | Benutzer bearbeiten | `users` |
+| GET | `/system/users/{id}/signature` | `UserController::signatureImage` | Unterschrift eines Kontos ausliefern | `users` |
+| POST | `/system/users/{id}/signature` | `UserController::uploadSignature` | Unterschrift eines Kontos speichern oder entfernen | `users` |
 | POST | `/system/users/{id}/password` | `UserController::setPassword` | Kennwort setzen | `users` |
 | POST | `/system/users/{id}` | `UserController::update` | Benutzer speichern | `users` |
 
@@ -829,6 +835,7 @@ Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht
 | `database/migrations/013_users_and_groups.sql` | Schema der Benutzerverwaltung (Benutzer, Gruppen, Mitgliedschaften, Rechtematrix) inkl. der vorgegebenen Gruppen *Admin*, *MFA* und *Arzt* |
 | `database/migrations/014_patient_card_templates.sql` | Versionierte Ausweisvorlagen (`patient_card_template_versions`), `patient_cards.template_version_id`, Recht `patient_card_templates` |
 | `database/migrations/015_letter_measurement_defaults.sql` | Applikationsweiter Standard der Messwertauswahl für Briefe (`letter_measurement_defaults`, eine Zeile mit JSON-Schlüsselliste) |
+| `database/migrations/017_user_signatures.sql` | Unterschriften der Benutzer (`user_signatures`, Bild einmalig je SHA-256), Name in Teilen (`users.title/first_name/last_name`), `users.signature_id`, Baustein `signature` in allen Briefvorlagen |
 | `database/schema.sql` | Generiertes Gesamtschema (muss zu den Migrationen passen) |
 | `config/parameter_mapping.php` | Kategorien und Zuordnungsregeln inkl. `version` |
 | `docker-compose.yml` | Dienste, Profile (`test`, `docs`), Netze, Volumes |

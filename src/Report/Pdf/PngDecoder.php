@@ -266,8 +266,10 @@ final class PngDecoder
 
     /**
      * Packt Abtastwerte zeilenweise mit PNG-Filter 0 und komprimiert sie (Predictor 15).
+     *
+     * Oeffentlich, weil auch der BMP-Dekoder seine Abtastwerte so ablegt.
      */
-    private static function pack(string $samples, int $bytesPerRow, int $height): string
+    public static function pack(string $samples, int $bytesPerRow, int $height): string
     {
         $out = '';
         for ($y = 0; $y < $height; $y++) {

@@ -157,6 +157,10 @@ final class Kernel
         // Eigenes Kennwort: bewusst ohne Recht – jede angemeldete Person darf es aendern.
         $router->get('/account/password', $account->form(...));
         $router->post('/account/password', $account->change(...));
+        // Eigene Unterschrift: ebenfalls ohne Recht – sie gehoert zur angemeldeten Person.
+        $router->get('/account/signature', $account->signatureForm(...));
+        $router->post('/account/signature', $account->saveSignature(...));
+        $router->get('/account/signature/image', $account->signatureImage(...));
         $router->get('/', $dashboard->index(...), Permission::DASHBOARD);
         // Patientenvorgang fuehrend: die patientenbezogenen Vorgaenge setzen eine
         // Patientenauswahl voraus (Import, Ausweis erstellen, Brief erstellen).
@@ -216,6 +220,8 @@ final class Kernel
         $router->post('/system/users/groups/{id}/delete', $users->deleteGroup(...), Permission::USERS);
         $router->get('/system/users/{id}/edit', $users->editForm(...), Permission::USERS);
         $router->post('/system/users/{id}/password', $users->setPassword(...), Permission::USERS);
+        $router->get('/system/users/{id}/signature', $users->signatureImage(...), Permission::USERS);
+        $router->post('/system/users/{id}/signature', $users->uploadSignature(...), Permission::USERS);
         $router->post('/system/users/{id}', $users->update(...), Permission::USERS);
         $router->get('/letters', $letters->index(...), Permission::LETTERS);
         $router->get('/letters/new', $letters->newLetter(...), Permission::LETTERS, true);

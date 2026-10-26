@@ -9,8 +9,9 @@ use InvalidArgumentException;
 /**
  * Einbettbares Rasterbild fuer den PDF-Writer.
  *
- * Unterstuetzt werden PNG (Graustufen, RGB, Palette, mit/ohne Transparenz, nicht interlaced)
- * und JPEG (Graustufen/RGB). Alphakanaele werden als SMask (Weichmaske) eingebettet.
+ * Unterstuetzt werden PNG (Graustufen, RGB, Palette, mit/ohne Transparenz, nicht interlaced),
+ * JPEG (Graustufen/RGB) und BMP (unkomprimiert, 1–32 Bit). Alphakanaele werden als SMask
+ * (Weichmaske) eingebettet.
  * Alle Daten werden im Speicher verarbeitet – es werden keine Dateien geschrieben und keine
  * externen Bibliotheken verwendet.
  */
@@ -45,7 +46,10 @@ final class ImageData
         if (str_starts_with($bytes, "\xFF\xD8\xFF")) {
             return self::fromJpeg($bytes);
         }
-        throw new InvalidArgumentException('Nicht unterstuetztes Bildformat (erlaubt: PNG, JPEG).');
+        if (str_starts_with($bytes, 'BM') && strlen($bytes) > 14 && $bytes[6] === "\x00" && $bytes[7] === "\x00") {
+            return BmpDecoder::decode($bytes);
+        }
+        throw new InvalidArgumentException('Nicht unterstuetztes Bildformat (erlaubt: PNG, JPEG, BMP).');
     }
 
     private static function fromJpeg(string $bytes): self
