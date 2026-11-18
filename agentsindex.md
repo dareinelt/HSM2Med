@@ -293,7 +293,7 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | --- | --- |
 | `MerlinParser` | Zerlegt die Datei an 0x1C in Datensätze mit 4 Feldern; erkennt Kodierung; sammelt Fehler/Warnungen |
 | `ImportValidator` | Datei-/Stammdatenprüfung (blockierende Fehler vs. Warnungen) |
-| `ImportService` | Analyse, Dublettenprüfung, atomarer Import, Stammdaten-Upsert, Parameter-Chunks (100) |
+| `ImportService` | Analyse, Dublettenprüfung, atomarer Import, Stammdaten-Upsert (Identität vor Patienten-ID; ohne Datei-Identität aktiver Patient), Parameter-Chunks (100) |
 | `ImportArchive` | Originaldatei als `<sha256>.txt` schreibgeschützt ablegen |
 | `PendingUploadStore` | Zwischenspeicher für geprüfte Uploads außerhalb des Webroots (Token, TTL 1 h) |
 | `ImportAnalysis`/`ImportOutcome`/`ImportIssue` | Wertobjekte für Analyse, Ergebnis und Meldungen |
@@ -517,6 +517,9 @@ Grundsätze:
 - `patients.last_name`/`first_name` und `patients.identity_key` (generiert, `Nachname|Vorname|Geburtsdatum`,
   `utf8mb4_bin`) tragen die Identitätsregel des Patientenausweises; `idx_patients_identity` ist
   bewusst **nicht** eindeutig, damit mehrere Treffer erkannt und dem Benutzer vorgelegt werden können.
+  `ImportService::upsertPatient()` sucht zuerst über diesen Schlüssel (nicht über das Rohformat des
+  Geburtsdatums oder allein über die Patienten-ID); ohne vollständige Datei-Identität wird der
+  aktive Patient des Patientenvorgangs verwendet, damit der Bericht für Brief und Ausweis verfügbar ist.
 - Ausweise sind unveränderlich: `pdf_content` wird nie neu berechnet, jede Korrektur erzeugt eine
   neue `card_version` desselben Berichts; `patient_cards` ist eindeutig über `(patient_id, sequence_no)`.
 - `NULL` bedeutet „Feld nicht vorhanden“, `''` bedeutet „Feld vorhanden, aber leer“.
@@ -807,7 +810,7 @@ Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht
 | Neues Parser-Fehlerkennzeichen | in `MerlinParser`/`ImportValidator` erzeugen, Code + Art in README-Tabelle und in `templates/import/preview.php` ergänzen, Test in `tests/Unit/MerlinParserTest.php` |
 | PDF-Layout ändern | `PdfGenerator` anpassen; bei strukturellen Snapshot-Änderungen `REPORT_VERSION` und `SUPPORTED_REPORT_VERSION` erhöhen und Versionszweig ergänzen |
 | Ausweis-Layout ändern | `PatientCardPdfGenerator` anpassen (Vorlage `.reference/idcard_ann.png` beachten); bei strukturellen Snapshot-Änderungen `PatientCardService::CARD_VERSION` und `PatientCardPdfGenerator::SUPPORTED_CARD_VERSION` erhöhen; bestehende Ausweise bleiben unverändert |
-| Messzeile auf Ausweis-Seite 2 ergänzen | `config/patient_card_measurements.php` (`sections` → `groups` → `rows` mit `label`, `chamber`, `sources.ids`/`sources.names`, `glue`) anpassen, `version` erhöhen; Generator und Tests bleiben unberührt, bestehende Ausweise unverändert |
+| Messzeile auf Ausweis-Seite 2 ergänzen | `config/patient_card_measurements.php` (`sections` → `groups` → `rows` mit `label`, `chamber`, `sources.ids`/`sources.names`, `glue`) anpassen, `version` erhöhen; `sources.ids` führt Merlin- und Biotronik-`code`-Werte, Generator und Tests bleiben unberührt, bestehende Ausweise unverändert |
 | Briefvorlage erweitern (neuer Baustein/Text/Platzhalter) | `LetterTemplate` (Definition + `default()`), Darstellung in `LetterPdfGenerator`, Editor-Vorschau in `template-editor.js`; bestehende Vorlagenfassungen müssen weiterhin `normalize()` bestehen; Tests in `tests/Unit/LetterTemplateTest.php` |
 | Brief-Layout strukturell ändern | `LetterService::LETTER_VERSION` und `LetterPdfGenerator::SUPPORTED_LETTER_VERSION` erhöhen, alten Zweig erhalten (wie `LegacyLetterPdfGenerator`); die Vorversion in `COMPATIBLE_LETTER_VERSIONS` aufnehmen und im Generator verzweigen (so geschah es für die Messwerttabelle in Fassung 3) |
 | Messwertzeilen der Brief-Messwerttabelle ändern | nur `config/patient_card_measurements.php` (gemeinsamer Katalog mit dem Patientenausweis) anpassen und `version` erhöhen; Spaltenzahl je Vorlage über die Zone `measurement_table` (Option `previous`), Auswahl je Brief über `measurements[]` |

@@ -39,7 +39,11 @@ class ImportService
     ) {
     }
 
-    public function analyze(string $bytes, string $originalFilename): ImportAnalysis
+    /**
+     * @param ?int $activePatientId Aktiver Patient der Sitzung; ein Bericht ohne Patientendaten
+     *                              wird ihm zugeordnet, statt ohne Patient gespeichert zu werden.
+     */
+    public function analyze(string $bytes, string $originalFilename, ?int $activePatientId = null): ImportAnalysis
     {
         $parser = $this->parser->forBytes($bytes, $originalFilename);
         $result = $parser->parse($bytes);
@@ -59,7 +63,7 @@ class ImportService
             parseResult: $result,
             assignments: $assignments,
             summary: $summary,
-            validation: $this->validator->validate($result, $summary),
+            validation: $this->validator->validate($result, $summary, $activePatientId !== null),
             previousImports: $this->findImportsByHash($hash),
         );
     }
@@ -84,7 +88,11 @@ class ImportService
         ], $stmt->fetchAll());
     }
 
-    public function import(ImportAnalysis $analysis, string $bytes, bool $allowDuplicate = false): ImportOutcome
+    /**
+     * @param ?int $activePatientId Aktiver Patient der Sitzung; wird herangezogen, wenn die Datei
+     *                              keine vollstaendige Patientenidentitaet enthaelt.
+     */
+    public function import(ImportAnalysis $analysis, string $bytes, bool $allowDuplicate = false, ?int $activePatientId = null): ImportOutcome
     {
         if (!hash_equals($analysis->fileHash, hash('sha256', $bytes))) {
             throw new ImportFailedException('Die Datei wurde seit der Analyse veraendert.');
@@ -106,7 +114,7 @@ class ImportService
         try {
             $this->pdo->beginTransaction();
 
-            $patientId = $this->upsertPatient($summary, $now);
+            $patientId = $this->upsertPatient($summary, $now, $activePatientId);
             $deviceId = $this->upsertDevice($summary, $patientId, $now);
             $leadIds = $deviceId === null ? [] : $this->upsertLeads($summary, $deviceId, $now);
             $archiveFilename = $this->archiveOriginal($analysis->fileHash, $bytes);
@@ -143,35 +151,31 @@ class ImportService
         );
     }
 
-    protected function upsertPatient(ReportSummary $summary, string $now): ?int
+    protected function upsertPatient(ReportSummary $summary, string $now, ?int $activePatientId = null): ?int
     {
         $identifier = $summary->nonEmpty('patient_identifier');
         $name = $summary->nonEmpty('patient_name');
-        if ($identifier === null && $name === null) {
-            return null;
-        }
         $dobRaw = $summary->nonEmpty('patient_dob');
         $dob = SourceDate::parse($dobRaw)?->format('Y-m-d');
         // Nachname/Vorname werden aus "NACHNAME, VORNAME" abgeleitet; fehlt das Komma,
         // bleibt der Vorname leer und wird im Patientenausweis-Assistenten ergaenzt.
         $parts = PatientName::split($name);
+        $identityKey = PatientName::identityKey($parts['last'], $parts['first'], $dob);
 
-        if ($identifier !== null) {
-            $stmt = $this->pdo->prepare('SELECT id FROM patients WHERE patient_identifier = ? FOR UPDATE');
-            $stmt->execute([$identifier]);
-        } else {
-            $stmt = $this->pdo->prepare(
-                'SELECT id FROM patients
-                  WHERE patient_identifier IS NULL
-                    AND patient_name = ? COLLATE utf8mb4_bin
-                    AND date_of_birth_raw <=> ?
-                  ORDER BY id LIMIT 1 FOR UPDATE'
-            );
-            $stmt->execute([$name, $dobRaw]);
+        // Die Identitaet (Nachname + Vorname + Geburtsdatum) ist das primaere Merkmal; die
+        // Patienten-ID ist nur eine Zusatzangabe. Damit werden vor dem Import angelegte
+        // Patienten wiederverwendet, auch wenn sich das Rohformat des Geburtsdatums unterscheidet.
+        $id = $identityKey === null ? null : $this->findPatientByIdentity($identityKey, $activePatientId);
+        if ($id === null && $identifier !== null) {
+            $id = $this->findPatientByIdentifier($identifier);
         }
-        $id = $stmt->fetchColumn();
+        // Ohne vollstaendige Identitaet in der Datei ist der aktive Patient der
+        // Patientenvorgang; der Bericht bleibt dadurch fuer Brief und Ausweis nutzbar.
+        if ($id === null && $identityKey === null && $activePatientId !== null && $this->patientExists($activePatientId)) {
+            $id = $activePatientId;
+        }
 
-        if ($id !== false) {
+        if ($id !== null) {
             // Stammdaten werden nur ergaenzt, nie ueberschrieben (Berichte haben eigene Snapshots).
             $this->pdo->prepare(
                 'UPDATE patients SET patient_name = COALESCE(patient_name, ?),
@@ -182,7 +186,11 @@ class ImportService
                         updated_at = ?
                   WHERE id = ?'
             )->execute([$name, $parts['last'], $parts['first'], $dob, $dobRaw, $now, $id]);
-            return (int) $id;
+            return $id;
+        }
+
+        if ($identifier === null && $name === null) {
+            return null;
         }
 
         $this->pdo->prepare(
@@ -191,6 +199,39 @@ class ImportService
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         )->execute([$identifier, $name, $parts['last'], $parts['first'], $dob, $dobRaw, $now, $now]);
         return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * Alle Patienten mit derselben Identitaet; bei mehreren Treffern hat der aktive Patient
+     * Vorrang, damit der laufende Patientenvorgang zusammenhaelt.
+     */
+    private function findPatientByIdentity(string $identityKey, ?int $activePatientId): ?int
+    {
+        $stmt = $this->pdo->prepare('SELECT id FROM patients WHERE identity_key = ? ORDER BY id FOR UPDATE');
+        $stmt->execute([$identityKey]);
+        $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        if ($ids === []) {
+            return null;
+        }
+        if ($activePatientId !== null && in_array($activePatientId, $ids, true)) {
+            return $activePatientId;
+        }
+        return $ids[0];
+    }
+
+    private function findPatientByIdentifier(string $identifier): ?int
+    {
+        $stmt = $this->pdo->prepare('SELECT id FROM patients WHERE patient_identifier = ? FOR UPDATE');
+        $stmt->execute([$identifier]);
+        $id = $stmt->fetchColumn();
+        return $id === false ? null : (int) $id;
+    }
+
+    private function patientExists(int $patientId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT 1 FROM patients WHERE id = ?');
+        $stmt->execute([$patientId]);
+        return $stmt->fetchColumn() !== false;
     }
 
     protected function upsertDevice(ReportSummary $summary, ?int $patientId, string $now): ?int
