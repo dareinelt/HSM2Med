@@ -18,7 +18,7 @@
  * @var array<string, mixed> $mrt
  * @var array<string, mixed> $appendix
  * @var array<string, mixed> $measurements
- * @var list<array{key: string, label: string, available: bool, values: list<string>}> $measurementChoices
+ * @var list<array{key: string, label: string, chamber?: string, available: bool, values: list<string>}> $measurementChoices
  * @var int $measurementPrevious
  * @var list<string> $measurementDefault
  * @var list<string> $warnings
@@ -318,7 +318,7 @@ $measurementColumns = (array) ($measurements['columns'] ?? []);
                                             name="measurements[]" value="<?= $e($choice['key']) ?>"
                                             <?= $isMeasurementChecked($choice['key']) ? ' checked' : '' ?>
                                             <?= $choice['available'] ? '' : ' disabled' ?>>
-                                        <span><?= $e($choice['label']) ?>
+                                        <span><?php if (trim((string) ($choice['chamber'] ?? '')) !== ''): ?><span class="badge"><?= $e($choice['chamber']) ?></span> <?php endif; ?><?= $e($choice['label']) ?>
                                             <?php if ($choice['available']): ?>
                                                 <small class="muted"><?= $e(implode(' · ', array_filter($choice['values'], static fn (string $value): bool => trim($value) !== ''))) ?></small>
                                             <?php else: ?>

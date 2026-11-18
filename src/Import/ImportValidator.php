@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Import;
 
+use App\PatientCard\PatientName;
 use App\Report\ReportSummary;
 use App\Support\SourceDate;
 
@@ -73,13 +74,31 @@ final class ImportValidator
             if ($summary->nonEmpty('device_serial') === null) {
                 $warnings[] = ImportIssue::warning('missing_device_serial', 'Keine Geraete-Seriennummer in der Datei; der Bericht wird ohne Geraetezuordnung gespeichert.');
             }
-            if ($summary->nonEmpty('patient_identifier') === null && $summary->nonEmpty('patient_name') === null) {
+            $identifier = $summary->nonEmpty('patient_identifier');
+            $name = $summary->nonEmpty('patient_name');
+            $dobRaw = $summary->nonEmpty('patient_dob');
+            if ($identifier === null && $name === null && $dobRaw === null) {
                 $warnings[] = ImportIssue::warning(
                     'missing_patient',
                     $hasActivePatient
-                        ? 'Weder Patient-ID noch Patientenname in der Datei; der Bericht wird dem aktiven Patienten zugeordnet.'
-                        : 'Weder Patient-ID noch Patientenname vorhanden; der Bericht wird ohne Patientenzuordnung gespeichert.',
+                        ? 'Keine Patientendaten in der Datei; der Bericht wird dem aktiven Patienten zugeordnet.'
+                        : 'Keine Patientendaten vorhanden; der Bericht wird ohne Patientenzuordnung gespeichert.',
                 );
+            } else {
+                if ($dobRaw === null) {
+                    $warnings[] = ImportIssue::warning(
+                        'missing_patient_dob',
+                        'Kein Geburtsdatum in der Datei vorhanden.',
+                    );
+                }
+                $parts = PatientName::split($name);
+                $dob = SourceDate::parse($dobRaw)?->format('Y-m-d');
+                if (PatientName::identityKey($parts['last'], $parts['first'], $dob) === null) {
+                    $warnings[] = ImportIssue::warning(
+                        'incomplete_patient_identity',
+                        'Unvollständige Patientenidentität in der Datei (erforderlich sind Nachname, Vorname und gültiges Geburtsdatum); die Zuordnung muss ausdrücklich bestätigt werden.',
+                    );
+                }
             }
             foreach (['patient_dob' => 'Geburtsdatum', 'device_implant_date' => 'Implantationsdatum', 'session_timestamp' => 'Sitzungszeitpunkt', 'interrogation_timestamp' => 'Abfragezeitpunkt'] as $key => $label) {
                 $value = $summary->nonEmpty($key);

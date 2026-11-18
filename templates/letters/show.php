@@ -320,7 +320,7 @@ $textParts = [
                         <?php endif; ?>
                         <?php foreach ((array) ($group['rows'] ?? []) as $row): ?>
                             <tr>
-                                <td><?= $e($row['label']) ?></td>
+                                <td><?php if (trim((string) ($row['chamber'] ?? '')) !== ''): ?><span class="badge"><?= $e($row['chamber']) ?></span> <?php endif; ?><?= $e($row['label']) ?></td>
                                 <?php foreach ($measurementColumns as $index => $column): ?>
                                     <td><?= $e((string) (((array) ($row['values'] ?? []))[$index] ?? '')) ?></td>
                                 <?php endforeach; ?>

@@ -33,11 +33,12 @@ class PatientRepository
     /**
      * @return list<array<string, mixed>>
      */
-    public function findPatientsByIdentity(string $identityKey): array
+    public function findPatientsByIdentity(string $identityKey, bool $forUpdate = false): array
     {
         $stmt = $this->pdo->prepare(
             'SELECT id, patient_identifier, patient_name, last_name, first_name, date_of_birth, date_of_birth_raw'
             . ' FROM patients WHERE identity_key = ? ORDER BY id'
+            . ($forUpdate ? ' FOR UPDATE' : '')
         );
         $stmt->execute([$identityKey]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -46,9 +47,24 @@ class PatientRepository
     /**
      * @return array<string, mixed>|null
      */
-    public function patient(int $patientId): ?array
+    public function findPatientByIdentifier(string $identifier, bool $forUpdate = false): ?array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM patients WHERE id = ?');
+        $stmt = $this->pdo->prepare(
+            'SELECT id, patient_identifier, patient_name, last_name, first_name, date_of_birth, date_of_birth_raw, identity_key'
+            . ' FROM patients WHERE patient_identifier = ?'
+            . ($forUpdate ? ' FOR UPDATE' : '')
+        );
+        $stmt->execute([$identifier]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function patient(int $patientId, bool $forUpdate = false): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM patients WHERE id = ?' . ($forUpdate ? ' FOR UPDATE' : ''));
         $stmt->execute([$patientId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row === false ? null : $row;
@@ -82,6 +98,51 @@ class PatientRepository
         );
         $stmt->execute([$identifier, $patientName, $lastName, $firstName, $dateOfBirth, $dateOfBirthRaw, $now, $now]);
         return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * Legt einen Patienten aus Importangaben an (Teil-Angaben duerfen NULL sein).
+     */
+    public function createImportedPatient(
+        ?string $identifier,
+        ?string $patientName,
+        ?string $lastName,
+        ?string $firstName,
+        ?string $dateOfBirth,
+        ?string $dateOfBirthRaw,
+        string $now,
+    ): int {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO patients (patient_identifier, patient_name, last_name, first_name,'
+            . ' date_of_birth, date_of_birth_raw, created_at, updated_at)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$identifier, $patientName, $lastName, $firstName, $dateOfBirth, $dateOfBirthRaw, $now, $now]);
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * Ergaenzt fehlende Stammdaten aus einem Import, ohne vorhandene Angaben zu ueberschreiben.
+     */
+    public function supplementPatientFromImport(
+        int $patientId,
+        ?string $patientName,
+        ?string $lastName,
+        ?string $firstName,
+        ?string $dateOfBirth,
+        ?string $dateOfBirthRaw,
+        string $now,
+    ): void {
+        $stmt = $this->pdo->prepare(
+            'UPDATE patients SET patient_name = COALESCE(patient_name, ?),'
+            . ' last_name = COALESCE(last_name, ?),'
+            . ' first_name = COALESCE(first_name, ?),'
+            . ' date_of_birth = COALESCE(date_of_birth, ?),'
+            . ' date_of_birth_raw = CASE WHEN date_of_birth IS NULL OR date_of_birth <=> ? THEN COALESCE(date_of_birth_raw, ?) ELSE date_of_birth_raw END,'
+            . ' updated_at = ?'
+            . ' WHERE id = ?'
+        );
+        $stmt->execute([$patientName, $lastName, $firstName, $dateOfBirth, $dateOfBirth, $dateOfBirthRaw, $now, $patientId]);
     }
 
     /**

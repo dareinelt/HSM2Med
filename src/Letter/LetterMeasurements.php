@@ -273,11 +273,11 @@ final class LetterMeasurements
     }
 
     /**
-     * Auswahl fuer den Assistenten: alle Zeilen mit Beschriftung und der Angabe, ob in den
-     * Untersuchungen ein Wert vorliegt.
+     * Auswahl fuer den Assistenten: alle Zeilen mit Beschriftung, Kammerangabe und der Angabe,
+     * ob in den Untersuchungen ein Wert vorliegt.
      *
      * @param array<string, mixed> $measurements Ergebnis von resolve()
-     * @return list<array{key: string, label: string, available: bool, values: list<string>}>
+     * @return list<array{key: string, label: string, chamber: string, available: bool, values: list<string>}>
      */
     public static function choices(array $measurements): array
     {
@@ -297,6 +297,7 @@ final class LetterMeasurements
                     $choices[] = [
                         'key' => (string) ($row['key'] ?? ''),
                         'label' => (string) ($row['label'] ?? ''),
+                        'chamber' => (string) ($row['chamber'] ?? ''),
                         'available' => ($row['available'] ?? false) === true,
                         'values' => array_values(array_map('strval', (array) ($row['values'] ?? []))),
                     ];

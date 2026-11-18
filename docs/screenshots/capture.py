@@ -24,6 +24,7 @@ from playwright.sync_api import Page, sync_playwright
 
 BASE_URL = os.environ.get("BASE_URL", "http://web-docs").rstrip("/")
 SAMPLE = Path(os.environ.get("SAMPLE_FILE", "/work/tests/fixtures/merlin_sample.log"))
+BIOTRONIK_SAMPLE = Path(os.environ.get("BIOTRONIK_SAMPLE_FILE", "/work/tests/fixtures/BIOTRONIC_ANN.xml"))
 OUT = Path(os.environ.get("OUT_DIR", "/work/docs/screenshots"))
 VIEWPORT = {"width": 1366, "height": 900}
 
@@ -309,6 +310,28 @@ def main() -> int:
         upload(page, bad.name)
         shot(page, "10-import-abgelehnt")
 
+        # Biotronik-Vorschau (anonymisierte Beispieldatei) und anschliessendes Verwerfen
+        if BIOTRONIK_SAMPLE.is_file():
+            bio_tmp = Path(tempfile.gettempdir()) / "BIOIEEE_beispiel.xml"
+            bio_tmp.write_bytes(BIOTRONIK_SAMPLE.read_bytes())
+            upload(page, str(bio_tmp))
+            page.wait_for_url("**/import/*")
+            shot(page, "63-import-biotronik-vorschau")
+            page.click("form[action$='/cancel'] button[type=submit]")
+            page.wait_for_load_state()
+
+        # Importvorschau ohne jegliche Patientendaten: Zuordnung zum aktiven Patienten
+        no_patient_file = Path(tempfile.gettempdir()) / "merlin_ohne_patient.log"
+        no_patient_file.write_bytes(
+            b"202\x1cDevice Serial Number\x1c5809481\x1c\x1c\n"
+            b"302\x1cBase Rate\x1c60\x1cbpm\x1c\n"
+        )
+        upload(page, str(no_patient_file))
+        page.wait_for_url("**/import/*")
+        shot(page, "65-import-ohne-patientendaten")
+        page.click("form[action$='/cancel'] button[type=submit]")
+        page.wait_for_load_state()
+
         page.goto(f"{BASE_URL}/")
         shot(page, "11-dashboard")
 
@@ -546,8 +569,9 @@ def main() -> int:
         # Beispielbriefe der Dokumentation wird er nach der Aufnahme zugeschaltet.
         page.check("input[name=include_appendix]")
 
-        # Schritt 4 (Messwerte) hat keine eigene Aufnahme und wird nur durchlaufen.
+        # Schritt 4 (Messwerte): zeigt Kammer-Abzeichen (RA/RV) bei gleichnamigen Elektrodenzeilen.
         page.click("[data-wizard-next]")
+        shot(page, "64-brief-assistent-messwerte")
 
         # Schritt 5: Empfaenger – je Haken entsteht ein eigener Brief.
         page.click("[data-wizard-next]")

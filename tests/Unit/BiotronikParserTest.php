@@ -123,10 +123,10 @@ final class BiotronikParserTest extends TestCase
 
         $model = self::byId($records, '720898');
         $this->assertSame(['MODEL', 'Enticos 4 SR', ''], [$model->name, $model->value, $model->unit]);
-        $this->assertSame('1000118587', self::byId($records, '720899')->value);
+        $this->assertSame('9000000101', self::byId($records, '720899')->value);
         $this->assertSame('BIO', self::byId($records, '720900')->value);
-        $this->assertSame('20231211T000000', self::byId($records, '720901')->value);
-        $this->assertSame('Klinikum WF', self::byId($records, '720904')->value);
+        $this->assertSame('20240315T000000', self::byId($records, '720901')->value);
+        $this->assertSame('Musterklinik', self::byId($records, '720904')->value);
     }
 
     public function testLeadAndSessionValuesAreTakenVerbatim(): void
@@ -134,7 +134,7 @@ final class BiotronikParserTest extends TestCase
         $records = $this->parser->parse(Fixtures::biotronikFile())->records;
 
         $this->assertSame('Solia S 60', self::byId($records, '720961')->value);
-        $this->assertSame('8001149599', self::byId($records, '720962')->value);
+        $this->assertSame('8000000202', self::byId($records, '720962')->value);
         $this->assertSame('BIO', self::byId($records, '720963')->value);
         $this->assertSame('BI', self::byId($records, '720965')->value);
         $this->assertSame('RV', self::byId($records, '720966')->value);
@@ -149,7 +149,7 @@ final class BiotronikParserTest extends TestCase
         $this->assertSame('LASTNAME1', self::byId($records, 'MDC.ATTR.PT.NAME.FAMILY')->value);
         $this->assertSame('FIRSTNAME1', self::byId($records, 'MDC.ATTR.PT.NAME.GIVEN')->value);
         $this->assertSame('2', self::byId($records, 'MDC.ATTR.PT.SEX')->value);
-        $this->assertSame('19280425', self::byId($records, 'MDC.ATTR.PT.DOB')->value);
+        $this->assertSame('19400515', self::byId($records, 'MDC.ATTR.PT.DOB')->value);
     }
 
     // ---------------------------------------------------------------- 3. Einheiten
@@ -463,9 +463,9 @@ final class BiotronikParserTest extends TestCase
 
         $this->assertSame('LASTNAME1, FIRSTNAME1', $summary->value('patient_name'), 'Nachname und Vorname werden zusammengefuehrt.');
         $this->assertNull($summary->value('patient_identifier'), 'Die Datei enthaelt keine Patienten-ID.');
-        $this->assertSame('19280425', $summary->value('patient_dob'), 'Der Originalwert bleibt erhalten.');
+        $this->assertSame('19400515', $summary->value('patient_dob'), 'Der Originalwert bleibt erhalten.');
         $this->assertSame('Enticos 4 SR', $summary->value('device_model_name'));
-        $this->assertSame('1000118587', $summary->value('device_serial'));
+        $this->assertSame('9000000101', $summary->value('device_serial'));
         $this->assertSame('BIO', $summary->value('device_manufacturer'));
         $this->assertSame('VVI', $summary->value('mode'));
         $this->assertSame('60', $summary->value('base_rate'));
@@ -476,8 +476,8 @@ final class BiotronikParserTest extends TestCase
         $this->assertSame('rv', $lead['chamber']);
         $this->assertSame('BIO', $lead['manufacturer']);
         $this->assertSame('Solia S 60', $lead['model_number']);
-        $this->assertSame('8001149599', $lead['serial_number']);
-        $this->assertSame('20231211T000000', $lead['implant_date'], 'Das Implantationsdatum bleibt im Quellformat.');
+        $this->assertSame('8000000202', $lead['serial_number']);
+        $this->assertSame('20240315T000000', $lead['implant_date'], 'Das Implantationsdatum bleibt im Quellformat.');
     }
 
     public function testSnapshotRowsAndValidation(): void
@@ -494,25 +494,41 @@ final class BiotronikParserTest extends TestCase
                 $rows[$row['label']] = $row;
             }
         }
-        $this->assertSame('25.04.1928', $rows['Geburtsdatum']['value']);
-        $this->assertSame('19280425', $rows['Geburtsdatum']['original']);
+        $this->assertSame('15.05.1940', $rows['Geburtsdatum']['value']);
+        $this->assertSame('19400515', $rows['Geburtsdatum']['original']);
         $this->assertSame('08.10.2026 12:38:29', $rows['Sitzungszeitpunkt']['value']);
         $this->assertSame('20261008T123829+0200', $rows['Sitzungszeitpunkt']['original']);
-        $this->assertSame('11.12.2023', $rows['Implantation']['value']);
-        $this->assertSame('20231211T000000', $rows['Implantation']['original']);
+        $this->assertSame('15.03.2024', $rows['Implantation']['value']);
+        $this->assertSame('20240315T000000', $rows['Implantation']['original']);
         $this->assertSame('02.12.2025 00:00:00', $rows['Letzte Abfrage']['value']);
         $this->assertSame('60', $rows['Grundfrequenz']['value']);
         $this->assertSame('{beats}/min', $rows['Grundfrequenz']['unit']);
         $this->assertSame('BIO', $rows['Hersteller']['value']);
-        $this->assertSame('1000118587', $rows['Seriennummer']['value']);
+        $this->assertSame('9000000101', $rows['Seriennummer']['value']);
         $this->assertSame('LASTNAME1, FIRSTNAME1', $rows['Name']['value']);
 
         $this->assertCount(1, $snapshot['leads']);
-        $this->assertSame('8001149599', $snapshot['leads'][0]['serial_number']);
-        $this->assertSame('11.12.2023', $snapshot['leads'][0]['implant_date_display']);
-        $this->assertSame('20231211T000000', $snapshot['leads'][0]['implant_date']);
+        $this->assertSame('8000000202', $snapshot['leads'][0]['serial_number']);
+        $this->assertSame('15.03.2024', $snapshot['leads'][0]['implant_date_display']);
+        $this->assertSame('20240315T000000', $snapshot['leads'][0]['implant_date']);
 
         $this->assertTrue((new ImportValidator())->validate($result, $summary)->isValid(), 'Der Beispieldatensatz ist importierbar.');
+    }
+
+    public function testFixtureIsAnonymizedAndDistinctFromReference(): void
+    {
+        $fixture = Fixtures::biotronikFile();
+        $referencePath = dirname(__DIR__, 2) . '/.reference/BIOTRONIC_ANN.xml';
+        if (is_file($referencePath)) {
+            $this->assertTrue(
+                hash_file('sha256', Fixtures::biotronikFilePath()) !== hash_file('sha256', $referencePath),
+                'Die Test-Fixture darf nicht mit der realen Referenzdatei uebereinstimmen.',
+            );
+        }
+        $this->assertNotContains('Klinikum WF', $fixture);
+        $this->assertNotContains('1000118587', $fixture);
+        $this->assertNotContains('8001149599', $fixture);
+        $this->assertNotContains('80005599', $fixture);
     }
 
     public function testTwoLeadSectionsBecomeTwoLeads(): void
@@ -522,13 +538,13 @@ final class BiotronikParserTest extends TestCase
             . '<value code="720961" name="MODEL" type="String">' . $model . '</value>'
             . '<value code="720962" name="SERIAL" type="String">' . $serial . '</value>'
             . '<value code="720963" name="MFG" type="String">BIO</value>'
-            . '<value code="720964" name="IMPLANT_DT" type="DateTime">20231211T000000</value>'
+            . '<value code="720964" name="IMPLANT_DT" type="DateTime">20240315T000000</value>'
             . '<value code="720966" name="LOCATION" type="String">' . $location . '</value>'
             . '</section>';
         $result = $this->parseDocument(
             '<section name="MDC"><section name="IDC">'
-            . $lead('Solia S 60', '8001149599', 'RV')
-            . $lead('Solia S 45', '8001149598', 'RA')
+            . $lead('Solia S 60', '8000000202', 'RV')
+            . $lead('Solia S 45', '8000000201', 'RA')
             . '</section></section>'
         );
 
@@ -540,7 +556,7 @@ final class BiotronikParserTest extends TestCase
         $summary = (new ReportSummaryBuilder(ReportDataFactory::mapping()))->build($result->records);
         $this->assertCount(2, $summary->leads);
         $this->assertSame(['atrial', 'rv'], array_column($summary->leads, 'chamber'), 'Sortierung: Atrium vor Ventrikel.');
-        $this->assertSame(['8001149598', '8001149599'], array_column($summary->leads, 'serial_number'));
+        $this->assertSame(['8000000201', '8000000202'], array_column($summary->leads, 'serial_number'));
     }
 
     // ---------------------------------------------------------------- 12. Parameterzuordnung

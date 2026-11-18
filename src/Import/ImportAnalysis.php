@@ -27,6 +27,12 @@ final readonly class ImportAnalysis
         public ReportSummary $summary,
         public ValidationResult $validation,
         public array $previousImports,
+        public PatientResolution $patientResolution = new PatientResolution(
+            mode: PatientResolutionMode::NoPatient,
+            defaultTarget: 'none',
+            summary: 'Ohne Patientenzuordnung',
+            reason: 'Keine Patientendaten in der Datei und kein aktiver Patient ausgewählt',
+        ),
     ) {
     }
 

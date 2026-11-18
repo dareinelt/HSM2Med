@@ -528,10 +528,23 @@ Die Übersicht (`/patients`) sucht nach Name (Freitext), Patienten-ID und Geburt
 (`TT.MM.JJJJ`) und zeigt je Patient die Anzahl verknüpfter Berichte und Bausteine sowie den
 Zeitpunkt der letzten Bausteinänderung. Ein Bericht aus dem Import wird über dieselbe
 Identität (Nachname + Vorname + Geburtsdatum) zugeordnet – unabhängig vom Rohformat des
-Geburtsdatums und unabhängig von Warnungen des Parsers. Enthält die Datei keine vollständige
-Patientenidentität, wird der Bericht dem aktiven Patienten zugeordnet, damit er sofort für
-Brief und Ausweis zur Verfügung steht; die Akte verlinkt auf die Ausweise und die Nachsorge
-des Patienten (`/patient-cards/patients/{id}`).
+Geburtsdatums und unabhängig von Warnungen des Parsers. Die Importvorschau weist den
+**Zielpatienten** und den **Treffergrund** ausdrücklich aus und sichert die Zuordnung beim
+Speichern gegen einen zwischenzeitlichen Wechsel des aktiven Patienten ab:
+
+- **Eindeutiger Identitätstreffer** (`Nachname + Vorname + Geburtsdatum`): Zuordnung zu diesem
+  Patienten; keine Dublette.
+- **Keinerlei Patientendaten in der Datei** (weder Name noch Patienten-ID noch Geburtsdatum):
+  Zuordnung zum aktiven Patienten der Sitzung (Warnung `missing_patient`).
+- **Mehrere Identitätstreffer**, **unvollständige Patientenidentität** in der Datei (z. B.
+  fehlendes Geburtsdatum `missing_patient_dob` oder fehlender Vorname
+  `incomplete_patient_identity`) oder **abweichende Patienten-ID** (ID bereits an einen anderen
+  Patienten vergeben): es erfolgt **keine** stille Zuordnung – die Vorschau legt dem Benutzer
+  die möglichen Zieloptionen zur ausdrücklichen Entscheidung vor.
+
+Die Akte verlinkt auf die Ausweise und die Nachsorge des Patienten (`/patient-cards/patients/{id}`).
+
+![Importvorschau ohne Patientendaten in der Datei](docs/screenshots/65-import-ohne-patientendaten.png)
 
 ### Routen
 
@@ -777,12 +790,16 @@ erscheinen (siehe [Messwerttabelle auf der letzten Seite](#messwerttabelle-auf-d
 Angeboten wird der feste Katalog der Briefvorlage, gegliedert nach Abschnitt und Gruppe; Zeilen
 ohne Wert in den Untersuchungen sind deaktiviert und als „kein Wert in den Untersuchungen"
 gekennzeichnet. Die Checkbox **Messwerttabelle auf der letzten Seite mitdrucken** blendet die
-Seite für diesen Brief ab. Mindestens ein Messwert ist Pflicht, solange Werte vorliegen – sonst
+Seite für diesen Brief ab. Kammerbezogene Messwerte (z. B. unter *Elektroden*) tragen sowohl
+im Assistenten als auch in der Detailansicht ein Kammer-Abzeichen (`RA`/`RV`), damit gleichnamige
+Zeilen eindeutig unterscheidbar sind. Mindestens ein Messwert ist Pflicht, solange Werte vorliegen – sonst
 antwortet der Server mit HTTP 422 und öffnet Schritt 4. Wird die Auswahl geändert, fragt der
 Assistent „Die Messwertauswahl wurde geändert. Einstellung merken?" – mit **Ja, als Standard
 merken** gilt die Auswahl applikationsweit für alle künftigen Briefe vorausgewählt (siehe
 [Messwertauswahl als Standard](#messwertauswahl-als-standard)); ohne JavaScript übernimmt das die
 Checkbox **Diese Messwertauswahl als Standard für alle künftigen Briefe merken**.
+
+![Messwerte im Brief-Assistenten wählen](docs/screenshots/64-brief-assistent-messwerte.png)
 
 **5. Empfänger wählen** – Checkboxen für **Patient**, **Hausarzt** und **Überweisender Arzt**
 mit der Anschrift aus den Stammdaten. Für **jeden** gewählten Empfänger entsteht ein eigener
@@ -1037,6 +1054,7 @@ docker compose cp ./MERLIN_export.log web:/tmp/export.log
 docker compose exec -u www-data web php bin/import.php /tmp/export.log --dry-run   # nur prüfen
 docker compose exec -u www-data web php bin/import.php /tmp/export.log             # importieren
 docker compose exec -u www-data web php bin/import.php /tmp/export.log --force     # Dublette erzwingen
+docker compose exec -u www-data web php bin/import.php /tmp/export.log --patient=new  # ausdrückliche Patientenzuordnung (<id|new|none>)
 
 # Import eines Biotronik-XML-Exports (Format wird automatisch erkannt)
 docker compose cp ./BIOIEEE_export.xml web:/tmp/BIOIEEE_export.xml
@@ -1121,6 +1139,8 @@ Endung gewählt.
 - Die Werte sind **keine** standardisierten IEEE-11073-Codes; `standard_codes` bleibt leer.
 - Eine eingebettete XML-Signatur (`<Signature>`) wird ignoriert.
 
+![Importvorschau eines Biotronik-XML-Exports](docs/screenshots/63-import-biotronik-vorschau.png)
+
 ## Parserverhalten und Fehlerbehandlung
 
 - Getrennt wird **ausschließlich** an 0x1C; Tabulatoren, Semikolons, Kommas usw. sind
@@ -1145,7 +1165,7 @@ Endung gewählt.
 | `line_break_in_field`, `nul_in_field` | Warnung | Steuerzeichen im Feld |
 | `encoding_fallback` | Warnung | Kein gültiges UTF-8, Fallback-Kodierung genutzt |
 | `duplicate_parameter_id` | Warnung | ID mehrfach vorhanden |
-| `missing_device_serial`, `missing_patient`, `unparsed_date` | Warnung | Stammdaten fehlen bzw. Datum nicht erkannt |
+| `missing_device_serial`, `missing_patient`, `missing_patient_dob`, `incomplete_patient_identity`, `unparsed_date` | Warnung | Stammdaten fehlen/unvollständig bzw. Datum nicht erkannt |
 | `invalid_xml` | Fehler (blockiert) | XML nicht lesbar (Biotronik) |
 | `unexpected_root` | Fehler (blockiert) | Wurzelelement ist nicht `<biotronik-ieee11073-export>` |
 | `no_values` | Fehler (blockiert) | XML enthält keine `<value>`-Knoten |
@@ -1286,7 +1306,12 @@ Bereits erzeugte Ausweise bleiben unverändert, weil die aufgelöste Tabelle im 
 Ausweises gespeichert ist. Eine bestehende Zeile ohne Treffer im Bericht kann unverändert
 bleiben; fehlt der Parameter im Export, bleibt die Zelle leer, bis ein Bericht den Wert
 enthält. Biotronik-`code`-Werte (IEEE 11073-10103) werden in denselben `ids`-Listen geführt
-wie die Merlin-IDs; die Vorlage ist dadurch für beide Quellformate gültig.
+wie die Merlin-IDs; die Vorlage ist dadurch für beide Quellformate gültig. Für die Zeile
+**Wahrnehmung [mV]** (`RV`) wird bei Biotronik gezielt `INTR_AMPL_MEAN` (`722055`) herangezogen:
+Biotronik exportiert unter `MSMT/LEADCHNL_RV/SENSING` getrennt Minimum (`722054`), Maximum
+(`722053`) und Mittelwert (`722055`), während die Vorlagenzeile – wie bei Merlin (`Ventricular
+Signal Amplitude`, `2722`) – genau einen einzelnen Messwert ohne eigene Zusammenfassung oder
+Umrechnung abbildet; Minimum und Maximum bleiben vollständig im Berichts-Snapshot gespeichert.
 
 ## Vorlage der Schrittmacher-/ICD-Abfrage erweitern
 
@@ -1378,10 +1403,11 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
 - **Parser (1–12):** Normalformat, 0x1C als einziger Trenner, leere Werte/Einheiten,
   Dezimal- und Prozentwerte, Datumswerte, Sonderzeichen, unbekannte Parameter,
   fehlerhafte Datensätze, lange Bezeichnungen, Zeilenumbrüche, Referenzdatei.
-- **Biotronik-Parser:** Referenzdatei `tests/fixtures/BIOTRONIC_ANN.xml` (61 Datensätze),
+- **Biotronik-Parser:** anonymisierte Beispieldatei `tests/fixtures/BIOTRONIC_ANN.xml` (61 Datensätze),
   Parsererkennung, Abschnittspfade, Ersatz-IDs ohne `code`, Einheiten, Duplikatnamen,
-  IEEE-Datumsformate, leere Werte, Fehlerfälle und der vollständige Datenbankimport
-  inklusive PDF.
+  IEEE-Datumsformate, leere Werte, Fehlerfälle, Patientenzuordnung (Identitätstreffer,
+  Mehrfachtreffer, Teil-Identität, Patienten-ID-Konflikt, Wechsel des aktiven Patienten) und
+  der vollständige Datenbankimport inklusive PDF.
 - **Datenbank (13–18):** erfolgreicher Import, Rollback, Fremdschlüssel,
   vollständige und unveränderte Parameter, Neuladen, Unveränderlichkeit historischer
   Berichte, außerdem Dubletten, Suche, Schema und Migrationen.
@@ -1403,8 +1429,9 @@ flüchtige MySQL-Instanz (`db-test`, Daten im RAM). Abgedeckt sind u. a.:
   MRT-Tauglichkeit aus dem Patientenausweis führt und ein abweichender Formularwert verworfen
   wird.
 - **Oberflächen (Integration):** Die Templates werden mit den echten Controllern gerendert
-  (`tests/Integration/PatientCardViewTest.php`, `tests/Integration/PatientViewTest.php`,
-  `tests/Integration/LetterViewTest.php`, `tests/Integration/SystemSettingsViewTest.php`).
+  (`tests/Integration/ImportViewTest.php`, `tests/Integration/PatientCardViewTest.php`,
+  `tests/Integration/PatientViewTest.php`, `tests/Integration/LetterViewTest.php`,
+  `tests/Integration/SystemSettingsViewTest.php`).
   Damit fallen Fehler in der HTML-Schicht (fehlende Template-Variablen, unbekannte Klassen,
   unvollständige Formulare, fehlende CSRF-Felder) im Test auf – `php -l` erkennt sie nicht.
 - **Praxis-Informationen (System):** `tests/Integration/SystemSettingsViewTest.php` prüft das

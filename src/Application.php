@@ -139,6 +139,8 @@ final class Application
             $this->clock,
             new ImportArchive($this->config->importDir),
             $this->logger(),
+            $this->importRepository(),
+            $this->patientRepository(),
         );
     }
 

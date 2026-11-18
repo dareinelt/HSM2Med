@@ -293,7 +293,7 @@ storage/             Laufzeitdaten (Logs, Sessions, Pending) – nicht eingechec
 | --- | --- |
 | `MerlinParser` | Zerlegt die Datei an 0x1C in Datensätze mit 4 Feldern; erkennt Kodierung; sammelt Fehler/Warnungen |
 | `ImportValidator` | Datei-/Stammdatenprüfung (blockierende Fehler vs. Warnungen) |
-| `ImportService` | Analyse, Dublettenprüfung, atomarer Import, Stammdaten-Upsert (Identität vor Patienten-ID; ohne Datei-Identität aktiver Patient), Parameter-Chunks (100) |
+| `ImportService` | Analyse inkl. `PatientResolution` (Zielpatient + Treffergrund), Dublettenprüfung, atomarer Import über `ImportRepository`/`PatientRepository`; aktiver Patient nur ohne jegliche Datei-Patientendaten, Benutzerauswahl bei Mehrfachtreffern, Teil-Identität oder ID-Konflikt |
 | `ImportArchive` | Originaldatei als `<sha256>.txt` schreibgeschützt ablegen |
 | `PendingUploadStore` | Zwischenspeicher für geprüfte Uploads außerhalb des Webroots (Token, TTL 1 h) |
 | `ImportAnalysis`/`ImportOutcome`/`ImportIssue` | Wertobjekte für Analyse, Ergebnis und Meldungen |
@@ -517,9 +517,11 @@ Grundsätze:
 - `patients.last_name`/`first_name` und `patients.identity_key` (generiert, `Nachname|Vorname|Geburtsdatum`,
   `utf8mb4_bin`) tragen die Identitätsregel des Patientenausweises; `idx_patients_identity` ist
   bewusst **nicht** eindeutig, damit mehrere Treffer erkannt und dem Benutzer vorgelegt werden können.
-  `ImportService::upsertPatient()` sucht zuerst über diesen Schlüssel (nicht über das Rohformat des
-  Geburtsdatums oder allein über die Patienten-ID); ohne vollständige Datei-Identität wird der
-  aktive Patient des Patientenvorgangs verwendet, damit der Bericht für Brief und Ausweis verfügbar ist.
+  `ImportService` löst die Zuordnung über `PatientRepository` zuerst anhand dieses Schlüssels auf
+  (nicht über das Rohformat des Geburtsdatums und nie allein über die Patienten-ID); der aktive
+  Patient wird nur dann automatisch verwendet, wenn die Datei **keinerlei** Patientendaten enthält.
+  Bei mehreren Identitätstreffern, unvollständiger Datei-Identität oder kollidierender Patienten-ID
+  verlangt die Vorschau eine ausdrückliche Auswahl durch den Benutzer (`patient_target`).
 - Ausweise sind unveränderlich: `pdf_content` wird nie neu berechnet, jede Korrektur erzeugt eine
   neue `card_version` desselben Berichts; `patient_cards` ist eindeutig über `(patient_id, sequence_no)`.
 - `NULL` bedeutet „Feld nicht vorhanden“, `''` bedeutet „Feld vorhanden, aber leer“.
@@ -592,7 +594,7 @@ wobei `FS` = ASCII **0x1C** ist. Beispiel (`␜` = 0x1C):
 | `line_break_in_field`, `nul_in_field` | Warnung | Steuerzeichen im Feld |
 | `encoding_fallback` | Warnung | Fallback-Kodierung verwendet |
 | `duplicate_parameter_id` | Warnung | ID mehrfach vorhanden |
-| `missing_device_serial`, `missing_patient`, `unparsed_date` | Warnung | Stammdaten/Datum |
+| `missing_device_serial`, `missing_patient`, `missing_patient_dob`, `incomplete_patient_identity`, `unparsed_date` | Warnung | Stammdaten/Datum |
 
 Importstatus: `completed`, `completed_with_warnings`, `completed_with_errors`, `failed`.
 
@@ -770,7 +772,7 @@ eingesetzt.
 (`db-docs`, `web-docs`) und ruft `docs/screenshots/capture.py` (Playwright/Chromium,
 `pdftoppm`) auf. Produktivdaten werden nicht berührt. Das Skript legt selbst Beispieldaten an
 (Import der Testdatei, Stammdaten inkl. Beispiel-Logo, Patientenausweis) und erzeugt die Bilder
-`01`–`62`. Es meldet sich zuerst über das Anmeldefenster an (Zugangsdaten der
+`01`–`65`. Es meldet sich zuerst über das Anmeldefenster an (Zugangsdaten der
 Dokumentationsinstanz: `ADMIN_USERNAME=docs-admin`, `ADMIN_PASSWORD=docs-screenshot-kennwort`,
 siehe `docker-compose.yml`) und bricht ab, wenn die Oberfläche ohne Anmeldung erreichbar wäre.
 Der Image-Build braucht einmalig Internetzugang, der Betrieb der Anwendung nicht.

@@ -67,6 +67,9 @@ return [
                         [
                             'label' => 'Wahrnehmung [mV]',
                             'chamber' => 'RV',
+                            // Biotronik liefert unter MSMT/LEADCHNL_RV/SENSING Minimum (722054), Maximum (722053)
+                            // und Mittelwert (722055); fuer die einspaltige Wahrnehmungszeile wird INTR_AMPL_MEAN
+                            // (722055) verwendet, Min/Max bleiben unveraendert im Berichts-Snapshot erhalten.
                             'sources' => [['ids' => ['2722', '722055'], 'names' => ['Ventricular Signal Amplitude']]],
                         ],
                         [
