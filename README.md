@@ -527,8 +527,11 @@ beschränkt.
 Die Übersicht (`/patients`) sucht nach Name (Freitext), Patienten-ID und Geburtsdatum
 (`TT.MM.JJJJ`) und zeigt je Patient die Anzahl verknüpfter Berichte und Bausteine sowie den
 Zeitpunkt der letzten Bausteinänderung. Ein Bericht aus dem Import wird über dieselbe
-Identität zugeordnet; die Akte verlinkt auf die Ausweise und die Nachsorge des Patienten
-(`/patient-cards/patients/{id}`).
+Identität (Nachname + Vorname + Geburtsdatum) zugeordnet – unabhängig vom Rohformat des
+Geburtsdatums und unabhängig von Warnungen des Parsers. Enthält die Datei keine vollständige
+Patientenidentität, wird der Bericht dem aktiven Patienten zugeordnet, damit er sofort für
+Brief und Ausweis zur Verfügung steht; die Akte verlinkt auf die Ausweise und die Nachsorge
+des Patienten (`/patient-cards/patients/{id}`).
 
 ### Routen
 
@@ -707,10 +710,11 @@ Untersuchungen desselben Patienten. Aufbau, Reihenfolge und Beschriftungen der Z
 zugehörigen Untersuchung überschrieben, die aktuelle Untersuchung steht immer in der ersten
 Spalte und ist als solche gekennzeichnet. Die Werte stammen aus den unveränderlichen
 Bericht-Snapshots der jeweiligen Untersuchung; Zellen ohne Wert bleiben leer. Die Zuordnung
-von Merlin-Parametern (IDs und Bezeichnungen) zu den Zeilen der Vorlage ist zentral in dieser
-Konfigurationsdatei hinterlegt. Reicht der Platz nicht, bricht die Erzeugung mit einer klaren
-Meldung ab, statt Inhalte abzuschneiden; die Ausgabe erfolgt ausschließlich über den eigenen,
-abhängigkeitsfreien PDF-Writer.
+von Merlin- und Biotronik-Parametern (IDs und Bezeichnungen) zu den Zeilen der Vorlage ist
+zentral in dieser Konfigurationsdatei hinterlegt; Biotronik-Werte stehen damit auch in der
+Messwerttabelle des Briefes und auf Seite 2 des Ausweises zur Verfügung. Reicht der Platz
+nicht, bricht die Erzeugung mit einer klaren Meldung ab, statt Inhalte abzuschneiden; die
+Ausgabe erfolgt ausschließlich über den eigenen, abhängigkeitsfreien PDF-Writer.
 
 ## Brief zur Schrittmacher-/ICD-Abfrage
 
@@ -1273,15 +1277,16 @@ der Zeilen stehen 1:1 in `config/patient_card_measurements.php`:
 - `sections` → `groups` → `rows` – Abschnitte, Gruppen und Zeilen der Tabelle.
 - `label` – Beschriftung der Zeile (Einheit in der Beschriftung, z. B. `Spannung [V]`).
 - `chamber` – optionale Kammerangabe (`RA`, `RV`) in der Spalte vor der Beschriftung.
-- `sources` – woher der Wert kommt: `ids` (Merlin-Parameter-IDs, haben Vorrang) und/oder
-  `names` (Parameterbezeichnungen, exakt, Groß-/Kleinschreibung egal). Mehrere Quellen
-  werden mit `glue` verbunden, z. B. Amplitude und Pulsbreite zu `0.5/0.4`.
+- `sources` – woher der Wert kommt: `ids` (Merlin- oder Biotronik-Parameter-IDs, haben
+  Vorrang) und/oder `names` (Parameterbezeichnungen, exakt, Groß-/Kleinschreibung egal).
+  Mehrere Quellen werden mit `glue` verbunden, z. B. Amplitude und Pulsbreite zu `0.5/0.4`.
 
 Zeilen ohne Quelle und Zellen ohne Wert bleiben leer – es werden keine Werte erfunden.
 Bereits erzeugte Ausweise bleiben unverändert, weil die aufgelöste Tabelle im Snapshot des
 Ausweises gespeichert ist. Eine bestehende Zeile ohne Treffer im Bericht kann unverändert
-bleiben; fehlt der Parameter im Merlin-Export, bleibt die Zelle leer, bis ein Bericht den
-Wert enthält.
+bleiben; fehlt der Parameter im Export, bleibt die Zelle leer, bis ein Bericht den Wert
+enthält. Biotronik-`code`-Werte (IEEE 11073-10103) werden in denselben `ids`-Listen geführt
+wie die Merlin-IDs; die Vorlage ist dadurch für beide Quellformate gültig.
 
 ## Vorlage der Schrittmacher-/ICD-Abfrage erweitern
 

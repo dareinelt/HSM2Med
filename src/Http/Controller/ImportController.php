@@ -52,7 +52,11 @@ final class ImportController extends Controller
     {
         $token = $params['token'];
         $pending = $this->loadPending($token);
-        $analysis = $this->app->importService()->analyze($pending['bytes'], $pending['filename']);
+        $analysis = $this->app->importService()->analyze(
+            $pending['bytes'],
+            $pending['filename'],
+            $this->app->activePatient()->id(),
+        );
         $builder = new ReportSummaryBuilder($this->app->mapping());
 
         return Response::html($this->view->render('import/preview', [
@@ -71,11 +75,12 @@ final class ImportController extends Controller
         $token = $params['token'];
         $pending = $this->loadPending($token);
         $service = $this->app->importService();
-        $analysis = $service->analyze($pending['bytes'], $pending['filename']);
+        $activePatientId = $this->app->activePatient()->id();
+        $analysis = $service->analyze($pending['bytes'], $pending['filename'], $activePatientId);
         $allowDuplicate = $request->post('allow_duplicate') === '1';
 
         try {
-            $outcome = $service->import($analysis, $pending['bytes'], $allowDuplicate);
+            $outcome = $service->import($analysis, $pending['bytes'], $allowDuplicate, $activePatientId);
         } catch (DuplicateImportException) {
             SessionManager::flash('warning', 'Diese Datei wurde bereits importiert. Bitte bestätigen Sie den erneuten Import ausdrücklich.');
             return Response::redirect('/import/' . $token);

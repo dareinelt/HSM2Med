@@ -11,8 +11,10 @@ declare(strict_types=1);
  * Patienten (neueste zuerst).
  *
  * "sources" beschreibt, woher der Wert einer Zeile stammt:
- *   'ids'   => Parameter-IDs des Merlin-Quellformats (haben Vorrang)
+ *   'ids'   => Parameter-IDs des Merlin- oder Biotronik-Quellformats (haben Vorrang)
  *   'names' => Parameterbezeichnungen (exakte Uebereinstimmung, Gross-/Kleinschreibung egal)
+ * Biotronik-IDs sind die "code"-Attribute der IEEE-11073-10103-Exporte; sie stehen in den
+ * IDs hinter den Merlin-IDs, damit beide Quellformate dieselbe Zeile fuellen.
  * Mehrere Quellen werden mit 'glue' verbunden, z.B. Amplitude und Pulsbreite zu "0.5/0.4".
  *
  * Zeilen ohne Quelle und Zellen ohne Wert in einer Untersuchung bleiben leer. Die Vorlage
@@ -23,7 +25,7 @@ declare(strict_types=1);
  * Bei inhaltlichen Aenderungen "version" erhoehen.
  */
 return [
-    'version' => '1.0.0',
+    'version' => '1.1.0',
 
     // Anzahl der Spalten: aktuelle Untersuchung + sechs fruehere Untersuchungen.
     'columns' => 7,
@@ -35,7 +37,7 @@ return [
                 [
                     'label' => 'Batterie',
                     'rows' => [
-                        ['label' => 'Status', 'sources' => [['names' => ['Battery Status']]]],
+                        ['label' => 'Status', 'sources' => [['ids' => ['721280'], 'names' => ['Battery Status']]]],
                         ['label' => 'Spannung [V]', 'sources' => [['ids' => ['519'], 'names' => ['Unloaded Battery Voltage']]]],
                         ['label' => 'Strom [µA]', 'sources' => [['ids' => ['520'], 'names' => ['Battery Current']]]],
                         ['label' => 'Impedanz [Ohm]', 'sources' => [['names' => ['Battery Impedance']]]],
@@ -55,7 +57,7 @@ return [
                         [
                             'label' => 'Impedanz [Ohm]',
                             'chamber' => 'RV',
-                            'sources' => [['ids' => ['507'], 'names' => ['RV Pacing Lead Impedance']]],
+                            'sources' => [['ids' => ['507', '722433'], 'names' => ['RV Pacing Lead Impedance']]],
                         ],
                         [
                             'label' => 'Wahrnehmung [mV]',
@@ -65,7 +67,7 @@ return [
                         [
                             'label' => 'Wahrnehmung [mV]',
                             'chamber' => 'RV',
-                            'sources' => [['ids' => ['2722'], 'names' => ['Ventricular Signal Amplitude']]],
+                            'sources' => [['ids' => ['2722', '722055'], 'names' => ['Ventricular Signal Amplitude']]],
                         ],
                         [
                             'label' => 'Reizschwelle [V/ms]',
@@ -81,8 +83,8 @@ return [
                             'chamber' => 'RV',
                             'glue' => '/',
                             'sources' => [
-                                ['ids' => ['1606'], 'names' => ['RV. Capture Test Threshold Amplitude']],
-                                ['ids' => ['1607'], 'names' => ['RV. Capture Test Pulse Width']],
+                                ['ids' => ['1606', '722177'], 'names' => ['RV. Capture Test Threshold Amplitude']],
+                                ['ids' => ['1607', '722241'], 'names' => ['RV. Capture Test Pulse Width']],
                             ],
                         ],
                         ['label' => 'Sonstige Messungen', 'sources' => []],
@@ -97,14 +99,14 @@ return [
                     'label' => 'Bradykardie',
                     'rows' => [
                         ['label' => 'Programmierung', 'sources' => []],
-                        ['label' => 'Betriebsart', 'sources' => [['ids' => ['301'], 'names' => ['Mode']]]],
-                        ['label' => 'Untere Grenzfrequenz [1/min]', 'sources' => [['ids' => ['302'], 'names' => ['Base Rate']]]],
-                        ['label' => 'Hysteresefrequenz [1/min]', 'sources' => [['ids' => ['303'], 'names' => ['Hysteresis Rate']]]],
+                        ['label' => 'Betriebsart', 'sources' => [['ids' => ['301', '730752', '730816'], 'names' => ['Mode']]]],
+                        ['label' => 'Untere Grenzfrequenz [1/min]', 'sources' => [['ids' => ['302', '730880'], 'names' => ['Base Rate']]]],
+                        ['label' => 'Hysteresefrequenz [1/min]', 'sources' => [['ids' => ['303', '730944'], 'names' => ['Hysteresis Rate']]]],
                         ['label' => 'Max. Synch.freq. [1/min]', 'sources' => [['ids' => ['2024'], 'names' => ['Maximum Pacing Rate']]]],
                         ['label' => 'Max. Sensor.freq. [1/min]', 'sources' => [['ids' => ['406'], 'names' => ['Maximum Sensor Rate']]]],
                         ['label' => 'PMT-Intervention', 'sources' => [['names' => ['PMT Intervention', 'PMT Response']]]],
                         ['label' => 'R-Funktion', 'sources' => [['names' => ['Rate Response', 'Rate Responsive']]]],
-                        ['label' => 'Ruhe-/Nachtfunktion', 'sources' => [['ids' => ['354'], 'names' => ['Rest Rate']]]],
+                        ['label' => 'Ruhe-/Nachtfunktion', 'sources' => [['ids' => ['354', '731008'], 'names' => ['Rest Rate']]]],
                         ['label' => 'VES-Reaktion', 'sources' => [['names' => ['PVC Response', 'VES Response']]]],
                         ['label' => 'Ventrikel Stimulation', 'sources' => []],
                         ['label' => 'VV-Zeit', 'sources' => []],
@@ -136,13 +138,13 @@ return [
                             'label' => 'Output [V/ms]',
                             'glue' => '/',
                             'sources' => [
-                                ['ids' => ['306'], 'names' => ['RV Pulse Amplitude']],
-                                ['ids' => ['305'], 'names' => ['RV Pulse Width']],
+                                ['ids' => ['306', '729985'], 'names' => ['RV Pulse Amplitude']],
+                                ['ids' => ['305', '730049'], 'names' => ['RV Pulse Width']],
                             ],
                         ],
                         ['label' => 'Empfindlichkeit [mV]', 'sources' => [['ids' => ['308'], 'names' => ['Ventricular Sensitivity']]]],
-                        ['label' => 'Wahrnehmungspolarität', 'sources' => [['ids' => ['307'], 'names' => ['Ventricular Sense Configuration']]]],
-                        ['label' => 'Stimulationspolarität', 'sources' => [['ids' => ['2008'], 'names' => ['RV Pulse Configuration']]]],
+                        ['label' => 'Wahrnehmungspolarität', 'sources' => [['ids' => ['307', '729601'], 'names' => ['Ventricular Sense Configuration']]]],
+                        ['label' => 'Stimulationspolarität', 'sources' => [['ids' => ['2008', '730113'], 'names' => ['RV Pulse Configuration']]]],
                         ['label' => 'Ausblendzeit [ms]', 'sources' => [['names' => ['Ventricular Blanking', 'RV Blanking']]]],
                         ['label' => 'Refraktärzeit [ms]', 'sources' => [['ids' => ['309'], 'names' => ['Ventricular Pace Refractory']]]],
                     ],

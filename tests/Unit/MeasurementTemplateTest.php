@@ -41,7 +41,7 @@ final class MeasurementTemplateTest extends TestCase
     {
         $template = $this->template();
 
-        $this->assertSame('1.0.0', $template->version());
+        $this->assertSame('1.1.0', $template->version());
         $this->assertSame(7, $template->columnCount());
         $this->assertSame(6, $template->previousCount());
         $this->assertSame(['Messungen', 'Programmierung'], array_column($template->sections(), 'label'));
@@ -104,6 +104,43 @@ final class MeasurementTemplateTest extends TestCase
         ]);
 
         $this->assertSame(['2.79'], $this->cells($sections, 'Messungen', 'Batterie', 'Spannung [V]'));
+    }
+
+    public function testResolvesBiotronikValues(): void
+    {
+        $columns = $this->columns(1);
+        $sections = $this->template()->resolve($columns, [
+            1 => [
+                'ids' => [
+                    '721280' => 'MOS',
+                    '722433' => '585',
+                    '722055' => '6.0',
+                    '722177' => '4.7',
+                    '722241' => '0.4',
+                    '729985' => '5.0',
+                    '730049' => '1.5',
+                    '730752' => 'VVI',
+                    '730880' => '60',
+                    '730944' => '50',
+                    '731008' => '55',
+                    '729601' => 'BI',
+                    '730113' => 'BI',
+                ],
+                'names' => [],
+            ],
+        ]);
+
+        $this->assertSame(['MOS'], $this->cells($sections, 'Messungen', 'Batterie', 'Status'));
+        $this->assertSame(['585'], $this->cells($sections, 'Messungen', 'Elektroden', 'Impedanz [Ohm]', 'RV'));
+        $this->assertSame(['6.0'], $this->cells($sections, 'Messungen', 'Elektroden', 'Wahrnehmung [mV]', 'RV'));
+        $this->assertSame(['4.7/0.4'], $this->cells($sections, 'Messungen', 'Elektroden', 'Reizschwelle [V/ms]', 'RV'));
+        $this->assertSame(['VVI'], $this->cells($sections, 'Programmierung', 'Bradykardie', 'Betriebsart'));
+        $this->assertSame(['60'], $this->cells($sections, 'Programmierung', 'Bradykardie', 'Untere Grenzfrequenz [1/min]'));
+        $this->assertSame(['50'], $this->cells($sections, 'Programmierung', 'Bradykardie', 'Hysteresefrequenz [1/min]'));
+        $this->assertSame(['55'], $this->cells($sections, 'Programmierung', 'Bradykardie', 'Ruhe-/Nachtfunktion'));
+        $this->assertSame(['5.0/1.5'], $this->cells($sections, 'Programmierung', 'RV', 'Output [V/ms]'));
+        $this->assertSame(['BI'], $this->cells($sections, 'Programmierung', 'RV', 'Wahrnehmungspolarität'));
+        $this->assertSame(['BI'], $this->cells($sections, 'Programmierung', 'RV', 'Stimulationspolarität'));
     }
 
     public function testTwoPartValuesAreJoinedWithGlue(): void

@@ -203,7 +203,7 @@ final class PatientCardTest extends DatabaseTestCase
         $this->assertSame($outcome->importId, $snapshot['source']['import_id']);
 
         // Messwerttabelle: Vorlage 1:1, nur die aktuelle Untersuchung als Spalte
-        $this->assertSame('1.0.0', $snapshot['measurements']['template_version']);
+        $this->assertSame('1.1.0', $snapshot['measurements']['template_version']);
         $this->assertSame(7, $snapshot['measurements']['column_count']);
         $this->assertCount(1, $snapshot['measurements']['columns']);
         $this->assertTrue($snapshot['measurements']['columns'][0]['current']);

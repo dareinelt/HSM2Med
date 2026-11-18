@@ -37,7 +37,11 @@ final class ImportValidator
         'implant_date' => 64,
     ];
 
-    public function validate(ParseResult $result, ReportSummary $summary): ValidationResult
+    /**
+     * @param bool $hasActivePatient Ob ein aktiver Patient den Import kontextualisiert; dann kann
+     *                               ein Bericht ohne Patientendaten diesem zugeordnet werden.
+     */
+    public function validate(ParseResult $result, ReportSummary $summary, bool $hasActivePatient = false): ValidationResult
     {
         $blocking = [];
         $warnings = [];
@@ -70,7 +74,12 @@ final class ImportValidator
                 $warnings[] = ImportIssue::warning('missing_device_serial', 'Keine Geraete-Seriennummer in der Datei; der Bericht wird ohne Geraetezuordnung gespeichert.');
             }
             if ($summary->nonEmpty('patient_identifier') === null && $summary->nonEmpty('patient_name') === null) {
-                $warnings[] = ImportIssue::warning('missing_patient', 'Weder Patient-ID noch Patientenname vorhanden; der Bericht wird ohne Patientenzuordnung gespeichert.');
+                $warnings[] = ImportIssue::warning(
+                    'missing_patient',
+                    $hasActivePatient
+                        ? 'Weder Patient-ID noch Patientenname in der Datei; der Bericht wird dem aktiven Patienten zugeordnet.'
+                        : 'Weder Patient-ID noch Patientenname vorhanden; der Bericht wird ohne Patientenzuordnung gespeichert.',
+                );
             }
             foreach (['patient_dob' => 'Geburtsdatum', 'device_implant_date' => 'Implantationsdatum', 'session_timestamp' => 'Sitzungszeitpunkt', 'interrogation_timestamp' => 'Abfragezeitpunkt'] as $key => $label) {
                 $value = $summary->nonEmpty($key);
