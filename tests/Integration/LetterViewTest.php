@@ -550,6 +550,9 @@ final class LetterViewTest extends DatabaseTestCase
         $this->assertContains('1 Untersuchung(en)', $wizard->body);
         $this->assertContains('kein Wert in den Untersuchungen', $wizard->body);
         $this->assertContains('data-toggle-group="measurement-choices"', $wizard->body);
+        $this->assertContains('<span class="badge">RA</span> Impedanz [Ohm]', $wizard->body);
+        $this->assertContains('<span class="badge">RV</span> Impedanz [Ohm]', $wizard->body);
+        $this->assertContains('<span class="badge">RV</span> Wahrnehmung [mV]', $wizard->body);
 
         // Ohne Auswahl lehnt der Assistent ab und oeffnet Schritt 4.
         $empty = $this->createLetter([

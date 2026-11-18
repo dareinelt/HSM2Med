@@ -271,7 +271,7 @@ final class LetterMeasurementsTest extends TestCase
         $this->assertNull(LetterMeasurements::preselect(['available' => []], ['0.0.0']));
     }
 
-    /** Die Checkbox-Liste nennt je Zeile die Verfuegbarkeit und die Werte der Untersuchungen. */
+    /** Die Checkbox-Liste nennt je Zeile die Verfuegbarkeit, Kammer und die Werte der Untersuchungen. */
     public function testChoicesListRowsWithAvailability(): void
     {
         $choices = LetterMeasurements::choices($this->resolved());
@@ -279,6 +279,8 @@ final class LetterMeasurementsTest extends TestCase
         $this->assertCount(4, $choices);
         $this->assertSame(['0.0.0', '0.0.1', '1.0.0', '2.0.0'], array_column($choices, 'key'));
         $this->assertSame('Reizschwelle', $choices[0]['label']);
+        $this->assertSame('RA', $choices[0]['chamber']);
+        $this->assertSame('', $choices[2]['chamber']);
         $this->assertTrue($choices[0]['available']);
         $this->assertSame(['0,9 V', '0,8 V', '0,7 V', '0,6 V', '0,5 V', '0,5 V'], $choices[0]['values']);
         $this->assertFalse($choices[1]['available'], 'Ohne Wert in den Untersuchungen ist die Zeile nicht waehlbar.');

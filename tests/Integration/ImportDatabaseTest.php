@@ -32,11 +32,11 @@ final class FailingImportService extends ImportService
 
 final class ImportDatabaseTest extends DatabaseTestCase
 {
-    private function importSample(?ImportService $service = null, ?string $bytes = null, string $filename = 'MERLIN__ANN_5809481.log'): \App\Import\ImportOutcome
+    private function importSample(?ImportService $service = null, ?string $bytes = null, string $filename = 'MERLIN__ANN_5809481.log', ?string $patientTarget = null): \App\Import\ImportOutcome
     {
         $service ??= $this->importService();
         $bytes ??= Fixtures::sampleFile();
-        return $service->import($service->analyze($bytes, $filename), $bytes);
+        return $service->import($service->analyze($bytes, $filename), $bytes, false, null, $patientTarget);
     }
 
     /** Test 13: Erfolgreicher Import speichert alle Tabellen konsistent. */
@@ -207,7 +207,7 @@ final class ImportDatabaseTest extends DatabaseTestCase
         // Neue Auslesung desselben Geraets mit geaendertem Patientennamen und Wert
         $bytes = str_replace(['LASTNAME, FIRSTNAME', '10/07/2026 07:03:24'], ['NEUNAME, VORNAME', '11/07/2026 07:03:24'], Fixtures::sampleFile());
         $this->clock->set(new DateTimeImmutable('2026-11-07 08:00:00'));
-        $second = $this->importSample($this->importService($newMapping), $bytes, 'zweite.log');
+        $second = $this->importSample($this->importService($newMapping), $bytes, 'zweite.log', 'new');
 
         $this->assertSame(2, $this->rowCount('reports'));
         $this->assertSame(1, $this->rowCount('devices'), 'Gleiches Geraet wird wiederverwendet');
@@ -275,7 +275,7 @@ final class ImportDatabaseTest extends DatabaseTestCase
     {
         $this->importSample();
         $bytes = str_replace(['5809481', 'LASTNAME'], ['1111111', 'MUSTER'], Fixtures::sampleFile());
-        $this->importSample(null, $bytes, 'muster.log');
+        $this->importSample(null, $bytes, 'muster.log', 'new');
         $repo = new ReportRepository($this->pdo);
 
         $this->assertSame(2, $repo->search([], 50, 0)['total']);

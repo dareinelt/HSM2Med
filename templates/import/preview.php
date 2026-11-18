@@ -10,6 +10,7 @@
  */
 $result = $analysis->parseResult;
 $valid = $analysis->validation->isValid();
+$resolution = $analysis->patientResolution;
 $sections = [];
 foreach ($snapshot['sections'] as $section) {
     $sections[$section['key']] = $section;
@@ -19,6 +20,16 @@ $cell = static function (?string $value) use ($e): string {
         return '<span class="muted">nicht in den Quelldaten enthalten</span>';
     }
     return $value === '' ? '<span class="muted">(leer)</span>' : $e($value);
+};
+$formatPatientMeta = static function (array $patient) use ($e): string {
+    $parts = [];
+    if ($patient['date_of_birth'] !== null) {
+        $parts[] = 'geb. ' . App\PatientCard\PatientCardInput::formatDate($patient['date_of_birth']);
+    }
+    if ($patient['identifier'] !== null) {
+        $parts[] = 'Patient-ID ' . $patient['identifier'];
+    }
+    return $parts === [] ? '' : ' <small class="muted">(' . $e(implode(' · ', $parts)) . ')</small>';
 };
 ?>
 <div class="page-head">
@@ -32,6 +43,12 @@ $cell = static function (?string $value) use ($e): string {
     <div class="alert alert-error" role="alert">
         <strong>Import nicht möglich:</strong>
         <ul><?php foreach ($analysis->validation->blockingErrors as $message): ?><li><?= $e($message) ?></li><?php endforeach; ?></ul>
+    </div>
+<?php endif; ?>
+
+<?php if ($valid && $resolution->requiresDecision()): ?>
+    <div class="alert alert-warning" role="alert">
+        <strong><?= $e($resolution->summary) ?>:</strong> <?= $e($resolution->reason) ?>
     </div>
 <?php endif; ?>
 
@@ -65,11 +82,32 @@ $cell = static function (?string $value) use ($e): string {
         </table>
     </section>
     <section class="card">
-        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Patient</h2>
+        <h2><?= $icon('patients', 'app-icon app-icon--sm') ?> Patient (Datei &amp; Zuordnung)</h2>
         <table class="kv">
             <?php foreach ($sections['patient']['rows'] as $row): ?>
                 <tr><th><?= $e($row['label']) ?></th><td><?= $cell($row['value']) ?></td></tr>
             <?php endforeach; ?>
+            <tr>
+                <th>Zielpatient</th>
+                <td>
+                    <?php if ($resolution->targetPatient !== null): ?>
+                        <a href="/patients/<?= $e($resolution->targetPatient['id']) ?>">Patient Nr. <?= $e($resolution->targetPatient['id']) ?> – <?= $e($resolution->targetPatient['name']) ?></a><?= $formatPatientMeta($resolution->targetPatient) ?>
+                    <?php elseif ($resolution->requiresDecision()): ?>
+                        <strong class="text-warning"><?= $e($resolution->summary) ?></strong>
+                    <?php else: ?>
+                        <strong><?= $e($resolution->summary) ?></strong>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <th>Treffergrund</th>
+                <td>
+                    <?= $e($resolution->reason) ?>
+                    <?php if ($resolution->notice !== null): ?>
+                        <br><small class="muted"><?= $e($resolution->notice) ?></small>
+                    <?php endif; ?>
+                </td>
+            </tr>
         </table>
         <h2><?= $icon('pulse', 'app-icon app-icon--sm') ?> Gerät</h2>
         <table class="kv">
@@ -159,8 +197,26 @@ $cell = static function (?string $value) use ($e): string {
 
 <section class="card actions">
     <?php if ($valid): ?>
-        <form method="post" action="/import/<?= $e($token) ?>/commit" class="inline">
+        <form method="post" action="/import/<?= $e($token) ?>/commit" class="<?= $resolution->requiresDecision() ? 'import-commit-form' : 'inline' ?>">
             <?= $csrf() ?>
+            <?php if ($resolution->requiresDecision()): ?>
+                <fieldset class="choice-box">
+                    <legend><?= $e($resolution->summary) ?></legend>
+                    <p class="muted"><?= $e($resolution->reason) ?></p>
+                    <?php foreach ($resolution->options as $option): ?>
+                        <label class="check">
+                            <input type="radio" name="patient_target" value="<?= $e($option->target) ?>" required>
+                            <span>
+                                <strong><?= $e($option->label) ?></strong>
+                                <?php if ($option->isActivePatient): ?> <span class="badge">Aktiver Patient</span><?php endif; ?>
+                                <?php if ($option->detail !== ''): ?><br><small class="muted"><?= $e($option->detail) ?></small><?php endif; ?>
+                            </span>
+                        </label>
+                    <?php endforeach; ?>
+                </fieldset>
+            <?php else: ?>
+                <input type="hidden" name="patient_target" value="<?= $e($resolution->defaultTarget ?? '') ?>">
+            <?php endif; ?>
             <?php if ($analysis->isDuplicate()): ?>
                 <label class="checkbox"><input type="checkbox" name="allow_duplicate" value="1" required> Ich bestätige den erneuten Import dieser bereits importierten Datei.</label>
             <?php endif; ?>

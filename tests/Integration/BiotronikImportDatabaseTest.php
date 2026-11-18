@@ -8,6 +8,8 @@ use App\Import\BiotronikParser;
 use App\Import\DuplicateImportException;
 use App\Import\ImportOutcome;
 use App\Import\ImportService;
+use App\Import\PatientResolutionException;
+use App\Import\PatientResolutionMode;
 use App\Letter\LetterMeasurements;
 use App\Patient\PatientInput;
 use App\Patient\PatientRepository;
@@ -74,11 +76,11 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
 
         $this->assertSame('LASTNAME1, FIRSTNAME1', $report['patient_name_snapshot']);
         $this->assertNull($report['patient_identifier_snapshot'], 'Die Datei enthaelt keine Patienten-ID.');
-        $this->assertSame('19280425', $report['patient_dob_snapshot'], 'Der Originalwert bleibt erhalten.');
+        $this->assertSame('19400515', $report['patient_dob_snapshot'], 'Der Originalwert bleibt erhalten.');
         $this->assertSame('BIO', $report['device_manufacturer_snapshot']);
         $this->assertSame('Enticos 4 SR', $report['device_model_name_snapshot']);
         $this->assertNull($report['device_model_number_snapshot'], 'Die Datei enthaelt keine Modellnummer.');
-        $this->assertSame('1000118587', $report['device_serial_snapshot']);
+        $this->assertSame('9000000101', $report['device_serial_snapshot']);
         $this->assertSame('2026-10-08 12:38:29', $report['session_timestamp'], 'Ortszeit ohne Umrechnung.');
         $this->assertSame('20261008T123829+0200', $report['session_timestamp_raw']);
         $this->assertSame('2025-12-02 00:00:00', $report['interrogation_timestamp']);
@@ -91,8 +93,8 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
 
         $snapshot = json_decode($report['summary_snapshot'], true, 512, JSON_THROW_ON_ERROR);
         $this->assertCount(1, $snapshot['leads']);
-        $this->assertSame('8001149599', $snapshot['leads'][0]['serial_number']);
-        $this->assertSame('11.12.2023', $snapshot['leads'][0]['implant_date_display']);
+        $this->assertSame('8000000202', $snapshot['leads'][0]['serial_number']);
+        $this->assertSame('15.03.2024', $snapshot['leads'][0]['implant_date_display']);
     }
 
     public function testPatientIdentityFollowsNameAndDateOfBirth(): void
@@ -104,15 +106,15 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $this->assertSame('LASTNAME1, FIRSTNAME1', $patient['patient_name']);
         $this->assertSame('LASTNAME1', $patient['last_name']);
         $this->assertSame('FIRSTNAME1', $patient['first_name']);
-        $this->assertSame('1928-04-25', $patient['date_of_birth']);
-        $this->assertSame('19280425', $patient['date_of_birth_raw']);
-        $this->assertSame('lastname1|firstname1|1928-04-25', $patient['identity_key'], 'Zuordnung ueber Nachname, Vorname und Geburtsdatum.');
+        $this->assertSame('1940-05-15', $patient['date_of_birth']);
+        $this->assertSame('19400515', $patient['date_of_birth_raw']);
+        $this->assertSame('lastname1|firstname1|1940-05-15', $patient['identity_key'], 'Zuordnung ueber Nachname, Vorname und Geburtsdatum.');
     }
 
     /** Ein vor dem Import angelegter Patient wird ueber die Identitaet wiederverwendet. */
     public function testImportReusesPatientCreatedBeforeImport(): void
     {
-        $patientId = $this->createPatient('LASTNAME1', 'FIRSTNAME1', '25.04.1928');
+        $patientId = $this->createPatient('LASTNAME1', 'FIRSTNAME1', '15.05.1940');
         $outcome = $this->importSample();
 
         $this->assertSame('completed_with_warnings', $outcome->status, 'Warnungen verhindern die Zuordnung nicht.');
@@ -125,34 +127,148 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $this->assertSame($outcome->reportId, (int) $reports[0]['id']);
     }
 
-    /** Bei mehreren Patienten mit derselben Identitaet hat der aktive Patient Vorrang. */
-    public function testActivePatientWinsWhenIdentityExistsMultipleTimes(): void
+    /** H2: Bei mehreren Patienten mit derselben Identitaet wird nie automatisch entschieden. */
+    public function testMultipleIdentityMatchesRequireExplicitUserDecision(): void
     {
-        $this->createPatient('LASTNAME1', 'FIRSTNAME1', '25.04.1928');
-        // Simuliert einen Altbestand mit doppelter Identitaet (z. B. aus einem frueheren Import).
+        $firstId = $this->createPatient('LASTNAME1', 'FIRSTNAME1', '15.05.1940');
         $this->pdo->prepare(
             'INSERT INTO patients (patient_name, last_name, first_name, date_of_birth, date_of_birth_raw, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)'
-        )->execute(['LASTNAME1, FIRSTNAME1', 'LASTNAME1', 'FIRSTNAME1', '1928-04-25', '19280425', '2026-10-07 08:00:00', '2026-10-07 08:00:00']);
-        $activePatientId = (int) $this->pdo->lastInsertId();
+        )->execute(['LASTNAME1, FIRSTNAME1', 'LASTNAME1', 'FIRSTNAME1', '1940-05-15', '19400515', '2026-10-07 08:00:00', '2026-10-07 08:00:00']);
+        $secondId = (int) $this->pdo->lastInsertId();
 
         $bytes = Fixtures::biotronikFile();
         $service = $this->importService();
-        $outcome = $service->import($service->analyze($bytes, 'BIOIEEE_ANN.xml', $activePatientId), $bytes, false, $activePatientId);
 
-        $this->assertSame(2, $this->rowCount('patients'));
+        // Auch ohne aktiven Patienten keine stille Auswahl des aeltesten Treffers.
+        $withoutActive = $service->analyze($bytes, 'BIOIEEE_ANN.xml', null);
+        $this->assertSame(PatientResolutionMode::IdentityMultiple, $withoutActive->patientResolution->mode);
+        $this->assertTrue($withoutActive->patientResolution->requiresDecision());
+        $this->assertCount(2, $withoutActive->patientResolution->options);
+        $this->assertThrows(PatientResolutionException::class, fn () => $service->import($withoutActive, $bytes));
+        $this->assertSame(0, $this->rowCount('reports'));
+
+        // Auch mit aktivem Patienten keine stille Auswahl ohne ausdrueckliche Bestaetigung.
+        $withActive = $service->analyze($bytes, 'BIOIEEE_ANN.xml', $secondId);
+        $this->assertSame(PatientResolutionMode::IdentityMultiple, $withActive->patientResolution->mode);
+        $this->assertTrue($withActive->patientResolution->requiresDecision());
+        $this->assertThrows(PatientResolutionException::class, fn () => $service->import($withActive, $bytes, false, $secondId));
+        $this->assertSame(0, $this->rowCount('reports'));
+
+        // Erst die ausdrueckliche Benutzerauswahl speichert den Bericht beim gewaehlten Patienten.
+        $outcome = $service->import($withActive, $bytes, false, $secondId, 'patient:' . $firstId);
         $report = $this->pdo->query('SELECT * FROM reports')->fetch();
         $this->assertSame($outcome->reportId, (int) $report['id']);
-        $this->assertSame($activePatientId, (int) $report['patient_id']);
-        $this->assertSame(1, $this->rowCount('reports', 'patient_id = ?', [$activePatientId]));
+        $this->assertSame($firstId, (int) $report['patient_id']);
+        $this->assertSame(0, $this->rowCount('reports', 'patient_id = ?', [$secondId]));
     }
 
-    /** Ohne Patientendaten in der Datei wird der Bericht dem aktiven Patienten zugeordnet. */
+    /** H1: Unvollstaendige Datei-Identitaet wird niemals stillschweigend dem aktiven Patienten zugeordnet. */
+    public function testIncompleteFileIdentityRequiresExplicitUserDecision(): void
+    {
+        $activeId = $this->createPatient('MUSTER', 'ERIKA', '01.01.1950');
+
+        // Reproduktion aus dem Review: Merlin-Export mit entferntem Geburtsdatum, fremdem Namen und fremder ID.
+        $merlinWithoutDob = str_replace("2431\x1CPatient Date of Birth\x1C10/21/1938 00:00:00\x1C\x1C", '', Fixtures::sampleFile());
+        $service = $this->importService();
+        $analysis = $service->analyze($merlinWithoutDob, 'MERLIN_ohne_dob.log', $activeId);
+
+        $this->assertSame(PatientResolutionMode::IncompleteIdentity, $analysis->patientResolution->mode);
+        $this->assertTrue($analysis->patientResolution->requiresDecision());
+        $warningCodes = array_map(static fn ($w): string => $w->code, $analysis->validation->warnings);
+        $this->assertTrue(in_array('missing_patient_dob', $warningCodes, true));
+        $this->assertTrue(in_array('incomplete_patient_identity', $warningCodes, true));
+
+        // Ohne Auswahl wird der Import abgewiesen; Erika erhaelt weder Bericht noch fremdes Geraet.
+        $this->assertThrows(
+            PatientResolutionException::class,
+            fn () => $service->import($analysis, $merlinWithoutDob, false, $activeId),
+        );
+        $this->assertSame(0, $this->rowCount('reports'));
+        $this->assertSame(0, $this->rowCount('devices'));
+
+        // Entscheidet der Benutzer "neuer Patient", landet der Bericht beim neuen Patienten mit der Datei-ID.
+        $outcome = $service->import($analysis, $merlinWithoutDob, false, $activeId, 'new');
+        $this->assertSame(2, $this->rowCount('patients'));
+        $this->assertSame(0, $this->rowCount('reports', 'patient_id = ?', [$activeId]));
+        $report = $this->pdo->query('SELECT * FROM reports WHERE id = ' . $outcome->reportId)->fetch();
+        $newPatient = $this->pdo->query('SELECT * FROM patients WHERE id = ' . (int) $report['patient_id'])->fetch();
+        $this->assertSame('LASTNAME, FIRSTNAME', $newPatient['patient_name']);
+        $this->assertSame('10358141', $newPatient['patient_identifier']);
+
+        // Ebenso bei einem Namen ohne Komma (fehlender Vorname).
+        $noComma = str_replace('LASTNAME, FIRSTNAME', 'EINZELNAME', Fixtures::sampleFile());
+        $noCommaAnalysis = $service->analyze($noComma, 'MERLIN_einzelname.log', $activeId);
+        $this->assertSame(PatientResolutionMode::IncompleteIdentity, $noCommaAnalysis->patientResolution->mode);
+        $this->assertThrows(
+            PatientResolutionException::class,
+            fn () => $service->import($noCommaAnalysis, $noComma, false, $activeId),
+        );
+    }
+
+    /** M1: Eine bekannte Patienten-ID ordnet bei abweichender Identitaet niemals automatisch zu. */
+    public function testKnownPatientIdentifierWithDifferentIdentityReportsConflict(): void
+    {
+        $existingId = (int) (new PatientService($this->pdo, new PatientRepository($this->pdo), $this->clock))
+            ->create(PatientInput::fromPost([
+                'last_name' => 'MUSTER',
+                'first_name' => 'ERIKA',
+                'date_of_birth' => '01.01.1950',
+                'patient_identifier' => '10358141',
+            ]))['patient_id'];
+
+        $bytes = Fixtures::sampleFile();
+        $service = $this->importService();
+        $analysis = $service->analyze($bytes, 'MERLIN__ANN_5809481.log');
+
+        $this->assertSame(PatientResolutionMode::IdentifierConflict, $analysis->patientResolution->mode);
+        $this->assertTrue($analysis->patientResolution->requiresDecision());
+        $this->assertSame($existingId, $analysis->patientResolution->conflictingPatient['id'] ?? null);
+        $this->assertThrows(PatientResolutionException::class, fn () => $service->import($analysis, $bytes));
+        $this->assertSame(0, $this->rowCount('reports'));
+
+        // Bei Auswahl "neuer Patient" bleibt die vergebene ID beim Altpatienten, der Snapshot behaelt sie.
+        $outcome = $service->import($analysis, $bytes, false, null, 'new');
+        $this->assertSame(2, $this->rowCount('patients'));
+        $this->assertSame(0, $this->rowCount('reports', 'patient_id = ?', [$existingId]));
+        $report = $this->pdo->query('SELECT * FROM reports WHERE id = ' . $outcome->reportId)->fetch();
+        $this->assertSame('10358141', $report['patient_identifier_snapshot']);
+        $newPatient = $this->pdo->query('SELECT * FROM patients WHERE id = ' . (int) $report['patient_id'])->fetch();
+        $this->assertSame('LASTNAME, FIRSTNAME', $newPatient['patient_name']);
+        $this->assertNull($newPatient['patient_identifier']);
+    }
+
+    /** M2: Wechselt der aktive Patient zwischen Vorschau und Speichern, wird das Speichern abgewiesen. */
+    public function testActivePatientChangeBetweenPreviewAndCommitIsRejected(): void
+    {
+        $erikaId = $this->createPatient('MUSTER', 'ERIKA', '01.01.1950');
+        $maxId = $this->createPatient('BEISPIEL', 'MAX', '02.02.1960');
+        $bytes = str_replace(
+            ['>FIRSTNAME1</value>', '>LASTNAME1</value>', '>19400515</value>'],
+            ['></value>', '></value>', '></value>'],
+            Fixtures::biotronikFile(),
+        );
+
+        $service = $this->importService();
+        $previewAnalysis = $service->analyze($bytes, 'BIOIEEE_ANN.xml', $erikaId);
+        $previewTarget = $previewAnalysis->patientResolution->defaultTarget;
+        $this->assertSame('patient:' . $erikaId, $previewTarget);
+
+        // Beim Speichern ist in einem anderen Tab inzwischen Max aktiv geworden.
+        $commitAnalysis = $service->analyze($bytes, 'BIOIEEE_ANN.xml', $maxId);
+        $this->assertThrows(
+            PatientResolutionException::class,
+            fn () => $service->import($commitAnalysis, $bytes, false, $maxId, $previewTarget),
+        );
+        $this->assertSame(0, $this->rowCount('reports'));
+    }
+
+    /** Ohne jegliche Patientendaten in der Datei wird der Bericht dem aktiven Patienten zugeordnet. */
     public function testFileWithoutPatientIdentityUsesActivePatient(): void
     {
         $patientId = $this->createPatient('MUSTER', 'ERIKA', '01.01.1950');
         $bytes = str_replace(
-            ['>FIRSTNAME1</value>', '>LASTNAME1</value>', '>19280425</value>'],
+            ['>FIRSTNAME1</value>', '>LASTNAME1</value>', '>19400515</value>'],
             ['></value>', '></value>', '></value>'],
             Fixtures::biotronikFile(),
         );
@@ -161,7 +277,7 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $analysis = $service->analyze($bytes, 'BIOIEEE_ANN.xml', $patientId);
         $messages = array_map(static fn ($issue): string => $issue->message, $analysis->validation->warnings);
         $this->assertTrue(in_array(
-            'Weder Patient-ID noch Patientenname in der Datei; der Bericht wird dem aktiven Patienten zugeordnet.',
+            'Keine Patientendaten in der Datei; der Bericht wird dem aktiven Patienten zugeordnet.',
             $messages,
             true,
         ));
@@ -220,12 +336,12 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $this->importSample();
 
         $device = $this->pdo->query('SELECT * FROM devices')->fetch();
-        $this->assertSame('1000118587', $device['serial_number']);
+        $this->assertSame('9000000101', $device['serial_number']);
         $this->assertSame('Enticos 4 SR', $device['model_name']);
         $this->assertSame('BIO', $device['manufacturer']);
         $this->assertNull($device['model_number']);
-        $this->assertSame('2023-12-11', $device['implant_date']);
-        $this->assertSame('20231211T000000', $device['implant_date_raw']);
+        $this->assertSame('2024-03-15', $device['implant_date']);
+        $this->assertSame('20240315T000000', $device['implant_date_raw']);
 
         $lead = $this->pdo->query('SELECT * FROM leads')->fetch();
         $this->assertSame((int) $device['id'], (int) $lead['device_id']);
@@ -233,9 +349,9 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $this->assertSame('RV', $lead['chamber_source']);
         $this->assertSame('BIO', $lead['manufacturer']);
         $this->assertSame('Solia S 60', $lead['model_number']);
-        $this->assertSame('8001149599', $lead['serial_number']);
-        $this->assertSame('2023-12-11', $lead['implant_date']);
-        $this->assertSame('20231211T000000', $lead['implant_date_raw']);
+        $this->assertSame('8000000202', $lead['serial_number']);
+        $this->assertSame('2024-03-15', $lead['implant_date']);
+        $this->assertSame('20240315T000000', $lead['implant_date_raw']);
         $this->assertNull($lead['lead_type'], 'POLARITY_TYPE wird nicht als Sondentyp uebernommen.');
     }
 
@@ -268,7 +384,7 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $this->assertSame('20261008T123829+0200', $byId['721025']['value'], 'Datumswerte bleiben im Quellformat.');
         $this->assertSame(['lead', 'id'], [$byId['720966']['category'], $byId['720966']['mapping_source']]);
         $this->assertSame(['patient', 'name'], [$byId['MDC.ATTR.PT.DOB']['category'], $byId['MDC.ATTR.PT.DOB']['mapping_source']]);
-        $this->assertSame('19280425', $byId['MDC.ATTR.PT.DOB']['value']);
+        $this->assertSame('19400515', $byId['MDC.ATTR.PT.DOB']['value']);
         $this->assertSame('FIRSTNAME1', $byId['MDC.ATTR.PT.NAME.GIVEN']['value']);
         $this->assertSame(['other', 'none'], [$byId['BIO.REQUEST.DATE']['category'], $byId['BIO.REQUEST.DATE']['mapping_source']]);
         $this->assertSame('', $byId['720966']['unit'], 'Fehlende Einheit bleibt ein leerer String.');
@@ -308,16 +424,16 @@ final class BiotronikImportDatabaseTest extends DatabaseTestCase
         $this->assertSame('%PDF-', substr($pdf, 0, 5));
         $text = PdfText::text($pdf);
         $this->assertContains('LASTNAME1, FIRSTNAME1', $text);
-        $this->assertContains('25.04.1928', $text);
+        $this->assertContains('15.05.1940', $text);
         $this->assertContains('Enticos 4 SR', $text);
-        $this->assertContains('1000118587', $text);
+        $this->assertContains('9000000101', $text);
         $this->assertContains('BIO', $text);
-        $this->assertContains('8001149599', $text);
+        $this->assertContains('8000000202', $text);
         $this->assertContains('Bericht Nr. ' . $outcome->reportId, $text);
         foreach ($data->parameters as $parameter) {
             $this->assertContains($parameter['parameter_id'], $text);
         }
-        $this->assertSame('Bericht_' . $outcome->reportId . '_2026-10-08_SN1000118587.pdf', ReportService::pdfFilename($data));
+        $this->assertSame('Bericht_' . $outcome->reportId . '_2026-10-08_SN9000000101.pdf', ReportService::pdfFilename($data));
     }
 
     public function testRepeatedImportIsDetectedAndCanBeForced(): void

@@ -9,6 +9,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Import\DuplicateImportException;
 use App\Import\ImportFailedException;
+use App\Import\PatientResolutionException;
 use App\Report\ReportSummaryBuilder;
 use App\Security\SessionManager;
 use App\Security\UploadException;
@@ -78,11 +79,15 @@ final class ImportController extends Controller
         $activePatientId = $this->app->activePatient()->id();
         $analysis = $service->analyze($pending['bytes'], $pending['filename'], $activePatientId);
         $allowDuplicate = $request->post('allow_duplicate') === '1';
+        $patientTarget = (string) ($request->post('patient_target') ?? '');
 
         try {
-            $outcome = $service->import($analysis, $pending['bytes'], $allowDuplicate, $activePatientId);
+            $outcome = $service->import($analysis, $pending['bytes'], $allowDuplicate, $activePatientId, $patientTarget);
         } catch (DuplicateImportException) {
             SessionManager::flash('warning', 'Diese Datei wurde bereits importiert. Bitte bestätigen Sie den erneuten Import ausdrücklich.');
+            return Response::redirect('/import/' . $token);
+        } catch (PatientResolutionException $e) {
+            SessionManager::flash('warning', $e->getMessage());
             return Response::redirect('/import/' . $token);
         } catch (ImportFailedException $e) {
             $this->discard($token);

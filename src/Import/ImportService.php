@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Import;
 
 use App\Mapping\ParameterMapping;
+use App\Patient\PatientRepository;
+use App\PatientCard\PatientCardInput;
 use App\PatientCard\PatientName;
 use App\Report\ReportSummary;
 use App\Report\ReportSummaryBuilder;
+use App\Repository\ImportRepository;
 use App\Security\FileName;
 use App\Support\Clock;
 use App\Support\Logger;
@@ -27,6 +30,9 @@ class ImportService
 
     private const int PARAMETER_CHUNK_SIZE = 100;
 
+    private readonly ImportRepository $imports;
+    private readonly PatientRepository $patients;
+
     public function __construct(
         protected readonly PDO $pdo,
         private readonly ParserChain $parser,
@@ -36,12 +42,16 @@ class ImportService
         private readonly Clock $clock,
         private readonly ?ImportArchive $archive = null,
         private readonly ?Logger $logger = null,
+        ?ImportRepository $imports = null,
+        ?PatientRepository $patients = null,
     ) {
+        $this->imports = $imports ?? new ImportRepository($this->pdo);
+        $this->patients = $patients ?? new PatientRepository($this->pdo);
     }
 
     /**
-     * @param ?int $activePatientId Aktiver Patient der Sitzung; ein Bericht ohne Patientendaten
-     *                              wird ihm zugeordnet, statt ohne Patient gespeichert zu werden.
+     * @param ?int $activePatientId Aktiver Patient der Sitzung; wird nur dann automatisch
+     *                              verwendet, wenn die Datei keinerlei Patientendaten enthaelt.
      */
     public function analyze(string $bytes, string $originalFilename, ?int $activePatientId = null): ImportAnalysis
     {
@@ -53,6 +63,7 @@ class ImportService
         }
         $summary = $this->summaryBuilder->build($result->records);
         $hash = hash('sha256', $bytes);
+        $patientResolution = $this->resolvePatient($summary, $activePatientId, false);
 
         return new ImportAnalysis(
             filename: FileName::sanitize($originalFilename),
@@ -63,8 +74,9 @@ class ImportService
             parseResult: $result,
             assignments: $assignments,
             summary: $summary,
-            validation: $this->validator->validate($result, $summary, $activePatientId !== null),
+            validation: $this->validator->validate($result, $summary, $patientResolution->activePatient !== null),
             previousImports: $this->findImportsByHash($hash),
+            patientResolution: $patientResolution,
         );
     }
 
@@ -73,27 +85,21 @@ class ImportService
      */
     public function findImportsByHash(string $hash): array
     {
-        $stmt = $this->pdo->prepare(
-            "SELECT i.id, i.imported_at, i.status, r.id AS report_id
-               FROM imports i LEFT JOIN reports r ON r.import_id = i.id
-              WHERE i.file_hash = ? AND i.status <> 'failed'
-              ORDER BY i.id"
-        );
-        $stmt->execute([$hash]);
-        return array_map(static fn (array $row): array => [
-            'id' => (int) $row['id'],
-            'imported_at' => (string) $row['imported_at'],
-            'status' => (string) $row['status'],
-            'report_id' => $row['report_id'] === null ? null : (int) $row['report_id'],
-        ], $stmt->fetchAll());
+        return $this->imports->findByHash($hash);
     }
 
     /**
-     * @param ?int $activePatientId Aktiver Patient der Sitzung; wird herangezogen, wenn die Datei
-     *                              keine vollstaendige Patientenidentitaet enthaelt.
+     * @param ?int $activePatientId Aktiver Patient der Sitzung.
+     * @param ?string $selectedPatientTarget Vom Benutzer bestaetigte/ausgewaehlte Zuordnung
+     *                                       ('patient:<id>', 'new' oder 'none').
      */
-    public function import(ImportAnalysis $analysis, string $bytes, bool $allowDuplicate = false, ?int $activePatientId = null): ImportOutcome
-    {
+    public function import(
+        ImportAnalysis $analysis,
+        string $bytes,
+        bool $allowDuplicate = false,
+        ?int $activePatientId = null,
+        ?string $selectedPatientTarget = null,
+    ): ImportOutcome {
         if (!hash_equals($analysis->fileHash, hash('sha256', $bytes))) {
             throw new ImportFailedException('Die Datei wurde seit der Analyse veraendert.');
         }
@@ -108,13 +114,14 @@ class ImportService
             throw new DuplicateImportException('Diese Datei wurde bereits importiert.');
         }
 
+        $effectiveTarget = $this->verifyTargetBeforeTransaction($analysis->patientResolution, $selectedPatientTarget);
         $now = $this->clock->now()->format('Y-m-d H:i:s');
         $summary = $analysis->summary;
 
         try {
             $this->pdo->beginTransaction();
 
-            $patientId = $this->upsertPatient($summary, $now, $activePatientId);
+            $patientId = $this->upsertPatient($summary, $now, $activePatientId, $effectiveTarget);
             $deviceId = $this->upsertDevice($summary, $patientId, $now);
             $leadIds = $deviceId === null ? [] : $this->upsertLeads($summary, $deviceId, $now);
             $archiveFilename = $this->archiveOriginal($analysis->fileHash, $bytes);
@@ -127,6 +134,11 @@ class ImportService
             $this->verifyParameterCount($reportId, $analysis->parseResult->validRecordCount());
 
             $this->pdo->commit();
+        } catch (PatientResolutionException $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
@@ -151,87 +163,336 @@ class ImportService
         );
     }
 
-    protected function upsertPatient(ReportSummary $summary, string $now, ?int $activePatientId = null): ?int
+    private function verifyTargetBeforeTransaction(PatientResolution $resolution, ?string $selectedTarget): string
     {
+        if ($selectedTarget !== null) {
+            if ($selectedTarget === '') {
+                throw new PatientResolutionException(
+                    $resolution->requiresDecision()
+                        ? 'Bitte wählen Sie aus, welchem Patienten der Bericht zugeordnet werden soll.'
+                        : 'Die Bestätigung des Zielpatienten fehlt. Bitte prüfen und bestätigen Sie die Importübersicht erneut.',
+                    $resolution,
+                );
+            }
+            if (!$resolution->accepts($selectedTarget)) {
+                throw new PatientResolutionException(
+                    $resolution->requiresDecision()
+                        ? 'Die gewählte Patientenzuordnung ist ungültig oder nicht mehr aktuell. Bitte wählen Sie den Zielpatienten erneut aus.'
+                        : 'Die Patientenzuordnung hat sich seit der Vorschau geändert (z. B. durch Wechsel des aktiven Patienten). Bitte prüfen und bestätigen Sie die Importübersicht erneut.',
+                    $resolution,
+                );
+            }
+            return $selectedTarget;
+        }
+
+        if ($resolution->requiresDecision() || $resolution->defaultTarget === null) {
+            throw new PatientResolutionException($resolution->reason, $resolution);
+        }
+
+        return $resolution->defaultTarget;
+    }
+
+    /**
+     * Ermittelt die Patientenzuordnung anhand der harten Identitaetsregel
+     * (Nachname + Vorname + Geburtsdatum). Bei Mehrdeutigkeit, Teil-Identitaet oder
+     * abweichender Patienten-ID wird niemals automatisch zugeordnet.
+     */
+    private function resolvePatient(ReportSummary $summary, ?int $activePatientId, bool $forUpdate): PatientResolution
+    {
+        $activeRow = $activePatientId === null ? null : $this->patients->patient($activePatientId, $forUpdate);
+        $activeInfo = $activeRow === null ? null : self::patientInfo($activeRow);
+
         $identifier = $summary->nonEmpty('patient_identifier');
         $name = $summary->nonEmpty('patient_name');
         $dobRaw = $summary->nonEmpty('patient_dob');
         $dob = SourceDate::parse($dobRaw)?->format('Y-m-d');
-        // Nachname/Vorname werden aus "NACHNAME, VORNAME" abgeleitet; fehlt das Komma,
-        // bleibt der Vorname leer und wird im Patientenausweis-Assistenten ergaenzt.
         $parts = PatientName::split($name);
         $identityKey = PatientName::identityKey($parts['last'], $parts['first'], $dob);
+        $hasFileData = $identifier !== null || $name !== null || $dobRaw !== null;
 
-        // Die Identitaet (Nachname + Vorname + Geburtsdatum) ist das primaere Merkmal; die
-        // Patienten-ID ist nur eine Zusatzangabe. Damit werden vor dem Import angelegte
-        // Patienten wiederverwendet, auch wenn sich das Rohformat des Geburtsdatums unterscheidet.
-        $id = $identityKey === null ? null : $this->findPatientByIdentity($identityKey, $activePatientId);
-        if ($id === null && $identifier !== null) {
-            $id = $this->findPatientByIdentifier($identifier);
-        }
-        // Ohne vollstaendige Identitaet in der Datei ist der aktive Patient der
-        // Patientenvorgang; der Bericht bleibt dadurch fuer Brief und Ausweis nutzbar.
-        if ($id === null && $identityKey === null && $activePatientId !== null && $this->patientExists($activePatientId)) {
-            $id = $activePatientId;
-        }
-
-        if ($id !== null) {
-            // Stammdaten werden nur ergaenzt, nie ueberschrieben (Berichte haben eigene Snapshots).
-            $this->pdo->prepare(
-                'UPDATE patients SET patient_name = COALESCE(patient_name, ?),
-                        last_name = COALESCE(last_name, ?),
-                        first_name = COALESCE(first_name, ?),
-                        date_of_birth = COALESCE(date_of_birth, ?),
-                        date_of_birth_raw = COALESCE(date_of_birth_raw, ?),
-                        updated_at = ?
-                  WHERE id = ?'
-            )->execute([$name, $parts['last'], $parts['first'], $dob, $dobRaw, $now, $id]);
-            return $id;
+        if (!$hasFileData) {
+            if ($activeInfo !== null) {
+                $target = 'patient:' . $activeInfo['id'];
+                return new PatientResolution(
+                    mode: PatientResolutionMode::ActivePatientFallback,
+                    defaultTarget: $target,
+                    summary: sprintf('Patient Nr. %d – %s', $activeInfo['id'], $activeInfo['name']),
+                    reason: 'Aktiver Patient der Sitzung (die Datei enthält keinerlei Patientendaten)',
+                    options: [self::patientOption($activeInfo, true)],
+                    targetPatient: $activeInfo,
+                    activePatient: $activeInfo,
+                );
+            }
+            return PatientResolution::unassigned();
         }
 
-        if ($identifier === null && $name === null) {
-            return null;
+        if ($identityKey !== null) {
+            $matches = array_map(
+                self::patientInfo(...),
+                $this->patients->findPatientsByIdentity($identityKey, $forUpdate),
+            );
+            if (count($matches) === 1) {
+                $match = $matches[0];
+                $target = 'patient:' . $match['id'];
+                $notice = ($activeInfo !== null && $activeInfo['id'] !== $match['id'])
+                    ? sprintf(
+                        'Weicht vom aktiven Patienten (Nr. %d – %s) ab; maßgeblich ist die vollständige Identität in der Datei.',
+                        $activeInfo['id'],
+                        $activeInfo['name'],
+                    )
+                    : null;
+                return new PatientResolution(
+                    mode: PatientResolutionMode::IdentitySingle,
+                    defaultTarget: $target,
+                    summary: sprintf('Patient Nr. %d – %s', $match['id'], $match['name']),
+                    reason: 'Eindeutiger Treffer über Nachname, Vorname und Geburtsdatum',
+                    options: [self::patientOption($match, $activeInfo !== null && $activeInfo['id'] === $match['id'])],
+                    targetPatient: $match,
+                    activePatient: $activeInfo,
+                    notice: $notice,
+                );
+            }
+
+            if (count($matches) > 1) {
+                $options = array_map(
+                    static fn (array $candidate): PatientResolutionOption => self::patientOption(
+                        $candidate,
+                        $activeInfo !== null && $activeInfo['id'] === $candidate['id'],
+                    ),
+                    $matches,
+                );
+                return new PatientResolution(
+                    mode: PatientResolutionMode::IdentityMultiple,
+                    defaultTarget: null,
+                    summary: 'Mehrere Patienten mit gleicher Identität – Auswahl erforderlich',
+                    reason: 'Zu Nachname, Vorname und Geburtsdatum existieren mehrere Patienten. Bitte wählen Sie den Zielpatienten ausdrücklich aus.',
+                    options: $options,
+                    activePatient: $activeInfo,
+                );
+            }
+
+            $existingByIdRow = $identifier === null ? null : $this->patients->findPatientByIdentifier($identifier, $forUpdate);
+            if ($existingByIdRow === null) {
+                $dobDisplay = SourceDate::display($dobRaw, true);
+                $detail = 'Geburtsdatum ' . $dobDisplay . ($identifier !== null ? ' · Patient-ID ' . $identifier : '');
+                $notice = $activeInfo !== null
+                    ? sprintf(
+                        'Weicht vom aktiven Patienten (Nr. %d – %s) ab; es wird ein eigener Patient angelegt.',
+                        $activeInfo['id'],
+                        $activeInfo['name'],
+                    )
+                    : null;
+                return new PatientResolution(
+                    mode: PatientResolutionMode::NewPatient,
+                    defaultTarget: 'new',
+                    summary: sprintf('Neuer Patient wird angelegt: %s', (string) $name),
+                    reason: 'Kein vorhandener Patient mit dieser Identität (Nachname, Vorname, Geburtsdatum)',
+                    options: [new PatientResolutionOption(target: 'new', label: sprintf('Neuen Patienten anlegen (%s)', (string) $name), detail: $detail)],
+                    activePatient: $activeInfo,
+                    notice: $notice,
+                );
+            }
+
+            $conflictInfo = self::patientInfo($existingByIdRow);
+            $options = [
+                new PatientResolutionOption(
+                    target: 'new',
+                    label: sprintf('Neuen Patienten aus den Dateiangaben anlegen (%s)', (string) $name),
+                    detail: sprintf(
+                        'Geburtsdatum %s · die bereits vergebene Patienten-ID „%s“ verbleibt bei Patient Nr. %d (bleibt im Berichts-Snapshot erhalten)',
+                        SourceDate::display($dobRaw, true),
+                        (string) $identifier,
+                        $conflictInfo['id'],
+                    ),
+                ),
+                self::patientOption(
+                    $conflictInfo,
+                    $activeInfo !== null && $activeInfo['id'] === $conflictInfo['id'],
+                    sprintf('vorhandener Patient mit Patienten-ID „%s“', (string) $identifier),
+                ),
+            ];
+            if ($activeInfo !== null && $activeInfo['id'] !== $conflictInfo['id']) {
+                $options[] = self::patientOption($activeInfo, true);
+            }
+
+            return new PatientResolution(
+                mode: PatientResolutionMode::IdentifierConflict,
+                defaultTarget: null,
+                summary: 'Konflikt bei der Patienten-ID – Entscheidung erforderlich',
+                reason: sprintf(
+                    'Die Patienten-ID „%s“ gehört bereits zu Patient Nr. %d (%s), dessen Identitätsangaben von der Datei abweichen. Die Patienten-ID allein dient nicht als Zuordnungsmerkmal.',
+                    (string) $identifier,
+                    $conflictInfo['id'],
+                    $conflictInfo['name'],
+                ),
+                options: $options,
+                activePatient: $activeInfo,
+                conflictingPatient: $conflictInfo,
+            );
         }
 
-        $this->pdo->prepare(
-            'INSERT INTO patients (patient_identifier, patient_name, last_name, first_name,
-                                   date_of_birth, date_of_birth_raw, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        )->execute([$identifier, $name, $parts['last'], $parts['first'], $dob, $dobRaw, $now, $now]);
-        return (int) $this->pdo->lastInsertId();
+        // Teil-Identitaet in der Datei ($hasFileData && $identityKey === null):
+        $existingByIdRow = $identifier === null ? null : $this->patients->findPatientByIdentifier($identifier, $forUpdate);
+        $conflictInfo = $existingByIdRow === null ? null : self::patientInfo($existingByIdRow);
+
+        $options = [];
+        if ($activeInfo !== null) {
+            $options[] = self::patientOption($activeInfo, true);
+        }
+        if ($conflictInfo !== null && ($activeInfo === null || $activeInfo['id'] !== $conflictInfo['id'])) {
+            $options[] = self::patientOption(
+                $conflictInfo,
+                false,
+                sprintf('vorhandener Patient mit Patienten-ID „%s“', (string) $identifier),
+            );
+        }
+
+        $canCreateNew = $name !== null || ($identifier !== null && $conflictInfo === null);
+        if ($canCreateNew) {
+            $newLabel = $name !== null
+                ? sprintf('Neuen Patienten aus den Dateiangaben anlegen (%s)', $name)
+                : sprintf('Neuen Patienten mit Patienten-ID „%s“ anlegen', (string) $identifier);
+            $newDetails = [];
+            if ($dobRaw !== null) {
+                $newDetails[] = 'Geburtsdatum ' . SourceDate::display($dobRaw, true);
+            }
+            if ($identifier !== null) {
+                $newDetails[] = $conflictInfo === null
+                    ? 'Patient-ID ' . $identifier
+                    : sprintf('ohne Übernahme der bereits an Patient Nr. %d vergebenen Patienten-ID „%s“', $conflictInfo['id'], $identifier);
+            }
+            $options[] = new PatientResolutionOption(
+                target: 'new',
+                label: $newLabel,
+                detail: implode(' · ', $newDetails),
+            );
+        } else {
+            $options[] = new PatientResolutionOption(
+                target: 'none',
+                label: 'Ohne Patientenzuordnung speichern',
+                detail: 'Die Datei enthält weder einen Namen noch eine freie Patienten-ID für einen neuen Datensatz.',
+            );
+        }
+
+        return new PatientResolution(
+            mode: PatientResolutionMode::IncompleteIdentity,
+            defaultTarget: null,
+            summary: 'Unvollständige Patientenidentität – Auswahl erforderlich',
+            reason: 'Die Datei enthält Patientenangaben, aber keine vollständige Identität (Nachname, Vorname und gültiges Geburtsdatum). Bitte wählen Sie die gewünschte Zuordnung ausdrücklich aus.',
+            options: $options,
+            activePatient: $activeInfo,
+            conflictingPatient: $conflictInfo,
+        );
     }
 
     /**
-     * Alle Patienten mit derselben Identitaet; bei mehreren Treffern hat der aktive Patient
-     * Vorrang, damit der laufende Patientenvorgang zusammenhaelt.
+     * @param array<string, mixed> $row
+     * @return array{id: int, name: string, date_of_birth: ?string, identifier: ?string}
      */
-    private function findPatientByIdentity(string $identityKey, ?int $activePatientId): ?int
+    private static function patientInfo(array $row): array
     {
-        $stmt = $this->pdo->prepare('SELECT id FROM patients WHERE identity_key = ? ORDER BY id FOR UPDATE');
-        $stmt->execute([$identityKey]);
-        $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-        if ($ids === []) {
+        $name = trim((string) ($row['patient_name'] ?? ''));
+        $dob = $row['date_of_birth'] !== null && trim((string) $row['date_of_birth']) !== ''
+            ? (string) $row['date_of_birth']
+            : null;
+        $identifier = $row['patient_identifier'] !== null && trim((string) $row['patient_identifier']) !== ''
+            ? (string) $row['patient_identifier']
+            : null;
+        return [
+            'id' => (int) $row['id'],
+            'name' => $name !== '' ? $name : 'ohne Namen',
+            'date_of_birth' => $dob,
+            'identifier' => $identifier,
+        ];
+    }
+
+    /**
+     * @param array{id: int, name: string, date_of_birth: ?string, identifier: ?string} $patient
+     */
+    private static function patientOption(array $patient, bool $isActive, string $extra = ''): PatientResolutionOption
+    {
+        $details = [];
+        if ($patient['date_of_birth'] !== null) {
+            $details[] = 'geb. ' . PatientCardInput::formatDate($patient['date_of_birth']);
+        }
+        if ($patient['identifier'] !== null) {
+            $details[] = 'Patient-ID ' . $patient['identifier'];
+        }
+        if ($extra !== '') {
+            $details[] = $extra;
+        }
+        return new PatientResolutionOption(
+            target: 'patient:' . $patient['id'],
+            label: sprintf('Patient Nr. %d – %s', $patient['id'], $patient['name']),
+            detail: implode(' · ', $details),
+            patientId: $patient['id'],
+            isActivePatient: $isActive,
+        );
+    }
+
+    protected function upsertPatient(
+        ReportSummary $summary,
+        string $now,
+        ?int $activePatientId = null,
+        ?string $selectedTarget = null,
+    ): ?int {
+        $resolution = $this->resolvePatient($summary, $activePatientId, true);
+        $target = $selectedTarget ?? $resolution->defaultTarget;
+        if ($target === null || !$resolution->accepts($target)) {
+            throw new PatientResolutionException(
+                'Die Patientenzuordnung hat sich zwischenzeitlich geändert oder erfordert eine Auswahl. Bitte prüfen Sie die Importübersicht erneut.',
+                $resolution,
+            );
+        }
+
+        if ($target === 'none') {
             return null;
         }
-        if ($activePatientId !== null && in_array($activePatientId, $ids, true)) {
-            return $activePatientId;
+
+        $identifier = $summary->nonEmpty('patient_identifier');
+        $name = $summary->nonEmpty('patient_name');
+        $dobRaw = $summary->nonEmpty('patient_dob');
+        $dob = SourceDate::parse($dobRaw)?->format('Y-m-d');
+        $parts = PatientName::split($name);
+
+        if (str_starts_with($target, 'patient:')) {
+            $patientId = (int) substr($target, 8);
+            if ($this->patients->patient($patientId, true) === null) {
+                throw new PatientResolutionException('Der gewählte Zielpatient existiert nicht mehr.', $resolution);
+            }
+            if ($name !== null || $dobRaw !== null) {
+                $this->patients->supplementPatientFromImport(
+                    $patientId,
+                    $name,
+                    $parts['last'],
+                    $parts['first'],
+                    $dob,
+                    $dobRaw,
+                    $now,
+                );
+            }
+            return $patientId;
         }
-        return $ids[0];
-    }
 
-    private function findPatientByIdentifier(string $identifier): ?int
-    {
-        $stmt = $this->pdo->prepare('SELECT id FROM patients WHERE patient_identifier = ? FOR UPDATE');
-        $stmt->execute([$identifier]);
-        $id = $stmt->fetchColumn();
-        return $id === false ? null : (int) $id;
-    }
+        if ($target === 'new') {
+            $identifierToStore = ($identifier !== null && !$this->patients->patientIdentifierInUse($identifier))
+                ? $identifier
+                : null;
+            if ($identifierToStore === null && $name === null) {
+                return null;
+            }
+            return $this->patients->createImportedPatient(
+                $identifierToStore,
+                $name,
+                $parts['last'],
+                $parts['first'],
+                $dob,
+                $dobRaw,
+                $now,
+            );
+        }
 
-    private function patientExists(int $patientId): bool
-    {
-        $stmt = $this->pdo->prepare('SELECT 1 FROM patients WHERE id = ?');
-        $stmt->execute([$patientId]);
-        return $stmt->fetchColumn() !== false;
+        throw new PatientResolutionException('Unbekannte Patientenzuordnung.', $resolution);
     }
 
     protected function upsertDevice(ReportSummary $summary, ?int $patientId, string $now): ?int
@@ -240,38 +501,17 @@ class ImportService
         if ($serial === null) {
             return null;
         }
-        $modelNumber = $summary->nonEmpty('device_model_number');
         $implantRaw = $summary->nonEmpty('device_implant_date');
-        $values = [
-            $patientId,
-            $summary->nonEmpty('device_manufacturer'),
-            $summary->nonEmpty('device_model_name'),
-            SourceDate::parse($implantRaw)?->format('Y-m-d'),
-            $implantRaw,
-        ];
-
-        $stmt = $this->pdo->prepare('SELECT id FROM devices WHERE serial_number = ? AND model_number_key = ? FOR UPDATE');
-        $stmt->execute([$serial, $modelNumber ?? '']);
-        $id = $stmt->fetchColumn();
-
-        if ($id !== false) {
-            $this->pdo->prepare(
-                'UPDATE devices SET patient_id = COALESCE(patient_id, ?),
-                        manufacturer = COALESCE(manufacturer, ?),
-                        model_name = COALESCE(model_name, ?),
-                        implant_date = COALESCE(implant_date, ?),
-                        implant_date_raw = COALESCE(implant_date_raw, ?),
-                        updated_at = ?
-                  WHERE id = ?'
-            )->execute([...$values, $now, $id]);
-            return (int) $id;
-        }
-
-        $this->pdo->prepare(
-            'INSERT INTO devices (patient_id, manufacturer, model_name, implant_date, implant_date_raw, model_number, serial_number, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        )->execute([...$values, $modelNumber, $serial, $now, $now]);
-        return (int) $this->pdo->lastInsertId();
+        return $this->imports->upsertDevice(
+            serial: $serial,
+            modelNumber: $summary->nonEmpty('device_model_number'),
+            patientId: $patientId,
+            manufacturer: $summary->nonEmpty('device_manufacturer'),
+            modelName: $summary->nonEmpty('device_model_name'),
+            implantDate: SourceDate::parse($implantRaw)?->format('Y-m-d'),
+            implantDateRaw: $implantRaw,
+            now: $now,
+        );
     }
 
     /**
@@ -282,40 +522,20 @@ class ImportService
         $ids = [];
         foreach ($summary->leads as $lead) {
             $v = static fn (string $key): ?string => ($lead[$key] === null || trim((string) $lead[$key]) === '') ? null : (string) $lead[$key];
-            $serial = $v('serial_number');
             $implantRaw = $v('implant_date');
-            $implant = SourceDate::parse($implantRaw)?->format('Y-m-d');
-
-            if ($serial !== null) {
-                $stmt = $this->pdo->prepare('SELECT id FROM leads WHERE device_id = ? AND chamber = ? AND serial_number = ? FOR UPDATE');
-                $stmt->execute([$deviceId, $lead['chamber'], $serial]);
-            } else {
-                $stmt = $this->pdo->prepare(
-                    'SELECT id FROM leads WHERE device_id = ? AND chamber = ? AND serial_number IS NULL
-                        AND model_number <=> ? AND implant_date_raw <=> ? ORDER BY id LIMIT 1 FOR UPDATE'
-                );
-                $stmt->execute([$deviceId, $lead['chamber'], $v('model_number'), $implantRaw]);
-            }
-            $id = $stmt->fetchColumn();
-
-            $values = [$v('manufacturer'), $v('model_label'), $v('model_number'), $v('lead_type'), $implant, $implantRaw];
-            if ($id !== false) {
-                $this->pdo->prepare(
-                    'UPDATE leads SET manufacturer = COALESCE(manufacturer, ?), model_label = COALESCE(model_label, ?),
-                            model_number = COALESCE(model_number, ?), lead_type = COALESCE(lead_type, ?),
-                            implant_date = COALESCE(implant_date, ?), implant_date_raw = COALESCE(implant_date_raw, ?),
-                            updated_at = ?
-                      WHERE id = ?'
-                )->execute([...$values, $now, $id]);
-                $ids[] = (int) $id;
-                continue;
-            }
-            $this->pdo->prepare(
-                'INSERT INTO leads (manufacturer, model_label, model_number, lead_type, implant_date, implant_date_raw,
-                                    device_id, chamber, chamber_source, serial_number, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-            )->execute([...$values, $deviceId, $lead['chamber'], $lead['chamber_source'], $serial, $now, $now]);
-            $ids[] = (int) $this->pdo->lastInsertId();
+            $ids[] = $this->imports->upsertLead(
+                deviceId: $deviceId,
+                chamber: (string) $lead['chamber'],
+                chamberSource: (string) $lead['chamber_source'],
+                serial: $v('serial_number'),
+                manufacturer: $v('manufacturer'),
+                modelLabel: $v('model_label'),
+                modelNumber: $v('model_number'),
+                leadType: $v('lead_type'),
+                implantDate: SourceDate::parse($implantRaw)?->format('Y-m-d'),
+                implantDateRaw: $implantRaw,
+                now: $now,
+            );
         }
         return array_values(array_unique($ids));
     }
@@ -336,25 +556,20 @@ class ImportService
 
     protected function insertImport(ImportAnalysis $analysis, ?string $archiveFilename, string $now): int
     {
-        $this->pdo->prepare(
-            'INSERT INTO imports (filename, file_hash, file_size, encoding, archive_filename, imported_at, parser_version,
-                                  record_count, valid_record_count, warning_count, error_count, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        )->execute([
-            $analysis->filename,
-            $analysis->fileHash,
-            $analysis->fileSize,
-            $analysis->parseResult->encoding,
-            $archiveFilename,
-            $now,
-            $analysis->parserVersion,
-            $analysis->parseResult->recordCount,
-            $analysis->parseResult->validRecordCount(),
-            $analysis->warningCount(),
-            $analysis->errorCount(),
-            $analysis->status(),
-        ]);
-        return (int) $this->pdo->lastInsertId();
+        return $this->imports->insertImport(
+            filename: $analysis->filename,
+            fileHash: $analysis->fileHash,
+            fileSize: $analysis->fileSize,
+            encoding: $analysis->parseResult->encoding,
+            archiveFilename: $archiveFilename,
+            importedAt: $now,
+            parserVersion: $analysis->parserVersion,
+            recordCount: $analysis->parseResult->recordCount,
+            validRecordCount: $analysis->parseResult->validRecordCount(),
+            warningCount: $analysis->warningCount(),
+            errorCount: $analysis->errorCount(),
+            status: $analysis->status(),
+        );
     }
 
     protected function insertReport(ImportAnalysis $analysis, int $importId, ?int $patientId, ?int $deviceId, string $now): int
@@ -367,36 +582,28 @@ class ImportService
         $sessionRaw = $s->nonEmpty('session_timestamp');
         $interrogationRaw = $s->nonEmpty('interrogation_timestamp');
 
-        $this->pdo->prepare(
-            'INSERT INTO reports (import_id, patient_id, device_id, session_timestamp, session_timestamp_raw,
-                                  interrogation_timestamp, interrogation_timestamp_raw, report_version, parser_version,
-                                  mapping_version, patient_name_snapshot, patient_identifier_snapshot, patient_dob_snapshot,
-                                  device_manufacturer_snapshot, device_model_name_snapshot, device_model_number_snapshot,
-                                  device_serial_snapshot, summary_snapshot, parameter_count, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        )->execute([
-            $importId,
-            $patientId,
-            $deviceId,
-            SourceDate::parse($sessionRaw)?->format('Y-m-d H:i:s'),
-            $sessionRaw,
-            SourceDate::parse($interrogationRaw)?->format('Y-m-d H:i:s'),
-            $interrogationRaw,
-            self::REPORT_VERSION,
-            $analysis->parserVersion,
-            $this->mapping->version(),
-            $s->value('patient_name'),
-            $s->value('patient_identifier'),
-            $s->value('patient_dob'),
-            $s->value('device_manufacturer'),
-            $s->value('device_model_name'),
-            $s->value('device_model_number'),
-            $s->value('device_serial'),
-            $snapshot,
-            $analysis->parseResult->validRecordCount(),
-            $now,
+        return $this->imports->insertReport([
+            'import_id' => $importId,
+            'patient_id' => $patientId,
+            'device_id' => $deviceId,
+            'session_timestamp' => SourceDate::parse($sessionRaw)?->format('Y-m-d H:i:s'),
+            'session_timestamp_raw' => $sessionRaw,
+            'interrogation_timestamp' => SourceDate::parse($interrogationRaw)?->format('Y-m-d H:i:s'),
+            'interrogation_timestamp_raw' => $interrogationRaw,
+            'report_version' => self::REPORT_VERSION,
+            'parser_version' => $analysis->parserVersion,
+            'mapping_version' => $this->mapping->version(),
+            'patient_name_snapshot' => $s->value('patient_name'),
+            'patient_identifier_snapshot' => $s->value('patient_identifier'),
+            'patient_dob_snapshot' => $s->value('patient_dob'),
+            'device_manufacturer_snapshot' => $s->value('device_manufacturer'),
+            'device_model_name_snapshot' => $s->value('device_model_name'),
+            'device_model_number_snapshot' => $s->value('device_model_number'),
+            'device_serial_snapshot' => $s->value('device_serial'),
+            'summary_snapshot' => $snapshot,
+            'parameter_count' => $analysis->parseResult->validRecordCount(),
+            'created_at' => $now,
         ]);
-        return (int) $this->pdo->lastInsertId();
     }
 
     /**
@@ -404,10 +611,7 @@ class ImportService
      */
     protected function linkLeads(int $reportId, array $leadIds): void
     {
-        $stmt = $this->pdo->prepare('INSERT INTO report_leads (report_id, lead_id) VALUES (?, ?)');
-        foreach ($leadIds as $leadId) {
-            $stmt->execute([$reportId, $leadId]);
-        }
+        $this->imports->linkLeads($reportId, $leadIds);
     }
 
     /**
@@ -422,43 +626,23 @@ class ImportService
             $firstRecord[$record->parameterId] ??= $record;
         }
 
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO parameter_definitions (source_parameter_id, source_name, category_key, mapping_source, mapping_version,
-                                                standard_system, standard_code, occurrence_count, first_seen_at, last_seen_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AS new
-             ON DUPLICATE KEY UPDATE source_name = new.source_name, category_key = new.category_key,
-                 mapping_source = new.mapping_source, mapping_version = new.mapping_version,
-                 standard_system = new.standard_system, standard_code = new.standard_code,
-                 occurrence_count = parameter_definitions.occurrence_count + new.occurrence_count,
-                 last_seen_at = new.last_seen_at'
-        );
+        $definitions = [];
         foreach ($firstRecord as $parameterId => $record) {
             $assignment = $analysis->assignments[$record->position];
             $standard = $this->mapping->standardCode((string) $parameterId);
-            $stmt->execute([
-                (string) $parameterId,
-                $record->name,
-                $assignment->key,
-                $assignment->source,
-                $this->mapping->version(),
-                $standard['system'] ?? null,
-                $standard['code'] ?? null,
-                $occurrences[$parameterId],
-                $now,
-                $now,
-            ]);
+            $definitions[] = [
+                'source_parameter_id' => (string) $parameterId,
+                'source_name' => $record->name,
+                'category_key' => $assignment->key,
+                'mapping_source' => $assignment->source,
+                'mapping_version' => $this->mapping->version(),
+                'standard_system' => $standard['system'] ?? null,
+                'standard_code' => $standard['code'] ?? null,
+                'occurrence_count' => $occurrences[$parameterId],
+            ];
         }
 
-        $ids = [];
-        foreach (array_chunk(array_map('strval', array_keys($firstRecord)), 500) as $chunk) {
-            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-            $select = $this->pdo->prepare("SELECT id, source_parameter_id FROM parameter_definitions WHERE source_parameter_id IN ($placeholders)");
-            $select->execute($chunk);
-            foreach ($select->fetchAll() as $row) {
-                $ids[(string) $row['source_parameter_id']] = (int) $row['id'];
-            }
-        }
-        return $ids;
+        return $this->imports->upsertParameterDefinitions($definitions, $now);
     }
 
     /**
@@ -496,13 +680,7 @@ class ImportService
      */
     protected function insertParameterChunk(array $rows, int $chunkIndex): void
     {
-        $placeholders = implode(',', array_fill(0, count($rows), '(' . implode(',', array_fill(0, 14, '?')) . ')'));
-        $this->pdo->prepare(
-            "INSERT INTO report_parameters (report_id, parameter_definition_id, parameter_id, parameter_name, display_name,
-                                            value, unit, category, category_label, category_sort, mapping_source,
-                                            original_position, raw_record, created_at)
-             VALUES $placeholders"
-        )->execute(array_merge(...$rows));
+        $this->imports->insertParameterChunk($rows);
     }
 
     /**
@@ -510,20 +688,12 @@ class ImportService
      */
     protected function insertIssues(int $importId, array $issues, string $now): void
     {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO import_errors (import_id, severity, error_code, message, record_position, raw_record, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
-        );
-        foreach ($issues as $issue) {
-            $stmt->execute([$importId, $issue->severity, $issue->code, mb_substr($issue->message, 0, 1000), $issue->position, $issue->rawRecord, $now]);
-        }
+        $this->imports->insertIssues($importId, $issues, $now);
     }
 
     protected function verifyParameterCount(int $reportId, int $expected): void
     {
-        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM report_parameters WHERE report_id = ?');
-        $stmt->execute([$reportId]);
-        $actual = (int) $stmt->fetchColumn();
+        $actual = $this->imports->countReportParameters($reportId);
         if ($actual !== $expected) {
             throw new RuntimeException(sprintf('Parameteranzahl stimmt nicht: erwartet %d, gespeichert %d.', $expected, $actual));
         }
@@ -537,24 +707,21 @@ class ImportService
         try {
             $now = $this->clock->now()->format('Y-m-d H:i:s');
             $this->pdo->beginTransaction();
-            $this->pdo->prepare(
-                "INSERT INTO imports (filename, file_hash, file_size, encoding, archive_filename, imported_at, parser_version,
-                                      record_count, valid_record_count, warning_count, error_count, status, failure_reason)
-                 VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'failed', ?)"
-            )->execute([
-                $analysis->filename,
-                $analysis->fileHash,
-                $analysis->fileSize,
-                $analysis->parseResult->encoding,
-                $now,
-                $analysis->parserVersion,
-                $analysis->parseResult->recordCount,
-                $analysis->parseResult->validRecordCount(),
-                $analysis->warningCount(),
-                $analysis->errorCount(),
-                mb_substr($reason, 0, 500),
-            ]);
-            $importId = (int) $this->pdo->lastInsertId();
+            $importId = $this->imports->insertImport(
+                filename: $analysis->filename,
+                fileHash: $analysis->fileHash,
+                fileSize: $analysis->fileSize,
+                encoding: $analysis->parseResult->encoding,
+                archiveFilename: null,
+                importedAt: $now,
+                parserVersion: $analysis->parserVersion,
+                recordCount: $analysis->parseResult->recordCount,
+                validRecordCount: $analysis->parseResult->validRecordCount(),
+                warningCount: $analysis->warningCount(),
+                errorCount: $analysis->errorCount(),
+                status: 'failed',
+                failureReason: mb_substr($reason, 0, 500),
+            );
             $this->insertIssues($importId, $analysis->issues(), $now);
             $this->pdo->commit();
             return $importId;

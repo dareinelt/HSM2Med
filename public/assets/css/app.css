@@ -53,6 +53,8 @@ main { padding-bottom: 2rem; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .actions form.inline { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+.actions form.import-commit-form { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; }
+.actions form.import-commit-form > .choice-box { flex: 1 1 100%; margin: 0 0 .2rem; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
 .stat { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; display: flex; flex-direction: column; }
 .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
